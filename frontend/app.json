@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "frontend",
+    "slug": "mog",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo_MOG.jpeg",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cargoline.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",
+        "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à la galerie pour vous permettre d'uploader vos preuves de paiement.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.cargoline.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo_MOG.jpeg",
+        "backgroundColor": "#000"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/logo_MOG.jpeg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo_MOG.jpeg",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000"
+        }
+      ],
+      "expo-localization",
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d6fad393-38ad-4362-85ff-b745c0c946a3"
+      }
+    },
+    "owner": "israelledje"
+  }
+}

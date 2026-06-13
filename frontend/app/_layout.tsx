@@ -1,0 +1,74 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ActivityIndicator, View, StatusBar, AppState, AppStateStatus } from 'react-native';
+import Toast from 'react-native-toast-message';
+import { initI18n } from '../src/i18n';
+import { useAuthStore } from '../src/store/authStore';
+import { useColisStore } from '../src/store/colisStore';
+import { useSettingsStore } from '../src/store/settingsStore';
+import { colors } from '../src/constants/theme';
+
+export default function RootLayout() {
+  const [ready, setReady] = useState(false);
+  const bootstrap = useAuthStore((s) => s.bootstrap);
+  const user = useAuthStore((s) => s.user);
+  const fetchAll = useColisStore((s) => s.fetchAll);
+  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const appState = useRef(AppState.currentState);
+
+  useEffect(() => {
+    (async () => {
+      await initI18n();
+      await Promise.all([
+        bootstrap(),
+        fetchSettings()
+      ]);
+      setReady(true);
+    })();
+  }, [bootstrap, fetchSettings]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        if (user) {
+          fetchAll().catch(console.error);
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user, fetchAll]);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="colis/[id]" />
+          <Stack.Screen name="colis/nouveau" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="notifications" />
+          <Stack.Screen name="profile/edit" />
+          <Stack.Screen name="profile/faq" />
+        </Stack>
+        <Toast />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
