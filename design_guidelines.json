@@ -1,0 +1,145 @@
+{
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast - Logistics Adaptation)",
+  "rationale": "For an international B2B freight forwarding app, trust, clarity, and authority are paramount. We avoid muddy gradients and rely on a strict, crisp 'Swiss-style' hierarchy using the required Deep Navy and Forest Green tones to project stability, while using the Orange accent to direct the user's eye toward critical tracking actions.",
+  "colors": {
+    "primary": "#1B3A6B",
+    "secondary": "#2E6DB4",
+    "accent": "#E87722",
+    "success": "#1A5C38",
+    "background": "#F4F6F9",
+    "card": "#FFFFFF",
+    "text": {
+      "main": "#1A1A1A",
+      "secondary": "#6B7280",
+      "inverse": "#FFFFFF"
+    },
+    "status_badges": {
+      "pending_reception": { "bg": "#F3F4F6", "text": "#4B5563" },
+      "received": { "bg": "#DBEAFE", "text": "#1D4ED8" },
+      "quoted": { "bg": "#FFEDD5", "text": "#C2410C" },
+      "grouped": { "bg": "#E0E7FF", "text": "#4338CA" },
+      "in_transit": { "bg": "#1B3A6B", "text": "#FFFFFF" },
+      "arrived": { "bg": "#DCFCE7", "text": "#15803D" },
+      "delivered": { "bg": "#1A5C38", "text": "#FFFFFF" }
+    }
+  },
+  "typography": {
+    "strategy": "The Anti-Default Rule: We reject standard robotic mobile fonts for headings. We use 'Outfit' for modern geometric precision in titles, 'Plus Jakarta Sans' for highly legible international body text, and strictly 'JetBrains Mono' for tracking numbers.",
+    "fonts": {
+      "headings": "Outfit",
+      "body": "Plus Jakarta Sans",
+      "mono": "JetBrains Mono"
+    },
+    "scales": {
+      "h1": "text-3xl tracking-tight leading-none",
+      "h2": "text-2xl tracking-tight leading-tight",
+      "h3": "text-xl tracking-tight",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm leading-normal",
+      "overline": "text-xs uppercase tracking-widest font-bold",
+      "tracking_number": "text-base font-mono tracking-wider text-[#1B3A6B] bg-slate-100 px-2 py-1 rounded"
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Generous Spacing Philosophy. Native mobile apps often feel cramped. We use optical alignment and generous padding to let the data breathe.",
+    "container_padding": "px-4 md:px-6",
+    "section_gap": "gap-6 md:gap-8",
+    "border_radius": {
+      "card": "rounded-[12px]",
+      "input": "rounded-[8px]",
+      "button": "rounded-[8px]",
+      "badge": "rounded-full"
+    },
+    "shadows": {
+      "card_light": "shadow-[0_2px_10px_rgba(0,0,0,0.04)]",
+      "floating_action": "shadow-[0_8px_30px_rgba(27,58,107,0.2)]"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#1B3A6B] text-white rounded-[8px] py-3.5 px-4 font-semibold active:bg-[#2E6DB4] flex-row items-center justify-center haptic-feedback-heavy",
+      "accent": "bg-[#E87722] text-white rounded-[8px] py-3.5 px-4 font-semibold active:opacity-80 flex-row items-center justify-center haptic-feedback-heavy",
+      "outline": "border-2 border-[#1B3A6B] text-[#1B3A6B] rounded-[8px] py-3 px-4 font-semibold bg-transparent"
+    },
+    "inputs": {
+      "text": "bg-white border border-gray-200 rounded-[8px] px-4 py-3 text-[#1A1A1A] placeholder:text-[#6B7280] focus:border-[#2E6DB4] focus:ring-1 focus:ring-[#2E6DB4]",
+      "search_bar": "bg-white border-none shadow-[0_2px_10px_rgba(0,0,0,0.04)] rounded-[8px] px-4 py-3 flex-row items-center space-x-2"
+    },
+    "cards": {
+      "kpi": "bg-white rounded-[12px] p-4 shadow-[0_2px_10px_rgba(0,0,0,0.04)] flex-1 flex-col justify-between border-l-4 border-l-[#2E6DB4]",
+      "package_list": "bg-white rounded-[12px] p-4 shadow-[0_2px_10px_rgba(0,0,0,0.04)] flex-col gap-3 mb-3",
+      "container_info": "bg-[#F4F6F9] border border-gray-100 rounded-[12px] p-4 flex-col gap-2"
+    },
+    "loaders": {
+      "strategy": "No isolated spinners. Use skeleton screens to establish structural expectation before data loads.",
+      "skeleton_base": "bg-gray-200 animate-pulse rounded",
+      "skeleton_card": "h-24 w-full bg-gray-200 animate-pulse rounded-[12px]"
+    },
+    "indicators": {
+      "toast_error": "bg-red-50 border-l-4 border-red-500 text-red-900 p-4 rounded shadow-md",
+      "pull_to_refresh": "tintColor='#1B3A6B'"
+    },
+    "special_views": {
+      "vertical_timeline": "border-l-2 border-gray-200 ml-4 pl-6 py-2 relative",
+      "timeline_node_active": "absolute -left-[9px] w-4 h-4 rounded-full bg-[#1B3A6B] border-4 border-white",
+      "timeline_node_inactive": "absolute -left-[9px] w-4 h-4 rounded-full bg-gray-300 border-4 border-white",
+      "photo_carousel": "w-full h-64 bg-black rounded-[12px] overflow-hidden"
+    }
+  },
+  "interactions_and_motion": {
+    "haptics": "MANDATORY. Add haptic feedback (impactLight or impactMedium) on all button presses, tab switches, and successful pull-to-refresh actions.",
+    "page_transitions": "Slide-in from right for standard navigation; modal slide-up for 'New Package' wizard.",
+    "micro_interactions": "Scale down (0.95) on button press using Animated API or Reanimated to give a tactile feel."
+  },
+  "media_assets": {
+    "strategy": "Photography grounds the app in physical reality, contrasting the sterile UI. Use the generated minimal assets for onboarding to reduce visual noise, and real warehouse/shipping imagery for banners/placeholders.",
+    "images": [
+      {
+        "category": "onboarding",
+        "description": "Onboarding Slide 1: Global Package Tracking Illustration",
+        "url": "https://static.prod-images.emergentagent.com/jobs/95cc8290-c522-40a5-a2a8-09954f10a702/images/933f086afcff7ba86792eeda59f01443d89ee0e78782ed9c253b62b8092a8e8c.png"
+      },
+      {
+        "category": "banners",
+        "description": "Home Screen Groupage Banner Background",
+        "url": "https://static.prod-images.emergentagent.com/jobs/95cc8290-c522-40a5-a2a8-09954f10a702/images/39e863956bd2725a01dfbbc0e09b6b8ecd6e3db701da307f69a6ec2043d8ebc8.png"
+      },
+      {
+        "category": "empty_states",
+        "description": "Empty Package List / Search Results Not Found",
+        "url": "https://static.prod-images.emergentagent.com/jobs/95cc8290-c522-40a5-a2a8-09954f10a702/images/079d2726df07d8479d01327751f70f6c6735ba935ed00c4bfd1d4dc3b50956e3.png"
+      },
+      {
+        "category": "placeholders",
+        "description": "Real Logistics Warehouse - For package detail photo placeholders",
+        "url": "https://images.pexels.com/photos/5860937/pexels-photo-5860937.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+      },
+      {
+        "category": "placeholders",
+        "description": "Real Cargo Ship - For shipment progress placeholders",
+        "url": "https://images.unsplash.com/photo-1713854091046-5965fa44a672?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwzfHxjYXJnbyUyMHNoaXAlMjBjb250YWluZXJzfGVufDB8fHx8MTc3ODE2MjM5M3ww&ixlib=rb-4.1.0&q=85"
+      }
+    ]
+  },
+  "testing_attributes": {
+    "rule": "All interactive and key informational elements MUST include a testID attribute (React Native equivalent of data-testid).",
+    "convention": "kebab-case, role-based",
+    "examples": [
+      "testID='login-submit-button'",
+      "testID='home-kpi-card-received'",
+      "testID='package-list-item'",
+      "testID='new-package-stepper-next'"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build standard React Native Views/Text using NativeWind (Tailwind for React Native) matching the provided classes.",
+    "Implement the 4-tab bottom navigation with Lucide-react-native icons.",
+    "Use react-native-reanimated and react-native-gesture-handler for the photo carousel pinch-zoom and smooth stepper transitions.",
+    "Ensure the 'Tracking Numbers' exclusively use the monospace font class provided.",
+    "Build a robust skeleton loader component for the 'My Packages' and 'Shipments' list views; do not use ActivityIndicator alone.",
+    "Language selection must control app state (default: French).",
+    "The 3-step 'New Package' form must show a visual step indicator.",
+    "Apply testID to all TouchableOpacities, Inputs, and major Views."
+  ]
+}

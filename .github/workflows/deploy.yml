@@ -1,0 +1,26 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute deployment commands via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Aller dans le répertoire du projet
+            cd /var/www/mog_v1-main
+            
+            # Récupérer les dernières modifications de la branche main
+            git pull origin main
+            
+            # Reconstruire et relancer les conteneurs Docker
+            docker-compose up -d --build

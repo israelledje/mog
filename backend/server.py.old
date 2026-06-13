@@ -1,0 +1,896 @@
+from dotenv import load_dotenv
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+import os
+import logging
+import uuid
+import bcrypt
+import jwt
+import secrets
+import random
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional, Literal
+from cryptography.fernet import Fernet, InvalidToken
+
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, EmailStr
+
+# ----- Setup -----
+mongo_url = os.environ['MONGO_URI']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DATABASE_NAME']]
+
+JWT_SECRET = os.environ['JWT_SECRET']
+JWT_ALG = "HS256"
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
+
+cipher_suite = Fernet(ENCRYPTION_KEY.encode()) if ENCRYPTION_KEY else None
+
+def encrypt_data(text: str) -> str:
+    if not text or not cipher_suite:
+        return text
+    return cipher_suite.encrypt(text.encode()).decode()
+
+def decrypt_data(text: str) -> str:
+    if not text or not cipher_suite:
+        return text
+    try:
+        return cipher_suite.decrypt(text.encode()).decode()
+    except (InvalidToken, ValueError, TypeError):
+        return text
+
+def encrypt_user(u: dict) -> dict:
+    res = u.copy()
+    if res.get("full_name"): res["full_name"] = encrypt_data(res["full_name"])
+    if res.get("phone"): res["phone"] = encrypt_data(res["phone"])
+    return res
+
+def decrypt_user(u: dict) -> dict:
+    if not u: return u
+    res = u.copy()
+    if res.get("full_name"): res["full_name"] = decrypt_data(res["full_name"])
+    if res.get("phone"): res["phone"] = decrypt_data(res["phone"])
+    return res
+
+app = FastAPI(title="Cargo Tracker API")
+api = APIRouter(prefix="/api")
+auth_scheme = HTTPBearer(auto_error=False)
+
+# ----- Helpers -----
+def hash_password(p: str) -> str:
+    return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
+
+def verify_password(p: str, h: str) -> bool:
+    try:
+        return bcrypt.checkpw(p.encode(), h.encode())
+    except Exception:
+        return False
+
+def create_token(user_id: str, ttype: str = "access") -> str:
+    delta = timedelta(minutes=60) if ttype == "access" else timedelta(days=30)
+    payload = {"sub": user_id, "type": ttype, "exp": datetime.now(timezone.utc) + delta}
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(auth_scheme)) -> dict:
+    if not creds:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALG])
+        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        if not user:
+            raise HTTPException(401, "User not found")
+        return decrypt_user(user)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+
+# ----- Models -----
+class RegisterIn(BaseModel):
+    full_name: str
+    email: EmailStr
+    phone: str
+    password: str
+    city: str
+    preferred_language: Literal["fr", "en", "zh"] = "fr"
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+class VerifyOtpIn(BaseModel):
+    email: EmailStr
+    code: str
+
+class ResetIn(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+class UpdateProfileIn(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    city: Optional[str] = None
+    default_delivery_address: Optional[str] = None
+    preferred_language: Optional[Literal["fr", "en", "zh"]] = None
+    avatar_url: Optional[str] = None
+
+class RefreshIn(BaseModel):
+    refresh: str
+
+class PushTokenIn(BaseModel):
+    token: str
+    platform: Literal["ios", "android", "web"] = "android"
+
+class ColisIn(BaseModel):
+    description: str
+    category: str
+    transport_mode: Literal["air", "sea"]
+    weight_real: float = 0.0
+    weight_volumetric: float = 0.0
+    dimensions: dict = Field(default_factory=lambda: {"l": 0, "w": 0, "h": 0})
+    declared_value: float = 0
+    currency: Literal["CNY", "USD"] = "CNY"
+    supplier_name: str
+    platform: str
+    order_ref: Optional[str] = ""
+    insurance_enabled: bool = False
+    delivery_address: Optional[str] = ""
+    instructions: Optional[str] = ""
+    invoice_base64: Optional[str] = None
+    photos: Optional[List[str]] = None
+
+# ----- Auth Endpoints -----
+@api.post("/auth/register")
+async def register(body: RegisterIn):
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already registered")
+    user_id = str(uuid.uuid4())
+    # Generate client code: CM + 5 digits
+    count = await db.users.count_documents({})
+    client_code = f"CM{(count + 124):05d}"
+    user_doc = encrypt_user({
+        "id": user_id,
+        "full_name": body.full_name,
+        "email": email,
+        "phone": body.phone,
+        "city": body.city,
+        "client_code": client_code,
+        "password_hash": hash_password(body.password),
+        "default_delivery_address": "",
+        "preferred_language": body.preferred_language,
+        "avatar_url": None,
+        "role": "client",
+        "created_at": now_iso(),
+    })
+    await db.users.insert_one(user_doc)
+    user_doc.pop("password_hash", None)
+    user_doc.pop("_id", None)
+    user_doc = decrypt_user(user_doc)
+    access = create_token(user_id, "access")
+    refresh = create_token(user_id, "refresh")
+    return {"access": access, "refresh": refresh, "user": user_doc}
+
+@api.post("/auth/login")
+async def login(body: LoginIn):
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user or not verify_password(body.password, user.get("password_hash", "")):
+        raise HTTPException(401, "Invalid credentials")
+    access = create_token(user["id"], "access")
+    refresh = create_token(user["id"], "refresh")
+    user.pop("_id", None)
+    user.pop("password_hash", None)
+    return {"access": access, "refresh": refresh, "user": decrypt_user(user)}
+
+@api.post("/auth/push-token")
+async def register_push_token(body: PushTokenIn, user: dict = Depends(get_current_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"push_token": body.token, "push_platform": body.platform}}
+    )
+    return {"message": "Push token registered successfully"}
+
+@api.get("/auth/me")
+async def me(user: dict = Depends(get_current_user)):
+    return user
+
+@api.post("/auth/qr-login")
+async def qr_login(qr_token: str):
+    # Lookup by badge_secret (or email for fallback)
+    user = await db.users.find_one({"$or": [{"badge_secret": qr_token}, {"email": qr_token}]})
+    if not user or user.get("role") not in ["operator", "admin"]:
+        raise HTTPException(404, "Badge invalide ou non reconnu.")
+    
+    otp = f"{random.randint(1000, 9999)}"
+    await db.password_resets.update_one(
+        {"email": user["email"]},
+        {"$set": {"code": otp, "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(), "used": False}},
+        upsert=True
+    )
+    logger.info(f"[OTP OPERATOR] {user['email']} -> {otp}")
+    return {"message": "OTP envoyé", "email": user["email"]}
+
+@api.post("/auth/qr-verify")
+async def qr_verify(body: VerifyOtpIn):
+    email = body.email.lower().strip()
+    rec = await db.password_resets.find_one({"email": email})
+    if not rec or rec.get("code") != body.code or rec.get("used"):
+        raise HTTPException(400, "Code invalide")
+    
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(404, "User not found")
+        
+    await db.password_resets.update_one({"email": email}, {"$set": {"used": True}})
+    access = create_token(user["id"], "access")
+    refresh = create_token(user["id"], "refresh")
+    user.pop("_id", None)
+    user.pop("password_hash", None)
+    return {"access": access, "refresh": refresh, "user": decrypt_user(user)}
+
+@api.post("/auth/forgot-password")
+async def forgot(body: ForgotIn):
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    # Always return success for privacy. Generate code anyway.
+    code = f"{random.randint(100000, 999999)}"
+    if user:
+        await db.password_resets.update_one(
+            {"email": email},
+            {"$set": {"code": code, "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(), "used": False}},
+            upsert=True,
+        )
+        logger.info(f"[OTP] {email} -> {code}")
+    return {"ok": True, "dev_code": code if user else None}
+
+@api.post("/auth/verify-otp")
+async def verify_otp(body: VerifyOtpIn):
+    email = body.email.lower().strip()
+    rec = await db.password_resets.find_one({"email": email})
+    if not rec or rec.get("code") != body.code or rec.get("used"):
+        raise HTTPException(400, "Invalid code")
+    return {"ok": True}
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetIn):
+    email = body.email.lower().strip()
+    rec = await db.password_resets.find_one({"email": email})
+    if not rec or rec.get("code") != body.code or rec.get("used"):
+        raise HTTPException(400, "Invalid code")
+    await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    await db.password_resets.update_one({"email": email}, {"$set": {"used": True}})
+    return {"ok": True}
+
+@api.put("/auth/me")
+async def update_me(body: UpdateProfileIn, user: dict = Depends(get_current_user)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        encrypted_updates = encrypt_user(updates)
+        await db.users.update_one({"id": user["id"]}, {"$set": encrypted_updates})
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    return decrypt_user(fresh)
+
+@api.post("/auth/refresh")
+async def refresh_token(body: RefreshIn):
+    try:
+        payload = jwt.decode(body.refresh, JWT_SECRET, algorithms=[JWT_ALG])
+        if payload.get("type") != "refresh":
+            raise HTTPException(401, "Invalid token type")
+        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+        if not user:
+            raise HTTPException(401, "User not found")
+        return {"access": create_token(user["id"], "access"), "user": decrypt_user(user)}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Refresh token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid refresh token")
+
+@api.post("/auth/push-token")
+async def register_push_token(body: PushTokenIn, user: dict = Depends(get_current_user)):
+    await db.push_tokens.update_one(
+        {"user_id": user["id"], "token": body.token},
+        {"$set": {"user_id": user["id"], "token": body.token, "platform": body.platform, "updated_at": now_iso()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+# ----- Colis Endpoints -----
+TIMELINE_ORDER = ["pending_reception", "received", "quoted", "grouped", "loading", "departed", "in_transit", "arrived", "delivered"]
+
+def build_timeline(status: str, created_at: str) -> List[dict]:
+    cur_idx = TIMELINE_ORDER.index(status) if status in TIMELINE_ORDER else 0
+    steps = []
+    for i, s in enumerate(TIMELINE_ORDER):
+        if i < cur_idx:
+            steps.append({"step": s, "completed_at": created_at, "status": "done"})
+        elif i == cur_idx:
+            steps.append({"step": s, "completed_at": created_at, "status": "current"})
+        else:
+            steps.append({"step": s, "completed_at": None, "status": "pending"})
+    return steps
+
+@api.get("/colis")
+async def list_colis(user: dict = Depends(get_current_user)):
+    if user.get("role") in ["admin", "operator"]:
+        items = await db.colis.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        user_ids = list(set(i["user_id"] for i in items))
+        users_info = await db.users.find({"id": {"$in": user_ids}}, {"id": 1, "full_name": 1, "_id": 0}).to_list(None)
+        user_map = {u["id"]: decrypt_data(u.get("full_name", "")) for u in users_info}
+        for item in items:
+            item["client_name"] = user_map.get(item["user_id"], "Inconnu")
+    else:
+        items = await db.colis.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return items
+
+# ----- Admin Endpoints -----
+@api.get("/admin/stats")
+async def admin_stats(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    total_packages = await db.colis.count_documents({})
+    total_revenue = await db.colis.aggregate([{"$group": {"_id": None, "total": {"$sum": "$declared_value"}}}]).to_list(1)
+    rev = total_revenue[0]["total"] if total_revenue else 0
+    return {
+        "total_revenue": rev,
+        "total_packages": total_packages,
+        "logistics_split": {"sea": 5, "air": 2}
+    }
+
+@api.get("/admin/customers")
+async def admin_list_customers(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    users = await db.users.find({"role": "client"}, {"_id": 0, "password_hash": 0}).to_list(500)
+    return [decrypt_user(u) for u in users]
+
+@api.get("/admin/team")
+async def admin_list_team(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    users = await db.users.find({"role": {"$in": ["admin", "operator"]}}, {"_id": 0, "password_hash": 0}).to_list(100)
+    return [decrypt_user(u) for u in users]
+
+class AdminUpdateUserIn(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    city: Optional[str] = None
+    role: Optional[Literal["admin", "operator", "client"]] = None
+
+@api.patch("/admin/users/{uid}")
+async def admin_update_user(uid: str, body: AdminUpdateUserIn, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+        
+    update_data = body.model_dump(exclude_unset=True)
+    if not update_data:
+        u = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+        return decrypt_user(u)
+        
+    if "email" in update_data:
+        update_data["email"] = update_data["email"].lower().strip()
+        
+    encrypted_update = encrypt_user(update_data)
+        
+    res = await db.users.update_one({"id": uid}, {"$set": encrypted_update})
+    if res.matched_count == 0:
+        raise HTTPException(404, "User not found")
+        
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+    return decrypt_user(u)
+
+# ----- Settings & Config Endpoints -----
+class SettingsIn(BaseModel):
+    storage_free_days: int = 7
+    storage_daily_fee: float = 1000.0
+    air_delay_days: int = 7
+    air_express_delay_days: int = 3
+    sea_delay_days: int = 45
+    exchange_rate_cny_xaf: float = 85.0
+
+@api.get("/admin/settings")
+async def get_settings(user: dict = Depends(get_current_user)):
+    # Accessible to operator and admin for calculations
+    if user.get("role") not in ["admin", "operator"]:
+        raise HTTPException(403, "Forbidden")
+    settings = await db.settings.find_one({"_id": "global_config"})
+    if not settings:
+        settings = SettingsIn().model_dump()
+        settings["_id"] = "global_config"
+        await db.settings.insert_one(settings)
+    settings.pop("_id", None)
+    return settings
+
+@api.put("/admin/settings")
+async def update_settings(body: SettingsIn, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    
+    current_settings = await db.settings.find_one({"_id": "global_config"})
+    if current_settings and current_settings.get("exchange_rate_cny_xaf") != body.exchange_rate_cny_xaf:
+        # Save history if rate changed
+        await db.exchange_rates_history.insert_one({
+            "old_rate": current_settings.get("exchange_rate_cny_xaf"),
+            "new_rate": body.exchange_rate_cny_xaf,
+            "changed_at": now_iso(),
+            "changed_by": user["id"]
+        })
+
+    update_data = body.model_dump()
+    await db.settings.update_one({"_id": "global_config"}, {"$set": update_data}, upsert=True)
+    return update_data
+
+# ----- Tarifs Endpoints -----
+@api.get("/tarifs")
+@api.get("/tarifs/")
+async def get_tarifs():
+    t = await db.tarifs.find({}, {"_id": 0}).to_list(100)
+    if not t:
+        t = [
+            {"id": "air_normal", "mode": "air", "label": "Colis Normal", "unit": "kg", "price": 8500, "description": "Vêtements, chaussures, sacs ordinaires...", "category_key": "normal"},
+            {"id": "air_machine", "mode": "air", "label": "Colis Machine", "unit": "kg", "price": 9500, "description": "Appareils, électronique...", "category_key": "machine"},
+            {"id": "sea_normal", "mode": "sea", "label": "Marchandise Ordinaire", "unit": "cbm", "price": 360000, "description": "Meubles, matériaux de construction...", "category_key": "normal"},
+            {"id": "sea_machine", "mode": "sea", "label": "Marchandise Sensible", "unit": "cbm", "price": 385000, "description": "Machines, produits avec batterie...", "category_key": "machine"},
+        ]
+        await db.tarifs.insert_many([{**item, "updated_at": now_iso()} for item in t])
+        for item in t: item.pop("_id", None)
+    return t
+
+class TarifUpdateIn(BaseModel):
+    price: Optional[float] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+
+@api.patch("/tarifs/{tid}")
+async def update_tarif(tid: str, body: TarifUpdateIn, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    update_data = body.model_dump(exclude_unset=True)
+    if not update_data:
+        return {"status": "ok"}
+    update_data["updated_at"] = now_iso()
+    res = await db.tarifs.update_one({"id": tid}, {"$set": update_data})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Tarif not found")
+    return {"status": "ok"}
+
+
+class AdminCreateUserIn(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: str
+    role: Literal["admin", "operator"]
+    city: str
+    gender: Literal["male", "female"] = "male"
+
+@api.post("/admin/users")
+async def admin_create_user(body: AdminCreateUserIn, user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already exists")
+    uid = str(uuid.uuid4())
+    badge_secret = secrets.token_urlsafe(16)
+    
+    count = await db.users.count_documents({})
+    prefix = "ADM" if body.role == "admin" else "OPS"
+    client_code = f"{prefix}{(count + 1):03d}"
+    
+    user_doc = encrypt_user({
+        "id": uid,
+        "full_name": body.full_name,
+        "email": email,
+        "phone": body.phone,
+        "city": body.city,
+        "client_code": client_code,
+        "password_hash": hash_password(body.password),
+        "default_delivery_address": "",
+        "preferred_language": "fr",
+        "avatar_url": None,
+        "role": body.role,
+        "gender": body.gender,
+        "badge_secret": badge_secret,
+        "created_at": now_iso(),
+    })
+    await db.users.insert_one(user_doc)
+    user_doc.pop("_id", None)
+    user_doc.pop("password_hash", None)
+    return decrypt_user(user_doc)
+
+@api.get("/colis/{cid}")
+async def get_colis(cid: str, user: dict = Depends(get_current_user)):
+    item = await db.colis.find_one({"id": cid, "user_id": user["id"]}, {"_id": 0})
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+@api.post("/colis")
+async def create_colis(body: ColisIn, user: dict = Depends(get_current_user)):
+    cid = str(uuid.uuid4())
+    # Atomic counter for tracking number (concurrency-safe)
+    counter = await db.counters.find_one_and_update(
+        {"_id": "colis_seq"},
+        {"$inc": {"value": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    seq = (counter or {}).get("value", 1) + 346  # start near 347 like seed
+    prefix = "AIR" if body.transport_mode == "air" else "SEA"
+    year = datetime.now(timezone.utc).year % 100
+    tracking_number = f"{prefix}-{user['client_code']}-{seq:05d}-{year:02d}"
+    now = now_iso()
+
+    # 1. IATA Rules & Pricing Calculation
+    l = body.dimensions.get("l", 0)
+    w = body.dimensions.get("w", 0)
+    h = body.dimensions.get("h", 0)
+    
+    vol_weight = 0.0
+    chargeable_qty = 0.0
+    shipping_cost = 0.0
+    
+    if body.transport_mode == "air":
+        vol_weight = (l * w * h) / 6000.0  # IATA rule for Air
+        chargeable_qty = max(body.weight_real, vol_weight)
+    else:
+        # Sea freight: usually charged by CBM
+        cbm = (l * w * h) / 1000000.0
+        chargeable_qty = max(cbm, body.weight_real / 1000.0) # 1 Ton = 1 CBM
+        vol_weight = cbm # Store CBM in this field for Sea
+
+    # Find applicable tarif
+    tarif = await db.tarifs.find_one({"mode": body.transport_mode, "category_key": body.category})
+    if tarif:
+        shipping_cost = tarif["price"] * chargeable_qty
+
+    doc = {
+        "id": cid,
+        "user_id": user["id"],
+        "tracking_number": tracking_number,
+        "description": body.description,
+        "category": body.category,
+        "status": "pending_reception",
+        "transport_mode": body.transport_mode,
+        "photos": body.photos or [],
+        "weight_real": body.weight_real,
+        "weight_volumetric": vol_weight,
+        "chargeable_qty": chargeable_qty,
+        "shipping_cost": shipping_cost,
+        "dimensions": body.dimensions,
+        "declared_value": body.declared_value,
+        "currency": body.currency,
+        "supplier_name": body.supplier_name,
+        "platform": body.platform,
+        "order_ref": body.order_ref or "",
+        "insurance_enabled": body.insurance_enabled,
+        "delivery_address": body.delivery_address or "",
+        "instructions": body.instructions or "",
+        "invoice_base64": body.invoice_base64,
+        "groupage_id": None,
+        "container_number": None,
+        "estimated_arrival": None,
+        "payment_status": "unpaid",
+        "storage_fee": 0.0,
+        "arrived_at": None,
+        "timeline": build_timeline("pending_reception", now),
+        "devis_url": None,
+        "facture_url": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.colis.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+# ----- Groupages -----
+@api.get("/groupages")
+async def list_groupages(user: dict = Depends(get_current_user)):
+    # Get user colis ids
+    colis_ids = [c["id"] async for c in db.colis.find({"user_id": user["id"]}, {"id": 1})]
+    items = await db.groupages.find({}, {"_id": 0}).sort("departure_date", -1).to_list(100)
+    # Filter to those that contain at least one of user's colis OR show all (for visibility)
+    return items
+
+@api.get("/groupages/{gid}")
+async def get_groupage(gid: str, user: dict = Depends(get_current_user)):
+    item = await db.groupages.find_one({"id": gid}, {"_id": 0})
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+@api.get("/groupages/next/info")
+async def next_groupage(user: dict = Depends(get_current_user)):
+    sea = await db.groupages.find_one({"mode": "sea", "status": {"$in": ["loading", "departed"]}}, {"_id": 0}, sort=[("departure_date", 1)])
+    air = await db.groupages.find_one({"mode": "air", "status": {"$in": ["loading", "departed"]}}, {"_id": 0}, sort=[("departure_date", 1)])
+    return {"sea": sea, "air": air}
+
+# ----- Notifications -----
+@api.get("/notifications")
+async def list_notifications(user: dict = Depends(get_current_user)):
+    items = await db.notifications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+@api.post("/notifications/{nid}/read")
+async def mark_read(nid: str, user: dict = Depends(get_current_user)):
+    res = await db.notifications.update_one({"id": nid, "user_id": user["id"]}, {"$set": {"read": True}})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Notification not found")
+    return {"ok": True}
+
+@api.post("/notifications/read-all")
+async def mark_all_read(user: dict = Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": user["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+# ----- Stats -----
+@api.get("/stats/kpi")
+async def kpi(user: dict = Depends(get_current_user)):
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    counts = {doc["_id"]: doc["count"] async for doc in db.colis.aggregate(pipeline)}
+    pending = counts.get("pending_reception", 0) + counts.get("received", 0)
+    warehouse = counts.get("quoted", 0) + counts.get("grouped", 0)
+    transit = counts.get("loading", 0) + counts.get("departed", 0) + counts.get("in_transit", 0) + counts.get("arrived", 0)
+    delivered = counts.get("delivered", 0)
+    return {"pending": pending, "warehouse": warehouse, "transit": transit, "delivered": delivered}
+
+@api.get("/")
+async def root():
+    return {"app": "Cargo Tracker API", "ok": True}
+
+app.include_router(api)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ----- Startup: indexes + seed -----
+async def seed_data():
+    # ensure indexes
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("id", unique=True)
+    await db.colis.create_index("id", unique=True)
+    await db.colis.create_index("user_id")
+    await db.colis.create_index("tracking_number", unique=True)
+    await db.groupages.create_index("id", unique=True)
+    await db.notifications.create_index("user_id")
+
+    # Initialize colis counter to existing count for backwards compat
+    existing = await db.colis.count_documents({})
+    cur = await db.counters.find_one({"_id": "colis_seq"})
+    if not cur or cur.get("value", 0) < existing:
+        await db.counters.update_one(
+            {"_id": "colis_seq"},
+            {"$set": {"value": existing}},
+            upsert=True,
+        )
+
+    # demo user
+    demo_email = "jean@cargo.cm"
+    demo_user = await db.users.find_one({"email": demo_email})
+    if not demo_user:
+        uid = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": uid,
+            "full_name": "Jean Fotso",
+            "email": demo_email,
+            "phone": "+237699123456",
+            "city": "Douala",
+            "client_code": "CM00124",
+            "password_hash": hash_password("demo123"),
+            "default_delivery_address": "Akwa, Rue Joss, Douala",
+            "preferred_language": "fr",
+            "avatar_url": None,
+            "role": "client",
+            "created_at": now_iso(),
+        })
+        demo_user = await db.users.find_one({"email": demo_email})
+
+    # demo operator
+    ops_email = "ops@cargo.cm"
+    ops_user = await db.users.find_one({"email": ops_email})
+    if not ops_user:
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "full_name": "Opérateur Entrepôt",
+            "email": ops_email,
+            "phone": "+8613800000000",
+            "city": "Guangzhou",
+            "client_code": "OPS001",
+            "password_hash": hash_password("secret123"),
+            "default_delivery_address": "Entrepôt CargoLine GZ",
+            "preferred_language": "fr",
+            "avatar_url": None,
+            "role": "operator",
+            "created_at": now_iso(),
+        })
+
+    # demo admin
+    admin_email = "admin@cargo.cm"
+    admin_user = await db.users.find_one({"email": admin_email})
+    if not admin_user:
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "full_name": "Admin Général",
+            "email": admin_email,
+            "phone": "+237690000000",
+            "city": "Douala",
+            "client_code": "ADM001",
+            "password_hash": hash_password("admin123"),
+            "default_delivery_address": "Siège CargoLine",
+            "preferred_language": "fr",
+            "avatar_url": None,
+            "role": "admin",
+            "created_at": now_iso(),
+        })
+
+    uid = demo_user["id"]
+    code = demo_user["client_code"]
+
+    # Seed groupages if empty
+    if await db.groupages.count_documents({}) == 0:
+        g_sea = {
+            "id": str(uuid.uuid4()),
+            "container_number": "MSCU-7382910",
+            "mode": "sea",
+            "departure_date": (datetime.now(timezone.utc) - timedelta(days=12)).isoformat(),
+            "estimated_arrival": (datetime.now(timezone.utc) + timedelta(days=18)).isoformat(),
+            "status": "in_transit",
+            "colis_ids": [],
+            "origin_port": "Guangzhou",
+            "destination_port": "Douala",
+        }
+        g_air = {
+            "id": str(uuid.uuid4()),
+            "container_number": "AWB-998732",
+            "mode": "air",
+            "departure_date": (datetime.now(timezone.utc) + timedelta(days=4)).isoformat(),
+            "estimated_arrival": (datetime.now(timezone.utc) + timedelta(days=10)).isoformat(),
+            "status": "loading",
+            "colis_ids": [],
+            "origin_port": "Shenzhen",
+            "destination_port": "Douala",
+        }
+        await db.groupages.insert_many([g_sea, g_air])
+        groupages = [g_sea, g_air]
+    else:
+        groupages = await db.groupages.find({}, {"_id": 0}).to_list(10)
+
+    g_sea = next((g for g in groupages if g["mode"] == "sea"), None)
+    g_air = next((g for g in groupages if g["mode"] == "air"), None)
+
+    # Seed 5 packages for demo user if none
+    if await db.colis.count_documents({"user_id": uid}) == 0:
+        seed_colis = [
+            {"desc": "Sneakers Nike Air", "cat": "shoes", "status": "received", "mode": "air", "supp": "Guangzhou Shoes Co.", "plat": "Alibaba", "wr": 4.5, "wv": 6.0, "val": 1200, "cur": "CNY"},
+            {"desc": "Smartphone accessories", "cat": "electronics", "status": "quoted", "mode": "air", "supp": "Shenzhen Tech Ltd", "plat": "1688", "wr": 2.1, "wv": 3.0, "val": 800, "cur": "CNY"},
+            {"desc": "Clothing batch", "cat": "clothing", "status": "grouped", "mode": "sea", "supp": "Hangzhou Garments", "plat": "Taobao", "wr": 22.0, "wv": 30.0, "val": 4500, "cur": "CNY"},
+            {"desc": "LED lighting fixtures", "cat": "construction", "status": "in_transit", "mode": "sea", "supp": "Foshan Lighting", "plat": "Alibaba", "wr": 45.0, "wv": 60.0, "val": 8000, "cur": "CNY"},
+            {"desc": "Children toys", "cat": "toys", "status": "delivered", "mode": "sea", "supp": "Yiwu Toys Group", "plat": "Alibaba", "wr": 18.0, "wv": 25.0, "val": 2300, "cur": "CNY"},
+        ]
+        for i, sc in enumerate(seed_colis):
+            cid = str(uuid.uuid4())
+            now = (datetime.now(timezone.utc) - timedelta(days=20 - i*3)).isoformat()
+            prefix = "AIR" if sc["mode"] == "air" else "SEA"
+            year = datetime.now(timezone.utc).year % 100
+            tracking = f"{prefix}-{code}-{(347 + i):05d}-{year:02d}"
+            groupage_ref = None
+            container = None
+            eta = None
+            if sc["status"] in ["grouped", "in_transit"]:
+                g = g_sea if sc["mode"] == "sea" else g_air
+                if g:
+                    groupage_ref = g["id"]
+                    container = g["container_number"]
+                    eta = g["estimated_arrival"]
+            doc = {
+                "id": cid,
+                "user_id": uid,
+                "tracking_number": tracking,
+                "description": sc["desc"],
+                "category": sc["cat"],
+                "status": sc["status"],
+                "transport_mode": sc["mode"],
+                "photos": [],
+                "weight_real": sc["wr"],
+                "weight_volumetric": sc["wv"],
+                "dimensions": {"l": 40, "w": 30, "h": 25},
+                "declared_value": sc["val"],
+                "currency": sc["cur"],
+                "supplier_name": sc["supp"],
+                "platform": sc["plat"],
+                "order_ref": f"ORD-{1000+i}",
+                "insurance_enabled": i % 2 == 0,
+                "delivery_address": "Akwa, Rue Joss, Douala",
+                "instructions": "",
+                "invoice_base64": None,
+                "groupage_id": groupage_ref,
+                "container_number": container,
+                "estimated_arrival": eta,
+                "timeline": build_timeline(sc["status"], now),
+                "devis_url": None,
+                "facture_url": None,
+                "created_at": now,
+            }
+            await db.colis.insert_one(doc)
+
+    # Seed notifications
+    if await db.notifications.count_documents({"user_id": uid}) == 0:
+        sample_colis = await db.colis.find({"user_id": uid}, {"_id": 0}).to_list(10)
+        types = ["received", "quoted", "grouped", "departed", "arrived", "delivered", "received", "quoted", "grouped", "delivered"]
+        for i, t in enumerate(types):
+            c = sample_colis[i % len(sample_colis)] if sample_colis else None
+            await db.notifications.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": uid,
+                "type": t,
+                "tracking_number": c["tracking_number"] if c else "AIR-CM00124-00347-25",
+                "message_key": f"notifications.{t}",
+                "read": i >= 4,
+                "created_at": (datetime.now(timezone.utc) - timedelta(hours=i*5)).isoformat(),
+                "colis_id": c["id"] if c else None,
+            })
+
+    # write test credentials
+    try:
+        os.makedirs("/app/memory", exist_ok=True)
+        with open("/app/memory/test_credentials.md", "w") as f:
+            f.write(f"""# Test Credentials
+
+## Demo User (importer)
+- Email: jean@cargo.cm
+- Password: demo123
+- Client Code: CM00124
+
+uvicorn server:app --reload
+
+
+
+## Auth Endpoints
+- POST /api/auth/register
+- POST /api/auth/login
+- GET  /api/auth/me
+- PUT  /api/auth/me
+- POST /api/auth/forgot-password
+- POST /api/auth/verify-otp
+- POST /api/auth/reset-password
+""")
+    except Exception as e:
+        logger.warning(f"creds write failed: {e}")
+
+@app.on_event("startup")
+async def on_startup():
+    try:
+        await seed_data()
+        logger.info("Seed data OK")
+    except Exception as e:
+        logger.exception(f"Seed failed: {e}")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    client.close()
