@@ -292,8 +292,8 @@ export default function LogisticsPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Réf. Groupage" value={newForm.container_number} onChange={v => setNewForm(f => ({ ...f, container_number: v }))} placeholder="CONT-2024-XXX" />
-                <Field label="Port d'origine" value={newForm.origin_port} onChange={v => setNewForm(f => ({ ...f, origin_port: v }))} placeholder="Guangzhou" />
+                <Field label="Réf. Groupage" value={newForm.container_number} onChange={(v: string) => setNewForm(f => ({ ...f, container_number: v }))} placeholder="CONT-2024-XXX" />
+                <Field label="Port d'origine" value={newForm.origin_port} onChange={(v: string) => setNewForm(f => ({ ...f, origin_port: v }))} placeholder="Guangzhou" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -305,11 +305,11 @@ export default function LogisticsPage() {
                     <option value="Bafoussam">Bafoussam</option>
                   </select>
                 </div>
-                <Field label="Nom du navire / vol" value={newForm.vessel_name} onChange={v => setNewForm(f => ({ ...f, vessel_name: v }))} placeholder="MSC Floriana..." />
+                <Field label="Nom du navire / vol" value={newForm.vessel_name} onChange={(v: string) => setNewForm(f => ({ ...f, vessel_name: v }))} placeholder="MSC Floriana..." />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field type="date" label="Départ prévu" value={newForm.departure_date} onChange={v => setNewForm(f => ({ ...f, departure_date: v }))} />
-                <Field type="date" label="Arrivée prévue" value={newForm.estimated_arrival} onChange={v => setNewForm(f => ({ ...f, estimated_arrival: v }))} />
+                <Field type="date" label="Départ prévu" value={newForm.departure_date} onChange={(v: string) => setNewForm(f => ({ ...f, departure_date: v }))} />
+                <Field type="date" label="Arrivée prévue" value={newForm.estimated_arrival} onChange={(v: string) => setNewForm(f => ({ ...f, estimated_arrival: v }))} />
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -339,8 +339,8 @@ export default function LogisticsPage() {
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Réf. Groupage" value={editContainer.container_number} onChange={v => setEditContainer((c: any) => ({ ...c, container_number: v }))} />
-                <Field label="Port d'origine" value={editContainer.origin_port || ''} onChange={v => setEditContainer((c: any) => ({ ...c, origin_port: v }))} />
+                <Field label="Réf. Groupage" value={editContainer.container_number} onChange={(v: string) => setEditContainer((c: any) => ({ ...c, container_number: v }))} />
+                <Field label="Port d'origine" value={editContainer.origin_port || ''} onChange={(v: string) => setEditContainer((c: any) => ({ ...c, origin_port: v }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -352,11 +352,11 @@ export default function LogisticsPage() {
                     <option value="Bafoussam">Bafoussam</option>
                   </select>
                 </div>
-                <Field label="Navire / Vol" value={editContainer.vessel_name || ''} onChange={v => setEditContainer((c: any) => ({ ...c, vessel_name: v }))} />
+                <Field label="Navire / Vol" value={editContainer.vessel_name || ''} onChange={(v: string) => setEditContainer((c: any) => ({ ...c, vessel_name: v }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field type="date" label="Départ prévu" value={editContainer.departure_date ? editContainer.departure_date.split('T')[0] : ''} onChange={v => setEditContainer((c: any) => ({ ...c, departure_date: v }))} />
-                <Field type="date" label="Arrivée prévue" value={editContainer.estimated_arrival ? editContainer.estimated_arrival.split('T')[0] : ''} onChange={v => setEditContainer((c: any) => ({ ...c, estimated_arrival: v }))} />
+                <Field type="date" label="Départ prévu" value={editContainer.departure_date ? editContainer.departure_date.split('T')[0] : ''} onChange={(v: string) => setEditContainer((c: any) => ({ ...c, departure_date: v }))} />
+                <Field type="date" label="Arrivée prévue" value={editContainer.estimated_arrival ? editContainer.estimated_arrival.split('T')[0] : ''} onChange={(v: string) => setEditContainer((c: any) => ({ ...c, estimated_arrival: v }))} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setEditContainer(null)} className="flex-1 py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors">Annuler</button>

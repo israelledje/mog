@@ -337,13 +337,13 @@ export default function EntrepotPage() {
                   </button>
                 ))}
               </div>
-              <WField label="Nom de l'entrepôt" value={newEntrepot.name} onChange={v => setNewEntrepot(f => ({ ...f, name: v }))} placeholder="Ex: Entrepôt MOG Guangzhou A" />
+              <WField label="Nom de l'entrepôt" value={newEntrepot.name} onChange={(v: string) => setNewEntrepot(f => ({ ...f, name: v }))} placeholder="Ex: Entrepôt MOG Guangzhou A" />
               <div className="grid grid-cols-2 gap-3">
-                <WField label="Ville" value={newEntrepot.city} onChange={v => setNewEntrepot(f => ({ ...f, city: v }))} />
-                <WField label="Pays" value={newEntrepot.country} onChange={v => setNewEntrepot(f => ({ ...f, country: v }))} />
+                <WField label="Ville" value={newEntrepot.city} onChange={(v: string) => setNewEntrepot(f => ({ ...f, city: v }))} />
+                <WField label="Pays" value={newEntrepot.country} onChange={(v: string) => setNewEntrepot(f => ({ ...f, country: v }))} />
               </div>
-              <WField label="Adresse complète" value={newEntrepot.address} onChange={v => setNewEntrepot(f => ({ ...f, address: v }))} placeholder="Ex: 23 Guangzhou Rd..." />
-              <WField label="Contact" value={newEntrepot.contact} onChange={v => setNewEntrepot(f => ({ ...f, contact: v }))} placeholder="+86 xxx xxx xxxx" />
+              <WField label="Adresse complète" value={newEntrepot.address} onChange={(v: string) => setNewEntrepot(f => ({ ...f, address: v }))} placeholder="Ex: 23 Guangzhou Rd..." />
+              <WField label="Contact" value={newEntrepot.contact} onChange={(v: string) => setNewEntrepot(f => ({ ...f, contact: v }))} placeholder="+86 xxx xxx xxxx" />
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowCreateEntrepot(false)} className="flex-1 py-3 text-slate-400 font-bold hover:text-slate-600">Annuler</button>
                 <button onClick={createEntrepot} disabled={submitting || !newEntrepot.name}
@@ -367,9 +367,9 @@ export default function EntrepotPage() {
               <button onClick={() => setEditEntrepot(null)} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400"><X size={20} /></button>
             </div>
             <div className="space-y-4">
-              <WField label="Nom" value={editEntrepot.name} onChange={v => setEditEntrepot((e: any) => ({ ...e, name: v }))} />
-              <WField label="Adresse" value={editEntrepot.address || ''} onChange={v => setEditEntrepot((e: any) => ({ ...e, address: v }))} />
-              <WField label="Contact" value={editEntrepot.contact || ''} onChange={v => setEditEntrepot((e: any) => ({ ...e, contact: v }))} />
+              <WField label="Nom" value={editEntrepot.name} onChange={(v: string) => setEditEntrepot((e: any) => ({ ...e, name: v }))} />
+              <WField label="Adresse" value={editEntrepot.address || ''} onChange={(v: string) => setEditEntrepot((e: any) => ({ ...e, address: v }))} />
+              <WField label="Contact" value={editEntrepot.contact || ''} onChange={(v: string) => setEditEntrepot((e: any) => ({ ...e, contact: v }))} />
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setEditEntrepot(null)} className="flex-1 py-3 text-slate-400 font-bold hover:text-slate-600">Annuler</button>
                 <button onClick={updateEntrepot} disabled={submitting}
