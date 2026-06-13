@@ -19,7 +19,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
 const STATUS_CONFIG: any = {
   pending_reception: { label: 'En attente', color: 'bg-amber-100 text-amber-700' },

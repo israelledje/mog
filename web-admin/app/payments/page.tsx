@@ -9,7 +9,7 @@ import {
   Pencil, Trash2
 } from 'lucide-react';
 
-const API = 'http://127.0.0.1:8000/api';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
 function getToken() {
   return typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
