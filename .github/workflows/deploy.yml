@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             # Aller dans le répertoire du projet
-            cd /var/www/mog_v1-main
+            cd /var/www/mog
             
             # Récupérer les dernières modifications de la branche main
             git pull origin main
