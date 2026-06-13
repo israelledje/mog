@@ -22,5 +22,5 @@ jobs:
             # Récupérer les dernières modifications de la branche main
             git pull origin main
             
-            # Reconstruire et relancer les conteneurs Docker
-            docker-compose up -d --build
+            # Reconstruire et relancer les conteneurs Docker (V2 syntax)
+            docker compose up -d --build
