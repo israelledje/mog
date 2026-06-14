@@ -14,14 +14,18 @@ function cleanLocks(dir) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
         const fullPath = path.join(dir, file);
-        if (fs.statSync(fullPath).isDirectory()) {
-            cleanLocks(fullPath);
-        } else if (file === 'SingletonLock') {
-            try {
+        try {
+            const stat = fs.lstatSync(fullPath);
+            if (stat.isDirectory()) {
+                cleanLocks(fullPath);
+            } else if (file === 'SingletonLock' || file === 'SingletonCookie' || file === 'SingletonSocket') {
                 fs.unlinkSync(fullPath);
                 console.log(`Removed stale lock file: ${fullPath}`);
-            } catch (e) {
-                console.error(`Could not remove ${fullPath}`, e);
+            }
+        } catch (e) {
+            // Ignore broken symlinks or missing files
+            if (file === 'SingletonLock' || file === 'SingletonCookie' || file === 'SingletonSocket') {
+                try { fs.unlinkSync(fullPath); } catch (err) {}
             }
         }
     }
