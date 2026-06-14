@@ -9,15 +9,24 @@ app.use(express.json());
 
 // Clean up stale Chromium lock file if container was killed
 const sessionPath = '/app/session';
-const lockFile = path.join(sessionPath, 'SingletonLock');
-if (fs.existsSync(lockFile)) {
-    try {
-        fs.unlinkSync(lockFile);
-        console.log('Removed stale Chromium SingletonLock file');
-    } catch (e) {
-        console.error('Could not remove SingletonLock', e);
+function cleanLocks(dir) {
+    if (!fs.existsSync(dir)) return;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+            cleanLocks(fullPath);
+        } else if (file === 'SingletonLock') {
+            try {
+                fs.unlinkSync(fullPath);
+                console.log(`Removed stale lock file: ${fullPath}`);
+            } catch (e) {
+                console.error(`Could not remove ${fullPath}`, e);
+            }
+        }
     }
 }
+cleanLocks(sessionPath);
 
 let qrCodeData = null;
 let isConnected = false;
