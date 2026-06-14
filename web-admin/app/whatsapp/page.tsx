@@ -3,7 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Loader2, AlertCircle, RefreshCw, LogOut, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
-import api from '../../lib/api';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
+const getToken = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('token');
+  }
+  return null;
+};
 
 export default function WhatsAppPage() {
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading');
@@ -12,8 +20,11 @@ export default function WhatsAppPage() {
 
   const fetchStatus = async () => {
     try {
-      const res = await api.get('/whatsapp/status');
-      if (res.data.isConnected) {
+      const res = await fetch(`${API_BASE_URL}/whatsapp/status`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      if (data.isConnected) {
         setStatus('connected');
         setQrCode(null);
       } else {
@@ -30,12 +41,15 @@ export default function WhatsAppPage() {
 
   const fetchQrCode = async () => {
     try {
-      const res = await api.get('/whatsapp/qr');
-      if (res.data.status === 'connected') {
+      const res = await fetch(`${API_BASE_URL}/whatsapp/qr`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const data = await res.json();
+      if (data.status === 'connected') {
         setStatus('connected');
         setQrCode(null);
-      } else if (res.data.qr) {
-        setQrCode(res.data.qr);
+      } else if (data.qr) {
+        setQrCode(data.qr);
         setStatus('disconnected');
       }
     } catch (err) {
@@ -46,7 +60,10 @@ export default function WhatsAppPage() {
   const handleLogout = async () => {
     try {
       setStatus('loading');
-      await api.post('/whatsapp/logout');
+      await fetch(`${API_BASE_URL}/whatsapp/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
       await fetchStatus();
     } catch (err) {
       console.error(err);
