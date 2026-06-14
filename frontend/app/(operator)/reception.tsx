@@ -17,6 +17,7 @@ export default function ReceptionScreen() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
+  const [scanned, setScanned] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   // Search & List
@@ -87,26 +88,29 @@ export default function ReceptionScreen() {
   };
 
   const onScan = async ({ data }: { data: string }) => {
-    if (loading) return;
+    if (scanned || loading) return;
+    setScanned(true);
     setLoading(true);
     try {
       const results = await colisApi.list({ tracking_number: data });
       if (results.length > 0) {
         selectColis(results[0]);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // On ne reset pas "scanned" ici car on passe à l'étape "form"
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Colis inconnu", `Le tracking ${data} n'est pas pré-alerté.`, [
-          { text: "Retour", style: "cancel", onPress: () => setStep('search') },
+          { text: "Retour", style: "cancel", onPress: () => { setStep('search'); setScanned(false); } },
           { text: "Créer maintenant", onPress: () => {
             setTracking(data);
             setStep('create');
+            setScanned(false);
           }}
         ]);
       }
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Erreur', 'Scan échoué');
+      Alert.alert('Erreur', 'Scan échoué', [{ text: 'Réessayer', onPress: () => setScanned(false) }]);
     } finally {
       setLoading(false);
     }
@@ -255,9 +259,9 @@ export default function ReceptionScreen() {
 
       {step === 'scan' && (
         <View style={{ flex: 1 }}>
-          <CameraView style={StyleSheet.absoluteFillObject} onBarcodeScanned={onScan} />
+          <CameraView style={StyleSheet.absoluteFillObject} onBarcodeScanned={scanned ? undefined : onScan} />
           <View style={styles.overlay}>
-             <TouchableOpacity style={styles.closeOverlay} onPress={() => setStep('search')}>
+             <TouchableOpacity style={styles.closeOverlay} onPress={() => { setStep('search'); setScanned(false); }}>
                <X size={30} color="#fff" />
              </TouchableOpacity>
             <View style={styles.scanBox} />

@@ -28,6 +28,7 @@ const menuItems = [
   { name: 'Équipe', href: '/team', icon: ShieldCheck },
   { name: 'Rapports', href: '/reports', icon: FileText },
   { name: 'Configuration', href: '/settings', icon: Settings },
+  { name: 'WhatsApp / SMS', href: '/whatsapp', icon: ShieldCheck },
 ];
 
 export default function Sidebar() {

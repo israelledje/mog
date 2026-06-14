@@ -3,41 +3,44 @@ import httpx
 from app.core.config import settings
 from app.core.database import get_database
 
+from app.core.nexah_provider import NexahProvider
+
 class NotificationService:
     @staticmethod
     async def send_whatsapp(to_phone: str, message: str):
         """
-        Envoie un message via WhatsApp Cloud API (Meta).
+        Envoie un message via le microservice WhatsApp Web.
+        En cas d'échec ou de déconnexion, bascule sur Nexah SMS.
         """
-        if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
-            logging.warning(f"[WHATSAPP MOCK] Envoi à {to_phone}: {message}")
-            return True
-
-        url = f"https://graph.facebook.com/v17.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
-        headers = {
-            "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
-            "Content-Type": "application/json",
-        }
-        
-        # Note: Pour WhatsApp Cloud API, l'envoi de messages libres (session) n'est possible que si le client
-        # a envoyé un message dans les dernières 24h. Sinon, il faut utiliser un TEMPLATE.
-        
+        whatsapp_url = f"{settings.WHATSAPP_SERVICE_URL}/send"
         payload = {
-            "messaging_product": "whatsapp",
-            "to": to_phone.replace("+", "").replace(" ", ""),
-            "type": "text",
-            "text": {"body": message}
+            "to": to_phone,
+            "message": message
         }
 
+        whatsapp_success = False
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, json=payload, headers=headers)
-                response.raise_for_status()
-                logging.info(f"[WHATSAPP OK] Message envoyé à {to_phone}")
-                return True
+                response = await client.post(whatsapp_url, json=payload, timeout=10.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success"):
+                        logging.info(f"[WHATSAPP OK] Message envoyé à {to_phone}")
+                        whatsapp_success = True
+                    else:
+                        logging.warning(f"[WHATSAPP ERR] Echec: {data.get('error')}")
+                else:
+                    logging.warning(f"[WHATSAPP HTTP ERR] Code: {response.status_code}")
             except Exception as e:
-                logging.error(f"[WHATSAPP ERR] Échec de l'envoi à {to_phone}: {e}")
-                return False
+                logging.error(f"[WHATSAPP CONN ERR] Impossible de joindre le service WhatsApp: {e}")
+
+        # Fallback to SMS if WhatsApp failed
+        if not whatsapp_success:
+            logging.info(f"[SMS FALLBACK] Tentative d'envoi de SMS à {to_phone} via Nexah")
+            nexah = NexahProvider()
+            await nexah.send_sms(to_phone, message)
+            
+        return True
 
     @staticmethod
     async def notify_status_change(package_data: dict, new_status: str):

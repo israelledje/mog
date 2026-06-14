@@ -3,9 +3,21 @@ import { storage } from './storage';
 
 /**
  * Configuration de l'URL de base de l'API.
- * Utilise la variable d'environnement ou une IP locale par défaut (fail-safe).
+ * EXPO_PUBLIC_BACKEND_URL est injectée au moment du build EAS via eas.json.
+ * Le fallback pointe vers le serveur de production pour éviter
+ * que l'app appelle localhost (qui n'existe pas sur un vrai téléphone).
  */
-export const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+
+if (__DEV__ && !BACKEND_URL) {
+  console.warn(
+    '[API] ⚠️ EXPO_PUBLIC_BACKEND_URL non définie ! ' +
+    'Vérifiez votre fichier .env ou la config env de eas.json. ' +
+    'Utilisation du fallback de production.'
+  );
+}
+
+export const BASE = BACKEND_URL || 'http://216.126.224.57';
 
 export const TOKEN_KEY = 'auth_access_token';
 export const REFRESH_KEY = 'auth_refresh_token';

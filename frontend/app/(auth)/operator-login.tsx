@@ -40,8 +40,10 @@ export default function OperatorLoginScreen() {
       setStep('otp');
       Toast.show({ type: 'info', text1: 'OTP envoyé sur WhatsApp' });
     } catch (e: any) {
-      Alert.alert('Erreur', 'Badge invalide ou non reconnu.');
-      setScanned(false);
+      Alert.alert('Erreur', 'Badge invalide ou non reconnu.', [{
+        text: 'Réessayer',
+        onPress: () => setScanned(false)
+      }]);
     }
   };
 

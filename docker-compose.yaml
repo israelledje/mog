@@ -61,9 +61,20 @@ services:
       - app-network
     restart: always
 
+  whatsapp-service:
+    build: ./whatsapp-service
+    container_name: cargo-tracker-whatsapp
+    volumes:
+      - whatsapp_session:/app/session
+    networks:
+      - app-network
+    restart: always
+
+
 networks:
   app-network:
     driver: bridge
 
 volumes:
   mongodb_data:
+  whatsapp_session:

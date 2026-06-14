@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     WHATSAPP_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_BUSINESS_ACCOUNT_ID: str = ""
+    WHATSAPP_SERVICE_URL: str = "http://whatsapp-service:3001"
+    
+    # Nexah SMS API
+    NEXAH_USER: str = ""
+    NEXAH_PASSWORD: str = ""
+    NEXAH_API_URL: str = "https://smsvas.com/bulk/public/index.php/api/v1/sendsms"
+    NEXAH_SENDER_ID: str = "CargoLine"
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
