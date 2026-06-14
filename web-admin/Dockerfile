@@ -12,5 +12,7 @@ RUN npm run build
 # Exposer le port
 EXPOSE 3000
 
+ENV HOSTNAME="0.0.0.0"
+
 # Démarrer le serveur Next.js
 CMD ["npm", "start"]
