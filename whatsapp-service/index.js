@@ -1,9 +1,23 @@
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
+
+// Clean up stale Chromium lock file if container was killed
+const sessionPath = '/app/session';
+const lockFile = path.join(sessionPath, 'SingletonLock');
+if (fs.existsSync(lockFile)) {
+    try {
+        fs.unlinkSync(lockFile);
+        console.log('Removed stale Chromium SingletonLock file');
+    } catch (e) {
+        console.error('Could not remove SingletonLock', e);
+    }
+}
 
 let qrCodeData = null;
 let isConnected = false;
