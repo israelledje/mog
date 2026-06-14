@@ -4,7 +4,7 @@
     "slug": "mog",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo_MOG.jpeg",
+    "icon": "./assets/images/logo_MOG.png",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -20,8 +20,8 @@
     "android": {
       "package": "com.cargoline.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo_MOG.jpeg",
-        "backgroundColor": "#000"
+        "foregroundImage": "./assets/images/logo_MOG.png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -33,14 +33,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/logo_MOG.jpeg"
+      "favicon": "./assets/images/logo_MOG.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo_MOG.jpeg",
+          "image": "./assets/images/logo_MOG.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000"

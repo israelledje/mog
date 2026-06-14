@@ -1,0 +1,24 @@
+# Dossiers non nécessaires au build mobile
+backend/
+web-admin/
+mobile/
+nginx/
+memory/
+.bmad/
+_bmad-output/
+.github/
+
+# Dépendances (régénérées sur EAS)
+frontend/node_modules/
+web-admin/node_modules/
+
+# Caches et temporaires
+frontend/.expo/
+frontend/.metro-cache/
+frontend/dist/
+frontend/web-build/
+
+# Fichiers sensibles
+*.pem
+*.jks
+.env*
