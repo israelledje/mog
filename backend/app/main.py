@@ -10,6 +10,7 @@ from app.features.tarifs.router import router as tarifs_router
 from app.features.entrepots.router import router as entrepots_router
 from app.features.billing.router import router as billing_router
 from app.features.settings.router import router as settings_router
+from app.features.whatsapp.router import router as whatsapp_router
 from app.core.database import connect_to_mongo, close_mongo_connection
 from contextlib import asynccontextmanager
 
@@ -97,6 +98,7 @@ app.include_router(tarifs_router, prefix="/api")
 app.include_router(entrepots_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(whatsapp_router, prefix="/api")
 app.include_router(notifs_router)
 
 # Serve Uploads
