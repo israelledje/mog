@@ -34,10 +34,48 @@ cleanLocks(sessionPath);
 
 let qrCodeData = null;
 let isConnected = false;
-let initState = 'starting'; // starting | waiting_qr | connected | error
+let isAuthenticated = false;
+let initState = 'starting'; // starting | waiting_qr | authenticating | connected | error
 let initError = null;
 let client = null;
 let initializing = false;
+let readyWatchdog = null;
+
+function markConnected(source = 'ready') {
+    isConnected = true;
+    isAuthenticated = true;
+    initState = 'connected';
+    initError = null;
+    qrCodeData = null;
+    if (readyWatchdog) {
+        clearTimeout(readyWatchdog);
+        readyWatchdog = null;
+    }
+    console.log(`WhatsApp Client is ready (${source})`);
+}
+
+async function waitForConnectedState(waClient) {
+    for (let attempt = 0; attempt < 45; attempt++) {
+        if (isConnected) return;
+
+        try {
+            const state = await waClient.getState();
+            console.log(`WhatsApp state check ${attempt + 1}/45: ${state}`);
+            if (state === 'CONNECTED') {
+                markConnected('state');
+                return;
+            }
+        } catch (err) {
+            console.log(`WhatsApp state not available yet (${attempt + 1}/45)`);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    console.error('Timed out waiting for WhatsApp ready after authentication');
+    initState = 'error';
+    initError = 'Session authentifiée mais connexion non établie. Cliquez sur « Déconnecter » ou redémarrez le service.';
+}
 
 function buildClient() {
     return new Client({
@@ -63,7 +101,25 @@ function buildClient() {
     });
 }
 
+function normalizeWhatsAppDigits(to) {
+    return String(to || '').replace(/[^\d]/g, '');
+}
+
+async function resolveWhatsAppChatId(waClient, to) {
+    const digits = normalizeWhatsAppDigits(to);
+    if (!digits) {
+        return null;
+    }
+
+    const numberId = await waClient.getNumberId(`${digits}@c.us`);
+    return numberId?._serialized || null;
+}
+
+let authWatchStarted = false;
+
 function attachClientEvents(waClient) {
+    waClient.removeAllListeners();
+
     waClient.on('qr', (qr) => {
         console.log('QR Code received');
         qrCodeData = qr;
@@ -72,20 +128,33 @@ function attachClientEvents(waClient) {
     });
 
     waClient.on('ready', () => {
-        console.log('WhatsApp Client is ready');
-        isConnected = true;
-        initState = 'connected';
-        initError = null;
-        qrCodeData = null;
+        markConnected('ready');
     });
 
     waClient.on('authenticated', () => {
         console.log('WhatsApp authenticated');
+        isAuthenticated = true;
+        initState = 'authenticating';
+        initError = null;
+        if (!authWatchStarted) {
+            authWatchStarted = true;
+            waitForConnectedState(waClient).finally(() => {
+                authWatchStarted = false;
+            });
+        }
+    });
+
+    waClient.on('loading_screen', (percent, message) => {
+        console.log(`WhatsApp loading: ${percent}% ${message || ''}`.trim());
+        if (!isConnected && isAuthenticated) {
+            initState = 'authenticating';
+        }
     });
 
     waClient.on('auth_failure', (msg) => {
         console.error('WhatsApp authentication failure:', msg);
         isConnected = false;
+        isAuthenticated = false;
         initState = 'error';
         initError = String(msg || 'Authentication failed');
         qrCodeData = null;
@@ -94,9 +163,11 @@ function attachClientEvents(waClient) {
     waClient.on('disconnected', (reason) => {
         console.log('WhatsApp disconnected:', reason);
         isConnected = false;
+        isAuthenticated = false;
+        authWatchStarted = false;
         qrCodeData = null;
         initState = 'starting';
-        setTimeout(() => initializeClient(true), 3000);
+        setTimeout(() => initializeClient(true), 5000);
     });
 }
 
@@ -108,6 +179,8 @@ async function initializeClient(force = false) {
     initState = 'starting';
     initError = null;
     qrCodeData = null;
+    isAuthenticated = false;
+    authWatchStarted = false;
 
     try {
         if (client) {
@@ -137,20 +210,24 @@ async function initializeClient(force = false) {
 initializeClient();
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', isConnected, initState, initError });
+    res.json({ status: 'healthy', isConnected, isAuthenticated, initState, initError });
 });
 
 app.get('/status', (req, res) => {
-    res.json({ isConnected, initState, initError, hasQr: Boolean(qrCodeData) });
+    res.json({ isConnected, isAuthenticated, initState, initError, hasQr: Boolean(qrCodeData) });
 });
 
 app.get('/qr', async (req, res) => {
     if (isConnected) {
-        return res.json({ status: 'connected', qr: null, initState, initError });
+        return res.json({ status: 'connected', qr: null, initState, initError, isAuthenticated });
+    }
+
+    if (initState === 'authenticating') {
+        return res.json({ status: 'loading', qr: null, initState, initError, isAuthenticated, message: 'Finalisation de la connexion WhatsApp...' });
     }
 
     if (initState === 'error') {
-        return res.json({ status: 'error', qr: null, initState, initError });
+        return res.json({ status: 'error', qr: null, initState, initError, isAuthenticated });
     }
 
     if (!qrCodeData) {
@@ -171,7 +248,7 @@ app.get('/qr', async (req, res) => {
 
 app.post('/send', async (req, res) => {
     if (!isConnected || !client) {
-        return res.status(503).json({ success: false, error: 'WhatsApp is not connected' });
+        return res.status(503).json({ success: false, error: 'WhatsApp is not connected', code: 'NOT_CONNECTED' });
     }
 
     const { to, message } = req.body;
@@ -179,13 +256,31 @@ app.post('/send', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Missing "to" or "message"' });
     }
 
+    const digits = normalizeWhatsAppDigits(to);
+    if (digits.length < 8 || digits.length > 15) {
+        return res.status(400).json({ success: false, error: 'Invalid phone number', code: 'INVALID_NUMBER' });
+    }
+
     try {
-        const formattedNumber = to.replace('+', '').replace(/\s+/g) + '@c.us';
-        const response = await client.sendMessage(formattedNumber, message);
-        res.json({ success: true, messageId: response.id.id });
+        const chatId = await resolveWhatsAppChatId(client, to);
+        if (!chatId) {
+            console.warn(`WhatsApp number not registered: +${digits}`);
+            return res.status(404).json({
+                success: false,
+                error: 'Number not registered on WhatsApp',
+                code: 'NOT_ON_WHATSAPP',
+                to: `+${digits}`,
+            });
+        }
+
+        console.log(`Sending WhatsApp message to ${chatId}`);
+        const response = await client.sendMessage(chatId, message);
+        const messageId = response?.id?.id || response?.id?._serialized || null;
+        console.log(`WhatsApp message queued: ${messageId || 'unknown id'}`);
+        res.json({ success: true, messageId, to: chatId });
     } catch (err) {
         console.error('Failed to send message:', err);
-        res.status(500).json({ success: false, error: err.message });
+        res.status(500).json({ success: false, error: err.message, code: 'SEND_FAILED' });
     }
 });
 
@@ -199,6 +294,7 @@ app.post('/logout', async (req, res) => {
     }
 
     isConnected = false;
+    isAuthenticated = false;
     qrCodeData = null;
     initState = 'starting';
 
@@ -215,6 +311,7 @@ app.post('/logout', async (req, res) => {
 
 app.post('/restart', async (req, res) => {
     isConnected = false;
+    isAuthenticated = false;
     qrCodeData = null;
     initState = 'starting';
     initError = null;

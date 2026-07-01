@@ -179,6 +179,8 @@
                     "saved":  "Modifications enregistrées",
                     "phone_verify_title":  "Vérification WhatsApp",
                     "phone_verify_hint":  "Un code à 6 chiffres sera envoyé sur WhatsApp pour confirmer votre numéro.",
+                    "phone_verify_hint_whatsapp":  "Consultez vos messages WhatsApp (conversation MOG) pour le code à 6 chiffres.",
+                    "phone_verify_hint_sms":  "Le code a été envoyé par SMS sur votre téléphone.",
                     "phone_send_otp":  "Envoyer le code WhatsApp",
                     "phone_otp_placeholder":  "Code à 6 chiffres",
                     "phone_verify_btn":  "Vérifier le numéro",

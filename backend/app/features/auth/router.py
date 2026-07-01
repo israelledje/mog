@@ -191,9 +191,18 @@ async def send_phone_otp(
     )
 
     msg = f"Votre code de vérification MOG est : {otp_code}. Valable 10 minutes."
-    await NotificationService.send_whatsapp(phone, msg)
+    delivery = await NotificationService.send_whatsapp(phone, msg)
 
-    return {"message": "Code envoyé par WhatsApp"}
+    if not delivery.get("success"):
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible d'envoyer le code. Vérifiez votre numéro ou réessayez plus tard.",
+        )
+
+    channel = delivery.get("channel", "whatsapp")
+    if channel == "sms":
+        return {"message": "Code envoyé par SMS", "channel": "sms"}
+    return {"message": "Code envoyé par WhatsApp", "channel": "whatsapp"}
 
 @router.post("/phone/verify-otp")
 async def verify_phone_otp(

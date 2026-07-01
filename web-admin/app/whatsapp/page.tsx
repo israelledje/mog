@@ -90,11 +90,19 @@ export default function WhatsAppPage() {
       const data = await res.json();
       setInitState(data.initState ?? null);
 
-      if (data.isConnected) {
+      if (data.isConnected || data.initState === 'connected') {
         setStatus('connected');
         setQrCode(null);
         setError(data.error ?? null);
         stopQrPolling();
+        return;
+      }
+
+      if (data.initState === 'authenticating') {
+        setStatus('loading');
+        setError(null);
+        await fetchQrCode();
+        startQrPolling();
         return;
       }
 
@@ -219,7 +227,11 @@ export default function WhatsAppPage() {
                   <div className="text-center px-4">
                     <Loader2 className="animate-spin text-slate-400 mx-auto mb-2" size={30} />
                     <span className="text-sm text-slate-500">
-                      {status === 'error' ? 'Échec de génération' : 'Génération du QR Code...'}
+                      {initState === 'authenticating'
+                        ? 'Finalisation de la connexion...'
+                        : status === 'error'
+                          ? 'Échec de génération'
+                          : 'Génération du QR Code...'}
                     </span>
                     {status === 'loading' && (
                       <p className="text-xs text-slate-400 mt-2">Le service peut prendre 30 à 60 secondes au premier démarrage.</p>

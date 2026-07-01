@@ -179,6 +179,8 @@
                     "saved":  "Changes saved",
                     "phone_verify_title":  "WhatsApp verification",
                     "phone_verify_hint":  "A 6-digit code will be sent via WhatsApp to confirm your number.",
+                    "phone_verify_hint_whatsapp":  "Check your WhatsApp messages (MOG conversation) for the 6-digit code.",
+                    "phone_verify_hint_sms":  "The code was sent by SMS to your phone.",
                     "phone_send_otp":  "Send WhatsApp code",
                     "phone_otp_placeholder":  "6-digit code",
                     "phone_verify_btn":  "Verify number",

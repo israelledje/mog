@@ -58,8 +58,11 @@ export default function EditProfileScreen() {
     setSendingOtp(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await authApi.sendPhoneOtp(fullPhone);
-      Toast.show({ type: 'success', text1: t('profile.phone_verify_title'), text2: t('profile.phone_verify_hint') });
+      const result = await authApi.sendPhoneOtp(fullPhone);
+      const hint = result.channel === 'sms'
+        ? t('profile.phone_verify_hint_sms')
+        : t('profile.phone_verify_hint_whatsapp');
+      Toast.show({ type: 'success', text1: t('profile.phone_verify_title'), text2: hint });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: formatErr(e, t('errors.server')) });
     } finally {

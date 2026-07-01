@@ -5,9 +5,11 @@ from app.core.database import get_database
 
 from app.core.nexah_provider import NexahProvider
 
+logger = logging.getLogger(__name__)
+
 class NotificationService:
     @staticmethod
-    async def send_whatsapp(to_phone: str, message: str):
+    async def send_whatsapp(to_phone: str, message: str) -> dict:
         """
         Envoie un message via le microservice WhatsApp Web.
         En cas d'échec ou de déconnexion, bascule sur Nexah SMS.
@@ -18,37 +20,43 @@ class NotificationService:
             "message": message
         }
 
-        whatsapp_success = False
+        whatsapp_error = None
+
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(whatsapp_url, json=payload, timeout=10.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("success"):
-                        logging.info(f"[WHATSAPP OK] Message envoyé à {to_phone}")
-                        whatsapp_success = True
-                    else:
-                        logging.warning(f"[WHATSAPP ERR] Echec: {data.get('error')}")
-                else:
-                    logging.warning(f"[WHATSAPP HTTP ERR] Code: {response.status_code}")
-            except Exception as e:
-                logging.error(f"[WHATSAPP CONN ERR] Impossible de joindre le service WhatsApp: {e}")
+                response = await client.post(whatsapp_url, json=payload, timeout=15.0)
+                data = response.json() if response.content else {}
 
-        # Fallback to SMS if WhatsApp failed
-        if not whatsapp_success:
-            logging.info(f"[SMS FALLBACK] Tentative d'envoi de SMS à {to_phone} via Nexah")
-            nexah = NexahProvider()
-            await nexah.send_sms(to_phone, message)
-            
-        return True
+                if response.status_code == 200 and data.get("success"):
+                    logger.info(f"[WHATSAPP OK] Message envoyé à {to_phone} (id={data.get('messageId')})")
+                    return {"success": True, "channel": "whatsapp", "messageId": data.get("messageId")}
+
+                whatsapp_error = data.get("error") or f"HTTP {response.status_code}"
+                code = data.get("code")
+                logger.warning(f"[WHATSAPP ERR] {to_phone}: {whatsapp_error} ({code})")
+            except Exception as e:
+                whatsapp_error = str(e)
+                logger.error(f"[WHATSAPP CONN ERR] Impossible de joindre le service WhatsApp: {e}")
+
+        logger.info(f"[SMS FALLBACK] Tentative d'envoi de SMS à {to_phone} via Nexah")
+        nexah = NexahProvider()
+        sms_result = await nexah.send_sms(to_phone, message)
+
+        if sms_result.get("success"):
+            return {"success": True, "channel": "sms", "whatsapp_error": whatsapp_error}
+
+        return {
+            "success": False,
+            "channel": None,
+            "whatsapp_error": whatsapp_error,
+            "sms_error": sms_result.get("error") or sms_result.get("response"),
+        }
 
     @staticmethod
     async def notify_status_change(package_data: dict, new_status: str):
         """
         Déclenche les notifications automatiques basées sur le changement de statut.
         """
-        sender_phone = package_data.get('owner_id') # Souvent l'email ou phone dans ce projet
-        # Récupérer l'utilisateur pour avoir son phone et son push token
         db = await get_database()
         user = await db.users.find_one({"email": package_data["owner_id"]})
         
@@ -72,11 +80,9 @@ class NotificationService:
 
         msg = messages.get(new_status)
         if msg:
-            # 1. WhatsApp
             if to_phone:
                 await NotificationService.send_whatsapp(to_phone, msg)
             
-            # 2. Push Notification
             if push_token:
                 await NotificationService.send_push(push_token, "Mise à jour CargoLine", msg)
 
@@ -86,8 +92,4 @@ class NotificationService:
         Envoie une notification push via Expo Server SDK.
         """
         logging.info(f"[PUSH] Envoi à {token}: {title} - {body}")
-        # Logique réelle : 
-        # from exponent_server_sdk import PushClient, PushMessage
-        # client = PushClient()
-        # client.publish(PushMessage(to=token, title=title, body=body))
         return True

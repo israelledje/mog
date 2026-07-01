@@ -78,7 +78,7 @@ export const authApi = {
   },
   async sendPhoneOtp(phone: string) {
     const { data } = await api.post('/auth/phone/send-otp', { phone });
-    return data as { message: string };
+    return data as { message: string; channel?: 'whatsapp' | 'sms' };
   },
   async verifyPhoneOtp(phone: string, otp_code: string) {
     const { data } = await api.post('/auth/phone/verify-otp', { phone, otp_code });
