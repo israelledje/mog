@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronDown, Save, MapPin, User as UserIcon, Phone, Building2 } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, Save, MapPin, User as UserIcon, Phone, Building2, CheckCircle2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
+import PhoneInput from '../../src/components/PhoneInput';
 import { useAuthStore } from '../../src/store/authStore';
+import { authApi } from '../../src/api/auth';
 import { formatErr } from '../../src/api/client';
+import { buildFullPhone, parsePhone, phonesMatch } from '../../src/utils/phone';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 const CITIES = ['Douala', 'Yaoundé', 'Bafoussam', 'Garoua', 'Maroua', 'Bamenda', 'Bertoua', 'Autre'];
@@ -17,23 +20,85 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
+  const setUser = useAuthStore((s) => s.setUser);
+
+  const initialPhone = useMemo(() => parsePhone(user?.phone), [user?.phone]);
 
   const [form, setForm] = useState({
     full_name: user?.full_name || '',
-    phone: user?.phone || '',
+    dialCode: initialPhone.country.dial,
+    nationalNumber: initialPhone.national,
     city: user?.city || 'Douala',
     default_delivery_address: user?.default_delivery_address || '',
   });
   const [showCity, setShowCity] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(true);
 
-  const update = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const fullPhone = buildFullPhone(form.dialCode, form.nationalNumber);
+  const phoneChanged = !phonesMatch(fullPhone, user?.phone);
+  const phoneReady = form.nationalNumber.replace(/\D/g, '').length >= 8;
+
+  const update = (k: string, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    if (k === 'dialCode' || k === 'nationalNumber') {
+      setPhoneVerified(false);
+      setOtpCode('');
+    }
+  };
+
+  const onSendOtp = async () => {
+    if (!phoneReady) {
+      Toast.show({ type: 'error', text1: t('profile.phone_invalid') });
+      return;
+    }
+    setSendingOtp(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await authApi.sendPhoneOtp(fullPhone);
+      Toast.show({ type: 'success', text1: t('profile.phone_verify_title'), text2: t('profile.phone_verify_hint') });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, t('errors.server')) });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const onVerifyPhone = async () => {
+    if (otpCode.length !== 6) {
+      Toast.show({ type: 'error', text1: t('errors.required') });
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const updated = await authApi.verifyPhoneOtp(fullPhone, otpCode);
+      setUser(updated);
+      setPhoneVerified(true);
+      Toast.show({ type: 'success', text1: t('profile.phone_verified') });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, t('errors.invalid_otp')) });
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
 
   const onSave = async () => {
+    if (phoneChanged && !phoneVerified) {
+      Toast.show({ type: 'error', text1: t('profile.phone_change_required') });
+      return;
+    }
     setSaving(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await updateProfile(form);
+      await updateProfile({
+        full_name: form.full_name,
+        city: form.city,
+        default_delivery_address: form.default_delivery_address,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: t('profile.saved') });
       router.back();
@@ -69,15 +134,61 @@ export default function EditProfileScreen() {
             </Field>
 
             <Field icon={<Phone size={18} color={colors.textSecondary} />} label={t('auth.phone')}>
-              <TextInput
-                style={styles.input}
-                value={form.phone}
-                onChangeText={(v) => update('phone', v)}
-                keyboardType="phone-pad"
+              <PhoneInput
+                dialCode={form.dialCode}
+                nationalNumber={form.nationalNumber}
+                onDialCodeChange={(v) => update('dialCode', v)}
+                onNationalNumberChange={(v) => update('nationalNumber', v)}
                 placeholder={t('auth.phone')}
-                placeholderTextColor={colors.textSecondary}
                 testID="edit-phone"
               />
+
+              {phoneChanged && (
+                <View style={styles.verifyBox}>
+                  <Text style={styles.verifyHint}>{t('profile.phone_verify_hint')}</Text>
+                  <TouchableOpacity
+                    style={[styles.otpBtn, (!phoneReady || sendingOtp) && styles.btnDisabled]}
+                    onPress={onSendOtp}
+                    disabled={!phoneReady || sendingOtp}
+                  >
+                    <Text style={styles.otpBtnText}>
+                      {sendingOtp ? t('common.loading') : t('profile.phone_send_otp')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={styles.input}
+                    value={otpCode}
+                    onChangeText={(v) => setOtpCode(v.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad"
+                    placeholder={t('profile.phone_otp_placeholder')}
+                    placeholderTextColor={colors.textSecondary}
+                    maxLength={6}
+                    testID="edit-phone-otp"
+                  />
+                  <TouchableOpacity
+                    style={[styles.verifyBtn, (otpCode.length !== 6 || verifyingOtp) && styles.btnDisabled]}
+                    onPress={onVerifyPhone}
+                    disabled={otpCode.length !== 6 || verifyingOtp}
+                  >
+                    <Text style={styles.verifyBtnText}>
+                      {verifyingOtp ? t('common.loading') : t('profile.phone_verify_btn')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {!phoneChanged && user?.phone && (
+                <View style={styles.verifiedRow}>
+                  <CheckCircle2 size={16} color={colors.success} />
+                  <Text style={styles.verifiedText}>{t('profile.phone_verified')}</Text>
+                </View>
+              )}
+              {phoneChanged && phoneVerified && (
+                <View style={styles.verifiedRow}>
+                  <CheckCircle2 size={16} color={colors.success} />
+                  <Text style={styles.verifiedText}>{t('profile.phone_verified')}</Text>
+                </View>
+              )}
             </Field>
 
             <Field icon={<Building2 size={18} color={colors.textSecondary} />} label={t('auth.city')}>
@@ -115,7 +226,7 @@ export default function EditProfileScreen() {
 
           <View style={styles.readOnly}>
             <Text style={styles.roLabel}>{t('profile.client_code')}</Text>
-            <Text style={styles.roValue}>{user?.client_code}</Text>
+            <Text style={styles.roValue}>{user?.client_code || '—'}</Text>
           </View>
           <View style={styles.readOnly}>
             <Text style={styles.roLabel}>Email</Text>
@@ -158,6 +269,15 @@ const styles = StyleSheet.create({
   dropdown: { backgroundColor: '#fff', borderRadius: radii.input, marginTop: 4, borderWidth: 1, borderColor: colors.border },
   dropItem: { padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
   dropItemText: { fontSize: 14, color: colors.text },
+  verifyBox: { marginTop: spacing.md, gap: spacing.sm },
+  verifyHint: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+  otpBtn: { backgroundColor: '#25D366', paddingVertical: 12, borderRadius: radii.button, alignItems: 'center' },
+  otpBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  verifyBtn: { backgroundColor: colors.primary, paddingVertical: 12, borderRadius: radii.button, alignItems: 'center' },
+  verifyBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  btnDisabled: { opacity: 0.5 },
+  verifiedRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
+  verifiedText: { fontSize: 13, color: colors.success, fontWeight: '600' },
   readOnly: { backgroundColor: '#fff', borderRadius: radii.card, padding: spacing.md, marginTop: spacing.md, ...shadow.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   roLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' },
   roValue: { fontSize: 14, color: colors.text, fontWeight: '600' },

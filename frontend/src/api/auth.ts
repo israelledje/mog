@@ -76,6 +76,14 @@ export const authApi = {
     const { data } = await api.post('/auth/reset-password', { email, otp_code: code, new_password });
     return data;
   },
+  async sendPhoneOtp(phone: string) {
+    const { data } = await api.post('/auth/phone/send-otp', { phone });
+    return data as { message: string };
+  },
+  async verifyPhoneOtp(phone: string, otp_code: string) {
+    const { data } = await api.post('/auth/phone/verify-otp', { phone, otp_code });
+    return data as User;
+  },
   async logout() {
     await clearTokens();
   },

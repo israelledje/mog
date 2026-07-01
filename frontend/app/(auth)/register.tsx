@@ -8,6 +8,8 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatErr } from '../../src/api/client';
+import PhoneInput from '../../src/components/PhoneInput';
+import { buildFullPhone, parsePhone } from '../../src/utils/phone';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 const CITIES = ['Douala', 'Yaoundé', 'Bafoussam', 'Garoua', 'Maroua', 'Bamenda', 'Bertoua', 'Autre'];
@@ -17,7 +19,14 @@ export default function RegisterScreen() {
   const router = useRouter();
   const register = useAuthStore((s) => s.register);
   const loading = useAuthStore((s) => s.loading);
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '', city: 'Douala' });
+  const [form, setForm] = useState({
+    full_name: '',
+    email: '',
+    dialCode: parsePhone().country.dial,
+    nationalNumber: '',
+    password: '',
+    city: 'Douala',
+  });
   const [showCity, setShowCity] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +35,7 @@ export default function RegisterScreen() {
   const onSubmit = async () => {
     Keyboard.dismiss();
     setError(null);
-    if (!form.full_name || !form.email || !form.password || !form.phone) {
+    if (!form.full_name || !form.email || !form.password || !form.nationalNumber) {
       setError(t('errors.required'));
       return;
     }
@@ -36,7 +45,14 @@ export default function RegisterScreen() {
     }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await register({ ...form, preferred_language: i18n.language });
+      await register({
+        full_name: form.full_name,
+        email: form.email,
+        phone: buildFullPhone(form.dialCode, form.nationalNumber),
+        password: form.password,
+        city: form.city,
+        preferred_language: i18n.language,
+      });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(tabs)');
     } catch (e: any) {
@@ -61,21 +77,14 @@ export default function RegisterScreen() {
           <View style={styles.card}>
             <TextInput style={styles.input} placeholder={t('auth.full_name')} placeholderTextColor={colors.textSecondary}
               value={form.full_name} onChangeText={(v) => onChange('full_name', v)} testID="register-name" />
-            <View style={styles.phoneContainer}>
-              <TouchableOpacity style={styles.countrySelector} activeOpacity={0.7}>
-                <Text style={styles.countryText}>🇨🇲 +237</Text>
-                <ChevronDown size={14} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TextInput 
-                style={[styles.input, { flex: 1, marginBottom: 0 }]} 
-                placeholder={t('auth.phone')} 
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="phone-pad" 
-                value={form.phone} 
-                onChangeText={(v) => onChange('phone', v)} 
-                testID="register-phone" 
-              />
-            </View>
+            <PhoneInput
+              dialCode={form.dialCode}
+              nationalNumber={form.nationalNumber}
+              onDialCodeChange={(v) => onChange('dialCode', v)}
+              onNationalNumberChange={(v) => onChange('nationalNumber', v)}
+              placeholder={t('auth.phone')}
+              testID="register-phone"
+            />
 
             <TextInput style={styles.input} placeholder={t('auth.email')} placeholderTextColor={colors.textSecondary}
               autoCapitalize="none" keyboardType="email-address" value={form.email} onChangeText={(v) => onChange('email', v)} testID="register-email" />

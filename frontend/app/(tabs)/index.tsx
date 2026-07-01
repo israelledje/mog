@@ -175,7 +175,7 @@ export default function HomeScreen() {
             {/* The Visa Card */}
             <View style={styles.visaCardContainer}>
               <LinearGradient
-                colors={['#4A3BFF', '#2A1DE5']}
+                colors={[colors.primary, colors.primaryDark]}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={styles.visaCard}
               >
