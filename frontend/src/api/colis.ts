@@ -3,7 +3,7 @@ import type { Colis, Groupage, AppNotification } from '../types';
 
 export const colisApi = {
   async list(params?: { tracking_number?: string; status?: string; skip?: number; limit?: number }): Promise<Colis[]> {
-    const { data } = await api.get('/colis', { params });
+    const { data } = await api.get('/colis/', { params });
     return data;
   },
   async searchUsers(q: string) {
@@ -15,7 +15,7 @@ export const colisApi = {
     return data;
   },
   async create(payload: Partial<Colis> & any): Promise<Colis> {
-    const { data } = await api.post('/colis', payload);
+    const { data } = await api.post('/colis/', payload);
     return data;
   },
   async kpi() {

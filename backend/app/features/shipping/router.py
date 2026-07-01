@@ -95,7 +95,8 @@ async def list_packages(
         
     return packages
 
-@router.post("/", response_model=PackageInDB)
+@router.post("", response_model=PackageInDB)
+@router.post("/", response_model=PackageInDB, include_in_schema=False)
 async def create_colis(
     package_in: PackageCreate, 
     current_user: dict = Depends(get_current_user),

@@ -33,7 +33,8 @@ async def list_entrepots(db=Depends(get_database)):
     return result
 
 
-@router.post("/")
+@router.post("")
+@router.post("/", include_in_schema=False)
 async def create_entrepot(
     data: EntrepotCreate,
     current_user: dict = Depends(check_role(["admin", "operator"])),
