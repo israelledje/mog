@@ -51,7 +51,8 @@ function markConnected(source = 'ready') {
         clearTimeout(readyWatchdog);
         readyWatchdog = null;
     }
-    console.log(`WhatsApp Client is ready (${source})`);
+    const connected = getConnectedPhoneDigits();
+    console.log(`WhatsApp Client is ready (${source})${connected ? ` — +${connected}` : ''}`);
 }
 
 async function waitForConnectedState(waClient) {
@@ -103,6 +104,26 @@ function buildClient() {
 
 function normalizeWhatsAppDigits(to) {
     return String(to || '').replace(/[^\d]/g, '');
+}
+
+function getConnectedPhoneDigits() {
+    if (!client?.info?.wid) {
+        return null;
+    }
+    const wid = client.info.wid.user || String(client.info.wid._serialized || '').split('@')[0];
+    return normalizeWhatsAppDigits(wid) || null;
+}
+
+function isSameWhatsAppNumber(a, b) {
+    const da = normalizeWhatsAppDigits(a);
+    const db = normalizeWhatsAppDigits(b);
+    if (!da || !db) {
+        return false;
+    }
+    if (da === db) {
+        return true;
+    }
+    return da.endsWith(db) || db.endsWith(da);
 }
 
 async function resolveWhatsAppChatId(waClient, to) {
@@ -210,11 +231,13 @@ async function initializeClient(force = false) {
 initializeClient();
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', isConnected, isAuthenticated, initState, initError });
+    const connectedPhone = getConnectedPhoneDigits();
+    res.json({ status: 'healthy', isConnected, isAuthenticated, initState, initError, connectedPhone: connectedPhone ? `+${connectedPhone}` : null });
 });
 
 app.get('/status', (req, res) => {
-    res.json({ isConnected, isAuthenticated, initState, initError, hasQr: Boolean(qrCodeData) });
+    const connectedPhone = getConnectedPhoneDigits();
+    res.json({ isConnected, isAuthenticated, initState, initError, hasQr: Boolean(qrCodeData), connectedPhone: connectedPhone ? `+${connectedPhone}` : null });
 });
 
 app.get('/qr', async (req, res) => {
@@ -259,6 +282,18 @@ app.post('/send', async (req, res) => {
     const digits = normalizeWhatsAppDigits(to);
     if (digits.length < 8 || digits.length > 15) {
         return res.status(400).json({ success: false, error: 'Invalid phone number', code: 'INVALID_NUMBER' });
+    }
+
+    const connectedPhone = getConnectedPhoneDigits();
+    if (connectedPhone && isSameWhatsAppNumber(digits, connectedPhone)) {
+        console.warn(`Cannot WhatsApp message the connected account itself: +${digits}`);
+        return res.status(409).json({
+            success: false,
+            error: 'Cannot send to the same number as the connected WhatsApp account',
+            code: 'SELF_NUMBER',
+            connectedPhone: `+${connectedPhone}`,
+            to: `+${digits}`,
+        });
     }
 
     try {

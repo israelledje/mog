@@ -9,6 +9,16 @@ import {
 import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
 
+function handleUnauthorized(res: Response) {
+  if (res.status === 401) {
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_user');
+    window.location.href = '/login';
+    return true;
+  }
+  return false;
+}
+
 const PKG_STATUS: Record<string, { label: string; bg: string; text: string; icon: any }> = {
   draft:              { label: 'Brouillon',       bg: 'bg-slate-100',   text: 'text-slate-500',   icon: Clock },
   pending_reception:  { label: 'En Attente',      bg: 'bg-amber-50',    text: 'text-amber-700',   icon: AlertCircle },
@@ -46,15 +56,22 @@ export default function EntrepotPage() {
   const [editEntrepot, setEditEntrepot] = useState<any>(null);
   const [newEntrepot, setNewEntrepot] = useState({ ...BLANK_ENTREPOT });
   const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const headers = { Authorization: `Bearer ${getToken()}` };
+    const token = getToken();
+    if (!token) {
+      window.location.href = '/login';
+      return;
+    }
+    const headers = { Authorization: `Bearer ${token}` };
     try {
       const [pRes, eRes] = await Promise.all([
         fetch(`${API}/colis/?limit=1000&skip=0`, { headers }),
         fetch(`${API}/entrepots/`, { headers }),
       ]);
+      if (handleUnauthorized(pRes) || handleUnauthorized(eRes)) return;
       if (pRes.ok) setPackages(await pRes.json());
       if (eRes.ok) setEntrepots(await eRes.json());
     } catch {}
@@ -65,18 +82,29 @@ export default function EntrepotPage() {
 
   const createEntrepot = async () => {
     setSubmitting(true);
+    setActionError(null);
     try {
       const res = await fetch(`${API}/entrepots/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify(newEntrepot),
       });
+      if (handleUnauthorized(res)) return;
+      if (res.status === 403) {
+        setActionError('Accès refusé : connectez-vous avec un compte admin ou opérateur.');
+        return;
+      }
       if (res.ok) {
         setShowCreateEntrepot(false);
         setNewEntrepot({ ...BLANK_ENTREPOT });
         loadData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setActionError(err.detail || 'Impossible de créer l\'entrepôt.');
       }
-    } catch {}
+    } catch {
+      setActionError('Erreur réseau lors de la création.');
+    }
     setSubmitting(false);
   };
 
@@ -327,6 +355,12 @@ export default function EntrepotPage() {
               <button onClick={() => setShowCreateEntrepot(false)} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400"><X size={20} /></button>
             </div>
             <div className="space-y-4">
+              {actionError && (
+                <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm font-medium flex items-center gap-2">
+                  <AlertCircle size={16} />
+                  {actionError}
+                </div>
+              )}
               <div className="flex gap-3">
                 {(['origin', 'destination'] as const).map(t => (
                   <button key={t} onClick={() => setNewEntrepot(f => ({ ...f, type: t }))}

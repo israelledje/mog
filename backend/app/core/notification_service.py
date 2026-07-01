@@ -33,7 +33,10 @@ class NotificationService:
 
                 whatsapp_error = data.get("error") or f"HTTP {response.status_code}"
                 code = data.get("code")
-                logger.warning(f"[WHATSAPP ERR] {to_phone}: {whatsapp_error} ({code})")
+                if code == "SELF_NUMBER":
+                    logger.info(f"[WHATSAPP] Numéro identique au compte connecté ({to_phone}) → fallback SMS")
+                else:
+                    logger.warning(f"[WHATSAPP ERR] {to_phone}: {whatsapp_error} ({code})")
             except Exception as e:
                 whatsapp_error = str(e)
                 logger.error(f"[WHATSAPP CONN ERR] Impossible de joindre le service WhatsApp: {e}")
