@@ -40,3 +40,15 @@ async def logout_whatsapp(current_user: dict = Depends(get_current_user)):
             return res.json()
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erreur de déconnexion")
+
+@router.post("/restart")
+async def restart_whatsapp(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") not in ["admin"]:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(f"{settings.WHATSAPP_SERVICE_URL}/restart", timeout=30.0)
+            return res.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Impossible de redémarrer le service WhatsApp")
