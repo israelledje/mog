@@ -38,7 +38,22 @@
                  "next_sea":  "Next sea departure",
                  "next_air":  "Next air departure",
                  "see_all":  "See all",
-                 "no_recent":  "No recent activity"
+                 "no_recent":  "No recent activity",
+                 "hero_title":  "Ready to\nship?",
+                 "in_stock":  "In Stock",
+                 "active_shipments":  "Active Shipments",
+                 "transport_air":  "Air Freight",
+                 "transport_sea":  "Sea Freight",
+                 "nothing_to_report":  "Nothing to report for now.",
+                 "exchange_rate":  "EXCHANGE RATE",
+                 "rmb_fcfa":  "RMB / FCFA",
+                 "rate_under_1m":  "< 1,000,000 FCFA",
+                 "rate_over_1m":  "≥ 1,000,000 FCFA",
+                 "updated_today":  "Updated today",
+                 "pay_supplier":  "Pay a supplier",
+                 "whatsapp_message":  "Hello MOG GROUP Multiservice, I would like to make a supplier payment. Please let me know the next steps.",
+                 "whatsapp_install_required":  "Please install WhatsApp to use this feature.",
+                 "client_fallback":  "Client"
              },
     "package":  {
                     "title":  "My Packages",
@@ -63,7 +78,8 @@
                     "eta":  "ETA",
                     "no_packages":  "No packages yet",
                     "no_packages_sub":  "Ship your first package from China",
-                    "timeline":  "Timeline"
+                    "timeline":  "Timeline",
+                    "progress":  "Progress"
                 },
     "steps":  {
                   "order_created":  "Order created",
@@ -160,7 +176,24 @@
                     "logout_confirm":  "Are you sure you want to log out?",
                     "client_code":  "Client code",
                     "save":  "Save",
-                    "saved":  "Changes saved"
+                    "saved":  "Changes saved",
+                    "section_preferences":  "Preferences",
+                    "section_security":  "Security & Access",
+                    "section_account":  "Account Management",
+                    "biometrics":  "Biometric Login",
+                    "biometrics_unavailable":  "Your device does not support biometrics or it is not configured.",
+                    "biometrics_no_token":  "No session token found to enable biometrics.",
+                    "biometrics_enabled":  "Biometrics enabled",
+                    "biometrics_disabled":  "Biometrics disabled",
+                    "biometrics_hint":  "Use Face ID / fingerprint at next login",
+                    "biometrics_error":  "Unable to configure biometrics.",
+                    "photo_permission_title":  "Permission required",
+                    "photo_permission_message":  "We need your permission to access your photos.",
+                    "upload_in_progress":  "Uploading...",
+                    "photo_updated":  "Photo updated!",
+                    "photo_update_error":  "Unable to update photo",
+                    "prefs_save_error":  "Unable to save your preferences",
+                    "unavailable":  "Unavailable"
                 },
     "notifications":  {
                           "title":  "Notifications",

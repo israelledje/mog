@@ -4,6 +4,7 @@ from app.features.auth.schemas import (
     ForgotPasswordRequest, VerifyOTPRequest, ResetPasswordRequest
 )
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, get_password_hash
+from app.core.user_codes import generate_client_code, ensure_client_code
 from app.core.database import get_database
 import random
 import secrets
@@ -38,6 +39,7 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     user_dict["role"] = "client"
     user_dict["hashed_password"] = get_password_hash(user_in.password)
     user_dict["badge_secret"] = secrets.token_urlsafe(16) # Secret unique pour le badge
+    user_dict["client_code"] = await generate_client_code(db, "client")
     del user_dict["password"]
     
     # Insérer dans MongoDB
@@ -87,6 +89,7 @@ async def login(login_data: LoginRequest, response: Response, db = Depends(get_d
         user_copy["_id"] = str(user_copy["_id"])
     if "hashed_password" in user_copy:
         del user_copy["hashed_password"]
+    user_copy["client_code"] = await ensure_client_code(db, user)
     
     return {
         "access_token": access_token,
@@ -112,12 +115,13 @@ async def get_current_user(request: Request, credentials: HTTPAuthorizationCrede
     return user
 
 @router.get("/me")
-async def get_me(current_user: dict = Depends(get_current_user)):
+async def get_me(current_user: dict = Depends(get_current_user), db = Depends(get_database)):
     user_copy = current_user.copy()
     if "_id" in user_copy:
         user_copy["_id"] = str(user_copy["_id"])
     if "hashed_password" in user_copy:
         del user_copy["hashed_password"]
+    user_copy["client_code"] = await ensure_client_code(db, current_user)
     return user_copy
 
 from pydantic import BaseModel

@@ -2,6 +2,7 @@ import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
 from app.core.security import get_password_hash
+from app.core.user_codes import generate_client_code
 import uuid
 from datetime import datetime
 
@@ -21,6 +22,7 @@ async def create_admin():
         "_id": str(uuid.uuid4()),
         "email": admin_email,
         "hashed_password": get_password_hash("admin123"), # Mot de passe par défaut
+        "client_code": await generate_client_code(db, "admin"),
         "full_name": "Administrateur",
         "city": "Paris",
         "role": "admin",

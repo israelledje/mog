@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from app.core.database import get_database
 from app.features.auth.schemas import UserCreate
 from app.core.security import get_password_hash
+from app.core.user_codes import generate_client_code
 from app.core.deps import get_current_user, check_role
 from datetime import datetime, timedelta
 import pandas as pd
@@ -113,6 +114,8 @@ async def create_user_as_admin(user_in: UserCreate, db = Depends(get_database)):
     # Créer l'objet utilisateur pour la base
     user_dict = user_in.model_dump()
     user_dict["hashed_password"] = get_password_hash(user_in.password)
+    role = user_dict.get("role", "client")
+    user_dict["client_code"] = await generate_client_code(db, role)
     del user_dict["password"]
     
     # Insérer dans MongoDB

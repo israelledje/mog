@@ -59,7 +59,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.headerTextWrap}>
               <Text style={styles.greeting}>{t('home.greeting')}!</Text>
-              <Text style={styles.userName}>{user?.full_name || 'Client'}</Text>
+              <Text style={styles.userName}>{user?.full_name || t('home.client_fallback')}</Text>
             </View>
             <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications')}>
               <Bell size={24} color={colors.text} strokeWidth={2.5} />
@@ -87,9 +87,9 @@ export default function HomeScreen() {
 
               <View style={styles.heroContent}>
                 <View style={styles.heroLeft}>
-                  <Text style={styles.heroTitle}>Prêt pour{'\n'}expédition ?</Text>
+                  <Text style={styles.heroTitle}>{t('home.hero_title')}</Text>
                   <TouchableOpacity style={styles.heroBtn} onPress={onShip}>
-                    <Text style={styles.heroBtnText}>Nouveau Colis</Text>
+                    <Text style={styles.heroBtnText}>{t('package.new_package')}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -98,7 +98,7 @@ export default function HomeScreen() {
                   <View style={styles.circleOuter}>
                     <View style={styles.circleInner}>
                       <Text style={styles.circleText}>{kpi.warehouse}</Text>
-                      <Text style={styles.circleSub}>En Stock</Text>
+                      <Text style={styles.circleSub}>{t('home.in_stock')}</Text>
                     </View>
                   </View>
                 </View>
@@ -109,7 +109,7 @@ export default function HomeScreen() {
           {/* IN PROGRESS SECTION (HORIZONTAL SCROLL) */}
           <View style={styles.sectionWrap}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Expéditions Actives</Text>
+              <Text style={styles.sectionTitle}>{t('home.active_shipments')}</Text>
               <View style={styles.countBadge}><Text style={styles.countBadgeText}>{activeShipments.length}</Text></View>
             </View>
             
@@ -124,7 +124,7 @@ export default function HomeScreen() {
                   return (
                     <TouchableOpacity key={c.id} style={[styles.activeCard, { backgroundColor: bgColor }]} onPress={() => router.push(`/colis/${c.id}`)}>
                       <View style={styles.acHeader}>
-                        <Text style={styles.acCategory}>{c.transport_mode === 'air' ? 'Transport Aérien' : 'Transport Maritime'}</Text>
+                        <Text style={styles.acCategory}>{c.transport_mode === 'air' ? t('home.transport_air') : t('home.transport_sea')}</Text>
                         <View style={[styles.acIconWrap, { backgroundColor: `${primaryC}20` }]}>
                           {c.transport_mode === 'air' ? <Plane size={16} color={primaryC} /> : <Ship size={16} color={primaryC} />}
                         </View>
@@ -146,14 +146,14 @@ export default function HomeScreen() {
                 })}
               </ScrollView>
             ) : (
-               <Text style={styles.emptyInline}>Aucune expédition en cours.</Text>
+               <Text style={styles.emptyInline}>{t('shipment.no_shipments')}</Text>
             )}
           </View>
 
           {/* TASK GROUPS -> RECENT ACTIVITY (VERTICAL LIST) */}
           <View style={[styles.sectionWrap, { marginTop: spacing.md }]}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Activité Récente</Text>
+              <Text style={styles.sectionTitle}>{t('home.recent_activity')}</Text>
               <View style={styles.countBadge}><Text style={styles.countBadgeText}>{recent.length}</Text></View>
             </View>
 
@@ -162,7 +162,7 @@ export default function HomeScreen() {
             ) : recent.length === 0 ? (
               <View style={styles.empty}>
                 <Package size={36} color={colors.textSecondary} />
-                <Text style={styles.emptyText}>Rien à signaler pour le moment.</Text>
+                <Text style={styles.emptyText}>{t('home.nothing_to_report')}</Text>
               </View>
             ) : (
               recent.map((c) => <RecentItem key={c.id} item={c} onPress={() => router.push(`/colis/${c.id}`)} />)
@@ -182,8 +182,8 @@ export default function HomeScreen() {
                 {/* Top Section */}
                 <View style={styles.visaTop}>
                   <View>
-                    <Text style={styles.visaLabel}>TAUX DE CHANGE</Text>
-                    <Text style={styles.visaTitle}>RMB / FCFA</Text>
+                    <Text style={styles.visaLabel}>{t('home.exchange_rate')}</Text>
+                    <Text style={styles.visaTitle}>{t('home.rmb_fcfa')}</Text>
                   </View>
                   <Cpu size={32} color="rgba(255,255,255,0.8)" strokeWidth={1.5} style={{ transform: [{ rotate: '90deg' }] }} />
                 </View>
@@ -192,17 +192,17 @@ export default function HomeScreen() {
                 <View style={styles.visaMiddle}>
                   <View style={styles.visaCol}>
                     <Text style={styles.visaRate}>1 ¥ = {settings?.exchange_rate_cny_xaf_under_1m || 100}</Text>
-                    <Text style={styles.visaSubLabel}>&lt; 1.000.000 FCFA</Text>
+                    <Text style={styles.visaSubLabel}>{t('home.rate_under_1m')}</Text>
                   </View>
                   <View style={styles.visaCol}>
                     <Text style={styles.visaRate}>1 ¥ = {settings?.exchange_rate_cny_xaf_over_1m || 85}</Text>
-                    <Text style={styles.visaSubLabel}>≥ 1.000.000 FCFA</Text>
+                    <Text style={styles.visaSubLabel}>{t('home.rate_over_1m')}</Text>
                   </View>
                 </View>
 
                 {/* Bottom Section (Card Number style & Logos) */}
                 <View style={styles.visaBottom}>
-                  <Text style={styles.visaDate}>Mis à jour aujourd'hui</Text>
+                  <Text style={styles.visaDate}>{t('home.updated_today')}</Text>
                   <View style={styles.visaMastercardLogo}>
                     <View style={[styles.mastercardCircle, { backgroundColor: 'rgba(255,255,255,0.4)', right: -10 }]} />
                     <View style={[styles.mastercardCircle, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
@@ -216,14 +216,14 @@ export default function HomeScreen() {
               style={styles.modernWhatsappBtn}
               activeOpacity={0.8}
               onPress={() => {
-                const msg = encodeURIComponent("Bonjour MOG GROUP Multiservice, je souhaite effectuer un paiement fournisseur. Merci de m'indiquer la marche à suivre.");
+                const msg = encodeURIComponent(t('home.whatsapp_message'));
                 Linking.openURL(`whatsapp://send?phone=+237600000000&text=${msg}`).catch(() => {
-                  alert('Veuillez installer WhatsApp pour utiliser cette fonctionnalité.');
+                  alert(t('home.whatsapp_install_required'));
                 });
               }}
             >
               <FontAwesome name="whatsapp" size={24} color="#fff" style={{ marginRight: 10 }} />
-              <Text style={styles.modernWhatsappBtnText}>Payer un fournisseur</Text>
+              <Text style={styles.modernWhatsappBtnText}>{t('home.pay_supplier')}</Text>
             </TouchableOpacity>
             
           </View>

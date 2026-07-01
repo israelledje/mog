@@ -38,7 +38,22 @@
                  "next_sea":  "下一班海运",
                  "next_air":  "下一班空运",
                  "see_all":  "查看全部",
-                 "no_recent":  "暂无活动"
+                 "no_recent":  "暂无活动",
+                 "hero_title":  "准备好\n发货了吗？",
+                 "in_stock":  "在库",
+                 "active_shipments":  "进行中的运单",
+                 "transport_air":  "空运",
+                 "transport_sea":  "海运",
+                 "nothing_to_report":  "目前没有新动态。",
+                 "exchange_rate":  "汇率",
+                 "rmb_fcfa":  "人民币 / 中非法郎",
+                 "rate_under_1m":  "< 1,000,000 中非法郎",
+                 "rate_over_1m":  "≥ 1,000,000 中非法郎",
+                 "updated_today":  "今日更新",
+                 "pay_supplier":  "向供应商付款",
+                 "whatsapp_message":  "您好 MOG GROUP Multiservice，我想进行供应商付款，请告知操作流程。",
+                 "whatsapp_install_required":  "请安装 WhatsApp 以使用此功能。",
+                 "client_fallback":  "客户"
              },
     "package":  {
                     "title":  "我的包裹",
@@ -63,7 +78,8 @@
                     "eta":  "预计到达",
                     "no_packages":  "暂无包裹",
                     "no_packages_sub":  "从中国发送您的第一个包裹",
-                    "timeline":  "进度"
+                    "timeline":  "进度",
+                    "progress":  "进度"
                 },
     "steps":  {
                   "order_created":  "订单已创建",
@@ -160,7 +176,24 @@
                     "logout_confirm":  "确定退出登录吗？",
                     "client_code":  "客户编号",
                     "save":  "保存",
-                    "saved":  "已保存"
+                    "saved":  "已保存",
+                    "section_preferences":  "偏好设置",
+                    "section_security":  "安全与访问",
+                    "section_account":  "账户管理",
+                    "biometrics":  "生物识别登录",
+                    "biometrics_unavailable":  "您的设备不支持生物识别或未配置。",
+                    "biometrics_no_token":  "未找到会话令牌，无法启用生物识别。",
+                    "biometrics_enabled":  "生物识别已启用",
+                    "biometrics_disabled":  "生物识别已关闭",
+                    "biometrics_hint":  "下次登录可使用面容/指纹",
+                    "biometrics_error":  "无法配置生物识别。",
+                    "photo_permission_title":  "需要权限",
+                    "photo_permission_message":  "我们需要访问您的相册权限。",
+                    "upload_in_progress":  "上传中...",
+                    "photo_updated":  "照片已更新！",
+                    "photo_update_error":  "无法更新照片",
+                    "prefs_save_error":  "无法保存您的偏好设置",
+                    "unavailable":  "不可用"
                 },
     "notifications":  {
                           "title":  "通知",

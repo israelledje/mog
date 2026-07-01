@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
 import LanguageSelector from '../../src/components/LanguageSelector';
+import { authApi } from '../../src/api/auth';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { biometricService } from '../../src/api/biometrics';
@@ -22,9 +23,14 @@ export default function ProfileScreen() {
   const lastPassword = useAuthStore((s) => s.lastPassword);
   const logout = useAuthStore((s) => s.logout);
   const updateProfile = useAuthStore((s) => s.updateProfile);
+  const setUser = useAuthStore((s) => s.setUser);
   const uploadAvatar = useAuthStore((s) => s.uploadAvatar);
   const kpi = useColisStore((s) => s.kpi);
   const [notif, setNotif] = useState({ received: true, quoted: true, departed: true, delivered: true });
+
+  useEffect(() => {
+    authApi.me().then(setUser).catch(() => {});
+  }, [setUser]);
 
   useEffect(() => {
     const prefs = (user as any)?.notification_preferences;
@@ -41,7 +47,7 @@ export default function ProfileScreen() {
       await updateProfile({ notification_preferences: newNotif } as any);
     } catch (e) {
       setNotif(notif);
-      Toast.show({ type: 'error', text1: 'Erreur', text2: 'Impossible de sauvegarder vos préférences' });
+      Toast.show({ type: 'error', text1: t('errors.server'), text2: t('profile.prefs_save_error') });
     }
   };
 
@@ -60,7 +66,7 @@ export default function ProfileScreen() {
   const handleAvatarPick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à vos photos.');
+      Alert.alert(t('profile.photo_permission_title'), t('profile.photo_permission_message'));
       return;
     }
 
@@ -74,11 +80,11 @@ export default function ProfileScreen() {
     if (!result.canceled && result.assets[0]) {
       try {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Toast.show({ type: 'info', text1: 'Upload en cours...' });
+        Toast.show({ type: 'info', text1: t('profile.upload_in_progress') });
         await uploadAvatar(result.assets[0].uri);
-        Toast.show({ type: 'success', text1: 'Photo mise à jour !' });
+        Toast.show({ type: 'success', text1: t('profile.photo_updated') });
       } catch (error) {
-        Toast.show({ type: 'error', text1: 'Erreur', text2: 'Impossible de mettre à jour la photo' });
+        Toast.show({ type: 'error', text1: t('errors.server'), text2: t('profile.photo_update_error') });
       }
     }
   };
@@ -100,7 +106,7 @@ export default function ProfileScreen() {
 
   const toggleBiometrics = async (val: boolean) => {
     if (val && !bioAvailable) {
-      Alert.alert("Indisponible", "Votre appareil ne supporte pas la biométrie ou elle n'est pas configurée.");
+      Alert.alert(t('profile.unavailable'), t('profile.biometrics_unavailable'));
       return;
     }
 
@@ -110,7 +116,7 @@ export default function ProfileScreen() {
       if (val) {
         const refreshToken = await getRefreshToken();
         if (!refreshToken) {
-          Alert.alert("Erreur", "Aucun jeton de session trouvé pour activer la biométrie.");
+          Alert.alert(t('errors.server'), t('profile.biometrics_no_token'));
           return;
         }
         await biometricService.setEnabled(true, refreshToken);
@@ -121,11 +127,11 @@ export default function ProfileScreen() {
       setBiometrics(val);
       Toast.show({
         type: 'success',
-        text1: val ? 'Biométrie activée' : 'Biométrie désactivée',
-        text2: val ? 'Utilisez FaceID/Empreinte à la prochaine connexion' : undefined
+        text1: val ? t('profile.biometrics_enabled') : t('profile.biometrics_disabled'),
+        text2: val ? t('profile.biometrics_hint') : undefined
       });
     } catch (e) {
-      Alert.alert("Erreur", "Impossible de configurer la biométrie.");
+      Alert.alert(t('errors.server'), t('profile.biometrics_error'));
     }
   };
 
@@ -154,7 +160,7 @@ export default function ProfileScreen() {
               <Text style={styles.email}>{user.email}</Text>
               <View style={styles.codeChip}>
                 <Text style={styles.codeLabel}>{t('profile.client_code')}</Text>
-                <Text style={styles.codeValue}>{user.client_code}</Text>
+                <Text style={styles.codeValue}>{user.client_code || '—'}</Text>
               </View>
             </View>
           </SafeAreaView>
@@ -163,17 +169,17 @@ export default function ProfileScreen() {
         {/* BARRE DE STATISTIQUES (KPIs) */}
         <View style={styles.kpiContainer}>
           <View style={styles.kpiCard}>
-            <KpiItem icon={<Box size={20} color={colors.secondary} />} label="Entrepôt" value={kpi.warehouse} />
+            <KpiItem icon={<Box size={20} color={colors.secondary} />} label={t('home.warehouse')} value={kpi.warehouse} />
             <View style={styles.kpiDivider} />
-            <KpiItem icon={<Truck size={20} color={colors.warning} />} label="En transit" value={kpi.transit} />
+            <KpiItem icon={<Truck size={20} color={colors.warning} />} label={t('home.transit')} value={kpi.transit} />
             <View style={styles.kpiDivider} />
-            <KpiItem icon={<CheckCircle size={20} color={colors.success} />} label="Livrés" value={kpi.delivered} />
+            <KpiItem icon={<CheckCircle size={20} color={colors.success} />} label={t('home.delivered')} value={kpi.delivered} />
           </View>
         </View>
 
         <View style={styles.content}>
           {/* PRÉFÉRENCES */}
-          <Section title="Préférences">
+          <Section title={t('profile.section_preferences')}>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <Globe size={20} color={colors.primary} />
@@ -192,11 +198,11 @@ export default function ProfileScreen() {
           </Section>
 
           {/* SÉCURITÉ */}
-          <Section title="Sécurité & Accès">
+          <Section title={t('profile.section_security')}>
             <View style={styles.row}>
               <View style={styles.rowLeft}>
                 <UserIcon size={20} color={colors.textSecondary} />
-                <Text style={styles.rowText}>Identification Biométrique</Text>
+                <Text style={styles.rowText}>{t('profile.biometrics')}</Text>
               </View>
               <Switch
                 value={biometrics}
@@ -229,7 +235,7 @@ export default function ProfileScreen() {
           </Section>
 
           {/* MON COMPTE & SUPPORT */}
-          <Section title="Gestion du compte">
+          <Section title={t('profile.section_account')}>
             <ItemRow
               testID="profile-edit"
               icon={<Edit3 size={20} color={colors.textSecondary} />}
