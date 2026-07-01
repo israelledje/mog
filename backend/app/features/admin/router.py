@@ -13,62 +13,129 @@ router = APIRouter(prefix="/admin", tags=["Administration"])
 
 @router.get("/stats", dependencies=[Depends(check_role(["admin"]))])
 async def get_global_stats(db = Depends(get_database)):
-    # 1. Total Colis + Revenu + Tendances journalières via un seul pipeline d'agrégation
     seven_days_ago = datetime.now() - timedelta(days=7)
+    fourteen_days_ago = datetime.now() - timedelta(days=14)
 
-    # Pipeline unique pour stats globales
-    global_pipeline = [
-        {"$group": {"_id": None, "total_weight": {"$sum": "$weight_estimated"}}}
-    ]
-    cursor = db.packages.aggregate(global_pipeline)
-    weight_data = await cursor.to_list(length=1)
-    total_weight = weight_data[0]["total_weight"] if weight_data else 0
-    total_revenue = total_weight * 5000  # Tarif moyen simulé
-
-    # Compter les colis en une seule requête
     total_packages = await db.packages.count_documents({})
+    packages_received = await db.packages.count_documents({"status": {"$in": ["received", "loaded", "closed"]}})
+    pending_payments = await db.packages.count_documents({
+        "payment_status": {"$in": ["pending", "waiting_validation"]}
+    })
+    active_clients = await db.users.count_documents({"role": "client"})
 
-    # 2. Répartition Mer / Air (parallèle)
-    import asyncio
-    sea_count, air_count = await asyncio.gather(
-        db.containers.count_documents({"transport_mode": "sea"}),
-        db.containers.count_documents({"transport_mode": "air"})
-    )
+    # Revenu réel : somme des total_price des colis payés
+    revenue_pipeline = [
+        {"$match": {"payment_status": "paid"}},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$total_price", 0]}}}},
+    ]
+    rev_cursor = db.packages.aggregate(revenue_pipeline)
+    rev_data = await rev_cursor.to_list(length=1)
+    total_revenue = rev_data[0]["total"] if rev_data else 0
 
-    # 3. Tendances journalières via aggregation (1 seule requête au lieu de 7)
+    # Volume CBM total (dimensions en cm)
+    volume_pipeline = [
+        {
+            "$project": {
+                "cbm": {
+                    "$divide": [
+                        {
+                            "$multiply": [
+                                {"$ifNull": ["$dimensions.l", 0]},
+                                {"$ifNull": ["$dimensions.w", 0]},
+                                {"$ifNull": ["$dimensions.h", 0]},
+                            ]
+                        },
+                        1_000_000,
+                    ]
+                }
+            }
+        },
+        {"$group": {"_id": None, "total_cbm": {"$sum": "$cbm"}}},
+    ]
+    vol_cursor = db.packages.aggregate(volume_pipeline)
+    vol_data = await vol_cursor.to_list(length=1)
+    total_volume_cbm = round(vol_data[0]["total_cbm"], 2) if vol_data else 0
+
+    # Conteneurs : compat mode / transport_mode
+    all_containers = await db.containers.find({}).to_list(length=5000)
+    sea_count = sum(1 for c in all_containers if (c.get("mode") or c.get("transport_mode") or "sea") == "sea")
+    air_count = sum(1 for c in all_containers if (c.get("mode") or c.get("transport_mode")) in ("air", "air_express"))
+    open_containers = sum(1 for c in all_containers if c.get("status") == "open")
+
+    # Tendances journalières (7 derniers jours)
     daily_pipeline = [
         {"$match": {"created_at": {"$gte": seven_days_ago}}},
-        {"$group": {
-            "_id": {
-                "year": {"$year": "$created_at"},
-                "month": {"$month": "$created_at"},
-                "day": {"$dayOfMonth": "$created_at"}
-            },
-            "count": {"$sum": 1}
-        }},
-        {"$sort": {"_id": 1}}
+        {
+            "$project": {
+                "created_at": 1,
+                "cbm": {
+                    "$divide": [
+                        {
+                            "$multiply": [
+                                {"$ifNull": ["$dimensions.l", 0]},
+                                {"$ifNull": ["$dimensions.w", 0]},
+                                {"$ifNull": ["$dimensions.h", 0]},
+                            ]
+                        },
+                        1_000_000,
+                    ]
+                },
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "year": {"$year": "$created_at"},
+                    "month": {"$month": "$created_at"},
+                    "day": {"$dayOfMonth": "$created_at"},
+                },
+                "count": {"$sum": 1},
+                "volume_cbm": {"$sum": "$cbm"},
+            }
+        },
+        {"$sort": {"_id": 1}},
     ]
     daily_cursor = db.packages.aggregate(daily_pipeline)
     daily_raw = await daily_cursor.to_list(length=7)
 
-    # Construire un dict des jours avec données
-    daily_map = {}
+    daily_map: dict = {}
     for item in daily_raw:
         date_str = f"{item['_id']['year']}-{item['_id']['month']:02d}-{item['_id']['day']:02d}"
-        daily_map[date_str] = item["count"]
+        daily_map[date_str] = {
+            "count": item["count"],
+            "volume_cbm": round(item.get("volume_cbm", 0), 2),
+        }
 
-    # Compléter avec les jours sans données
     daily_stats = []
     for i in range(6, -1, -1):
         day = datetime.now() - timedelta(days=i)
         date_str = day.strftime("%Y-%m-%d")
-        daily_stats.append({"date": date_str, "count": daily_map.get(date_str, 0)})
+        entry = daily_map.get(date_str, {"count": 0, "volume_cbm": 0})
+        daily_stats.append({"date": date_str, **entry})
+
+    # Colis créés cette semaine vs semaine précédente
+    packages_this_week = await db.packages.count_documents({"created_at": {"$gte": seven_days_ago}})
+    packages_last_week = await db.packages.count_documents({
+        "created_at": {"$gte": fourteen_days_ago, "$lt": seven_days_ago}
+    })
+
+    def pct_change(current: int, previous: int):
+        if previous == 0:
+            return None if current == 0 else 100.0
+        return round(((current - previous) / previous) * 100, 1)
 
     return {
         "total_packages": total_packages,
+        "packages_received": packages_received,
         "total_revenue": total_revenue,
-        "logistics_split": {"sea": sea_count, "air": air_count},
-        "daily_trends": daily_stats[::-1]
+        "total_volume_cbm": total_volume_cbm,
+        "active_clients": active_clients,
+        "pending_payments": pending_payments,
+        "open_containers": open_containers,
+        "logistics_split": {"sea": sea_count, "air": air_count, "total": len(all_containers)},
+        "daily_trends": daily_stats,
+        "packages_this_week": packages_this_week,
+        "packages_week_change_pct": pct_change(packages_this_week, packages_last_week),
     }
 
 @router.get("/users", dependencies=[Depends(check_role(["admin"]))])
