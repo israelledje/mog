@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Package, Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
-import { API_BASE_URL } from '@/lib/api';
+import { apiUrl } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      const res = await fetch(apiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
