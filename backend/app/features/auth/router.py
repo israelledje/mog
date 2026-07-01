@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Response, Request
 from app.features.auth.schemas import (
     LoginRequest, Token, RefreshRequest, UserCreate, UserBase,
-    ForgotPasswordRequest, VerifyOTPRequest, ResetPasswordRequest
+    ForgotPasswordRequest, VerifyOTPRequest, ResetPasswordRequest,
+    PhoneOTPRequest, PhoneVerifyRequest,
 )
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token, get_password_hash
 from app.core.user_codes import generate_client_code, ensure_client_code
+from app.core.phone_utils import normalize_phone, is_valid_phone
 from app.core.database import get_database
 import random
 import secrets
@@ -139,14 +141,106 @@ class UserUpdate(BaseModel):
 @router.put("/me")
 async def update_me(update_data: UserUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_database)):
     update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
+    # Le téléphone doit être vérifié via /auth/phone/verify-otp
+    update_dict.pop("phone", None)
     if not update_dict:
-        return current_user
+        user_copy = current_user.copy()
+        if "_id" in user_copy:
+            user_copy["_id"] = str(user_copy["_id"])
+        if "hashed_password" in user_copy:
+            del user_copy["hashed_password"]
+        return user_copy
     
     await db.users.update_one(
         {"email": current_user["email"]},
         {"$set": update_dict}
     )
     
+    user = await db.users.find_one({"email": current_user["email"]})
+    user_copy = user.copy()
+    if "_id" in user_copy:
+        user_copy["_id"] = str(user_copy["_id"])
+    if "hashed_password" in user_copy:
+        del user_copy["hashed_password"]
+    return user_copy
+
+@router.post("/phone/send-otp")
+async def send_phone_otp(
+    request: PhoneOTPRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database),
+):
+    phone = normalize_phone(request.phone)
+    if not is_valid_phone(phone):
+        raise HTTPException(status_code=400, detail="Numéro de téléphone invalide")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    await db.otp_codes.update_one(
+        {"email": current_user["email"]},
+        {
+            "$set": {
+                "phone_otp": otp_code,
+                "phone_otp_number": phone,
+                "phone_otp_expires_at": expires_at,
+                "phone_otp_attempts": 0,
+            }
+        },
+        upsert=True,
+    )
+
+    msg = f"Votre code de vérification MOG est : {otp_code}. Valable 10 minutes."
+    await NotificationService.send_whatsapp(phone, msg)
+
+    return {"message": "Code envoyé par WhatsApp"}
+
+@router.post("/phone/verify-otp")
+async def verify_phone_otp(
+    request: PhoneVerifyRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database),
+):
+    phone = normalize_phone(request.phone)
+    if not is_valid_phone(phone):
+        raise HTTPException(status_code=400, detail="Numéro de téléphone invalide")
+
+    otp_record = await db.otp_codes.find_one({"email": current_user["email"]})
+    if not otp_record or not otp_record.get("phone_otp"):
+        raise HTTPException(status_code=400, detail="Aucun code en cours. Demandez un nouveau code.")
+
+    attempts = otp_record.get("phone_otp_attempts", 0) + 1
+    if attempts > 3:
+        await db.otp_codes.update_one(
+            {"email": current_user["email"]},
+            {"$unset": {"phone_otp": "", "phone_otp_number": "", "phone_otp_expires_at": "", "phone_otp_attempts": ""}},
+        )
+        raise HTTPException(status_code=400, detail="Trop de tentatives. Demandez un nouveau code.")
+
+    await db.otp_codes.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"phone_otp_attempts": attempts}},
+    )
+
+    if otp_record.get("phone_otp_number") != phone:
+        raise HTTPException(status_code=400, detail="Le numéro ne correspond pas au code envoyé")
+
+    if otp_record.get("phone_otp") != request.otp_code:
+        raise HTTPException(status_code=400, detail="Code OTP incorrect")
+
+    expires = otp_record.get("phone_otp_expires_at")
+    if not expires or datetime.now(timezone.utc) > expires.replace(tzinfo=timezone.utc):
+        raise HTTPException(status_code=400, detail="Code OTP expiré")
+
+    await db.users.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"phone": phone, "phone_verified": True}},
+    )
+    await db.otp_codes.update_one(
+        {"email": current_user["email"]},
+        {"$unset": {"phone_otp": "", "phone_otp_number": "", "phone_otp_expires_at": "", "phone_otp_attempts": ""}},
+    )
+
     user = await db.users.find_one({"email": current_user["email"]})
     user_copy = user.copy()
     if "_id" in user_copy:

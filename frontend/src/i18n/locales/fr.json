@@ -185,6 +185,8 @@
                     "phone_verified":  "Numéro vérifié",
                     "phone_change_required":  "Vérifiez votre nouveau numéro avant d'enregistrer",
                     "phone_invalid":  "Numéro de téléphone invalide",
+                    "contact_support":  "Contacter le support",
+                    "support_whatsapp_message":  "Bonjour MOG GROUP, j'ai besoin d'aide concernant mon compte ou un colis.",
                     "section_preferences":  "Préférences",
                     "section_security":  "Sécurité & Accès",
                     "section_account":  "Gestion du compte",

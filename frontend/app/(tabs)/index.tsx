@@ -11,6 +11,7 @@ import SkeletonCard from '../../src/components/SkeletonCard';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
+import { buildWhatsAppUrl, formatSupportPhoneDisplay, getSupportPhoneDigits } from '../../src/utils/support';
 import { colors, fonts, shadow, spacing, radii } from '../../src/constants/theme';
 import type { Colis } from '../../src/types';
 
@@ -38,6 +39,8 @@ export default function HomeScreen() {
   const activeShipments = colis.filter(c => ['in_transit', 'loading', 'loaded', 'closed', 'departed', 'pending_reception', 'received'].includes(c.status)).slice(0, 5);
   const recent = colis.slice(0, 5);
   const unread = unreadCount();
+  const supportPhoneDigits = getSupportPhoneDigits(settings);
+  const supportPhoneDisplay = formatSupportPhoneDisplay(supportPhoneDigits);
 
   const onShip = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -216,14 +219,17 @@ export default function HomeScreen() {
               style={styles.modernWhatsappBtn}
               activeOpacity={0.8}
               onPress={() => {
-                const msg = encodeURIComponent(t('home.whatsapp_message'));
-                Linking.openURL(`whatsapp://send?phone=+237600000000&text=${msg}`).catch(() => {
+                const msg = t('home.whatsapp_message');
+                Linking.openURL(buildWhatsAppUrl(supportPhoneDigits, msg)).catch(() => {
                   alert(t('home.whatsapp_install_required'));
                 });
               }}
             >
               <FontAwesome name="whatsapp" size={24} color="#fff" style={{ marginRight: 10 }} />
-              <Text style={styles.modernWhatsappBtnText}>{t('home.pay_supplier')}</Text>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={styles.modernWhatsappBtnText}>{t('home.pay_supplier')}</Text>
+                <Text style={styles.modernWhatsappBtnSub}>{supportPhoneDisplay}</Text>
+              </View>
             </TouchableOpacity>
             
           </View>
@@ -328,5 +334,6 @@ const styles = StyleSheet.create({
 
   modernWhatsappBtn: { backgroundColor: '#25D366', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: radii.button, ...shadow.card },
   modernWhatsappBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  modernWhatsappBtnSub: { color: 'rgba(255,255,255,0.9)', fontWeight: '600', fontSize: 13, marginTop: 2 },
 });
 

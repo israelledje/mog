@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronDown, ChevronUp, HelpCircle, MessageCircle } from 'lucide-react-native';
+import { ChevronLeft, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react-native';
+import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
+import { useSettingsStore } from '../../src/store/settingsStore';
+import { buildWhatsAppUrl, formatSupportPhoneDisplay, getSupportPhoneDigits } from '../../src/utils/support';
 
 const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
   fr: [
@@ -43,13 +46,29 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
 export default function FaqScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
+  const { settings, fetchSettings } = useSettingsStore();
   const items = FAQ_ITEMS_BY_LANG[i18n.language] || FAQ_ITEMS_BY_LANG.fr;
   const [open, setOpen] = useState<number | null>(0);
+
+  const supportPhoneDigits = getSupportPhoneDigits(settings);
+  const supportPhoneDisplay = formatSupportPhoneDisplay(supportPhoneDigits);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   const toggle = (idx: number) => {
     Haptics.selectionAsync();
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpen(open === idx ? null : idx);
+  };
+
+  const onContactSupport = () => {
+    Haptics.selectionAsync();
+    const msg = t('profile.support_whatsapp_message');
+    Linking.openURL(buildWhatsAppUrl(supportPhoneDigits, msg)).catch(() => {
+      Alert.alert(t('profile.support'), t('home.whatsapp_install_required'));
+    });
   };
 
   return (
@@ -74,9 +93,17 @@ export default function FaqScreen() {
             {open === idx && <Text style={styles.a}>{item.a}</Text>}
           </TouchableOpacity>
         ))}
-        <TouchableOpacity style={styles.contact} onPress={() => Haptics.selectionAsync()} testID="faq-contact">
-          <MessageCircle size={20} color="#fff" />
-          <Text style={styles.contactText}>WhatsApp +237 6XX XXX XXX</Text>
+        <TouchableOpacity
+          style={styles.whatsappBtn}
+          onPress={onContactSupport}
+          activeOpacity={0.8}
+          testID="faq-contact"
+        >
+          <FontAwesome name="whatsapp" size={24} color="#fff" style={{ marginRight: 10 }} />
+          <View style={{ alignItems: 'center' }}>
+            <Text style={styles.whatsappBtnText}>{t('profile.contact_support')}</Text>
+            <Text style={styles.whatsappBtnSub}>{supportPhoneDisplay}</Text>
+          </View>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -93,6 +120,16 @@ const styles = StyleSheet.create({
   itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   q: { color: colors.text, fontSize: 14, fontWeight: '700', flex: 1 },
   a: { color: colors.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.borderLight },
-  contact: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.success, paddingVertical: 14, borderRadius: radii.button, marginTop: spacing.lg },
-  contactText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  whatsappBtn: {
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: radii.button,
+    marginTop: spacing.lg,
+    ...shadow.card,
+  },
+  whatsappBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  whatsappBtnSub: { color: 'rgba(255,255,255,0.9)', fontWeight: '600', fontSize: 13, marginTop: 2 },
 });

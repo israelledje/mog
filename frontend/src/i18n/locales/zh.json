@@ -185,6 +185,8 @@
                     "phone_verified":  "号码已验证",
                     "phone_change_required":  "保存前请验证新号码",
                     "phone_invalid":  "电话号码无效",
+                    "contact_support":  "联系客服",
+                    "support_whatsapp_message":  "您好 MOG GROUP，我需要关于账户或包裹的帮助。",
                     "section_preferences":  "偏好设置",
                     "section_security":  "安全与访问",
                     "section_account":  "账户管理",

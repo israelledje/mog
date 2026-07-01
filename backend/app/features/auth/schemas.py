@@ -50,3 +50,10 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp_code: str
     new_password: str
+
+class PhoneOTPRequest(BaseModel):
+    phone: str
+
+class PhoneVerifyRequest(BaseModel):
+    phone: str
+    otp_code: str
