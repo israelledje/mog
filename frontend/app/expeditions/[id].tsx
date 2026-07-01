@@ -4,6 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, Box, Download, FileText, Scale, Ruler, DollarSign, Package, Calendar, Check, Truck, MapPin, Anchor, PlaneTakeoff } from 'lucide-react-native';
+import { z } from 'zod';
+
+const paramSchema = z.object({
+  id: z.string().min(1),
+});
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from 'react-native-toast-message';
@@ -19,7 +24,18 @@ import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme
 export default function ExpeditionDetailScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const rawParams = useLocalSearchParams();
+  const parsed = paramSchema.safeParse(rawParams);
+  
+  if (!parsed.success) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.danger }}>Lien invalide.</Text>
+      </SafeAreaView>
+    );
+  }
+  
+  const { id } = parsed.data;
   
   const { groupages, colis } = useColisStore();
   const user = useAuthStore(s => s.user);

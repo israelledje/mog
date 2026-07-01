@@ -12,7 +12,7 @@ import LanguageSelector from '../../src/components/LanguageSelector';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { biometricService } from '../../src/api/biometrics';
-import { BASE } from '../../src/api/client';
+import { BASE, getRefreshToken } from '../../src/api/client';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 export default function ProfileScreen() {
@@ -108,11 +108,12 @@ export default function ProfileScreen() {
     
     try {
       if (val) {
-        if (!lastPassword) {
-          Alert.alert("Action requise", "Pour des raisons de sécurité, veuillez vous reconnecter manuellement une fois avant d'activer la biométrie.");
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken) {
+          Alert.alert("Erreur", "Aucun jeton de session trouvé pour activer la biométrie.");
           return;
         }
-        await biometricService.setEnabled(true, user?.email, lastPassword);
+        await biometricService.setEnabled(true, refreshToken);
       } else {
         await biometricService.setEnabled(false);
       }

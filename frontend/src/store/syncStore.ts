@@ -15,10 +15,12 @@ interface SyncState {
   removeFromQueue: (id: string) => Promise<void>;
   getQueue: () => SyncItem[];
   hydrate: () => Promise<void>;
+  reset: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
   queue: [],
+  reset: () => set({ queue: [] }),
   addToQueue: async (item) => {
     const newItem: SyncItem = {
       ...item,

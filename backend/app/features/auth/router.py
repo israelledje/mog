@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Response, Request
 from app.features.auth.schemas import (
     LoginRequest, Token, RefreshRequest, UserCreate, UserBase,
     ForgotPasswordRequest, VerifyOTPRequest, ResetPasswordRequest
@@ -16,7 +16,7 @@ import os
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=Token)
-async def register(user_in: UserCreate, db = Depends(get_database)):
+async def register(user_in: UserCreate, response: Response, db = Depends(get_database)):
     # ... (rest of validation)
     allowed_cities = ["Douala", "Yaoundé", "Guangzhou", "Yiwu", "Shenzhen", "Autre"]
     if user_in.city and user_in.city not in allowed_cities:
@@ -46,14 +46,21 @@ async def register(user_in: UserCreate, db = Depends(get_database)):
     user_response.pop("hashed_password", None)
     
     return {
-        "access_token": create_access_token({"sub": user_in.email, "role": "client"}),
-        "refresh_token": create_refresh_token({"sub": user_in.email}),
+    access_token = create_access_token({"sub": user_in.email, "role": "client"})
+    refresh_token = create_refresh_token({"sub": user_in.email})
+    
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user": user_response,
     }
 
 @router.post("/login", response_model=Token)
-async def login(login_data: LoginRequest, db = Depends(get_database)):
+async def login(login_data: LoginRequest, response: Response, db = Depends(get_database)):
     # Simuler la récupération utilisateur (En attendant Story 1.2)
     # Dans la vraie vie, on cherche dans MongoDB
     escaped_email = re.escape(login_data.email.strip())
@@ -71,17 +78,27 @@ async def login(login_data: LoginRequest, db = Depends(get_database)):
         )
     
     return {
-        "access_token": create_access_token({"sub": user["email"], "role": user["role"]}),
-        "refresh_token": create_refresh_token({"sub": user["email"]}),
+    access_token = create_access_token({"sub": user["email"], "role": user["role"]})
+    refresh_token = create_refresh_token({"sub": user["email"]})
+
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user": user,
     }
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db = Depends(get_database)):
-    token = credentials.credentials
+async def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db = Depends(get_database)):
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+        
     payload = decode_token(token)
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Token invalide")
@@ -238,7 +255,7 @@ class QRVerifyRequest(BaseModel):
     otp_code: str
 
 @router.post("/qr-verify", response_model=Token)
-async def qr_login_step2(request: QRVerifyRequest, db = Depends(get_database)):
+async def qr_login_step2(request: QRVerifyRequest, response: Response, db = Depends(get_database)):
     otp_record = await db.otp_codes.find_one({"email": request.email})
     
     if not otp_record:
@@ -263,14 +280,21 @@ async def qr_login_step2(request: QRVerifyRequest, db = Depends(get_database)):
     await db.otp_codes.update_one({"email": request.email}, {"$unset": {"qr_otp": "", "qr_expires_at": ""}})
     
     return {
-        "access_token": create_access_token({"sub": user["email"], "role": user.get("role", "operator")}),
-        "refresh_token": create_refresh_token({"sub": user["email"]}),
+    access_token = create_access_token({"sub": user["email"], "role": user.get("role", "operator")})
+    refresh_token = create_refresh_token({"sub": user["email"]})
+
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user": user,
     }
 
 @router.post("/refresh", response_model=Token)
-async def refresh(refresh_data: RefreshRequest, db = Depends(get_database)):
+async def refresh(refresh_data: RefreshRequest, response: Response, db = Depends(get_database)):
     payload = decode_token(refresh_data.refresh_token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(
@@ -290,7 +314,12 @@ async def refresh(refresh_data: RefreshRequest, db = Depends(get_database)):
         del user_copy["hashed_password"]
 
     return {
-        "access_token": create_access_token({"sub": email, "role": user.get("role", "operator")}),
+    access_token = create_access_token({"sub": email, "role": user.get("role", "operator")})
+    
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
+    
+    return {
+        "access_token": access_token,
         "refresh_token": refresh_data.refresh_token,
         "token_type": "bearer",
         "user": user_copy,

@@ -11,11 +11,13 @@ interface TarifsState {
     volume_cbm?: number;
     category_key?: string;
   }) => Promise<CalculationResult>;
+  reset: () => void;
 }
 
 export const useTarifsStore = create<TarifsState>((set, get) => ({
   tarifs: [],
   loading: false,
+  reset: () => set({ tarifs: [], loading: false }),
 
   fetchTarifs: async () => {
     set({ loading: true });

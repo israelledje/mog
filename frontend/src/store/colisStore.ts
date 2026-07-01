@@ -16,6 +16,7 @@ interface ColisState {
   markAllRead: () => Promise<void>;
   addColis: (c: Colis) => void;
   unreadCount: () => number;
+  reset: () => void;
 }
 
 export const useColisStore = create<ColisState>((set, get) => ({
@@ -24,6 +25,7 @@ export const useColisStore = create<ColisState>((set, get) => ({
   notifications: [],
   kpi: { pending: 0, warehouse: 0, transit: 0, delivered: 0 },
   loading: false,
+  reset: () => set({ colis: [], groupages: [], notifications: [], kpi: { pending: 0, warehouse: 0, transit: 0, delivered: 0 }, loading: false }),
   fetchAll: async () => {
     set({ loading: true });
     try {

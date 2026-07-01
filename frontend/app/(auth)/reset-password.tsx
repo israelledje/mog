@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import { ChevronLeft, Lock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -10,10 +11,26 @@ import { authApi } from '../../src/api/auth';
 import { formatErr } from '../../src/api/client';
 import { colors, radii, shadow, spacing } from '../../src/constants/theme';
 
+const paramSchema = z.object({
+  email: z.string().email(),
+  code: z.string().min(1),
+});
+
 export default function ResetPassword() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { email, code } = useLocalSearchParams<{ email: string; code: string }>();
+  const rawParams = useLocalSearchParams();
+  const parsed = paramSchema.safeParse(rawParams);
+  
+  if (!parsed.success) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.error}>Lien invalide ou expiré.</Text>
+      </SafeAreaView>
+    );
+  }
+  
+  const { email, code } = parsed.data;
   const [pwd, setPwd] = useState('');
   const [pwd2, setPwd2] = useState('');
   const [loading, setLoading] = useState(false);

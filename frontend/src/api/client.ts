@@ -17,7 +17,7 @@ if (__DEV__ && !BACKEND_URL) {
   );
 }
 
-export const BASE = BACKEND_URL || 'http://216.126.224.57';
+export const BASE = BACKEND_URL || 'https://mog.dis-network.net';
 
 export const TOKEN_KEY = 'auth_access_token';
 export const REFRESH_KEY = 'auth_refresh_token';
@@ -102,16 +102,33 @@ export const saveTokens = async (access: string, refresh: string) => {
   await storage.setItem(REFRESH_KEY, refresh);
 };
 
+import { useAuthStore } from '../store/authStore';
+import { useColisStore } from '../store/colisStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { useSyncStore } from '../store/syncStore';
+import { useTarifsStore } from '../store/tarifsStore';
+
 /**
  * Supprime les tokens du stockage local (ex: lors d'une déconnexion).
  */
 export const clearTokens = async () => {
   await storage.deleteItem(TOKEN_KEY);
   await storage.deleteItem(REFRESH_KEY);
+
+  // Purge complète de l'état en mémoire
+  useAuthStore.getState().reset?.();
+  useColisStore.getState().reset?.();
+  useSettingsStore.getState().reset?.();
+  useSyncStore.getState().reset?.();
+  useTarifsStore.getState().reset?.();
 };
 
 export const getAccessToken = async () => {
   return await storage.getItem(TOKEN_KEY);
+};
+
+export const getRefreshToken = async () => {
+  return await storage.getItem(REFRESH_KEY);
 };
 
 /**

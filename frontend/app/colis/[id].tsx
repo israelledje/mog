@@ -4,6 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, Copy, Plane, Ship, FileText, Receipt, MessageCircle, Box, Container, Scale, Ruler, Tag, Store, Globe, DollarSign, ShieldCheck } from 'lucide-react-native';
+import { z } from 'zod';
+
+const paramSchema = z.object({
+  id: z.string().min(1),
+});
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as Print from 'expo-print';
@@ -28,7 +33,18 @@ export default function ColisDetailScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const settings = useSettingsStore((s) => s.settings);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const rawParams = useLocalSearchParams();
+  const parsed = paramSchema.safeParse(rawParams);
+  
+  if (!parsed.success) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.danger }}>Lien invalide.</Text>
+      </SafeAreaView>
+    );
+  }
+  
+  const { id } = parsed.data;
   const [colis, setColis] = useState<Colis | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);

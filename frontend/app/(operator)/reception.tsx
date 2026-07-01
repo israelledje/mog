@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Image, ActivityIndicator, FlatList } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -18,6 +18,7 @@ export default function ReceptionScreen() {
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
   const [scanned, setScanned] = useState(false);
+  const isScanningRef = useRef(false);
   const [permission, requestPermission] = useCameraPermissions();
 
   // Search & List
@@ -87,8 +88,14 @@ export default function ReceptionScreen() {
     setStep('form');
   };
 
+  const resetScan = () => {
+    setScanned(false);
+    isScanningRef.current = false;
+  };
+
   const onScan = async ({ data }: { data: string }) => {
-    if (scanned || loading) return;
+    if (isScanningRef.current || scanned || loading) return;
+    isScanningRef.current = true;
     setScanned(true);
     setLoading(true);
     try {
@@ -100,17 +107,17 @@ export default function ReceptionScreen() {
       } else {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Colis inconnu", `Le tracking ${data} n'est pas pré-alerté.`, [
-          { text: "Retour", style: "cancel", onPress: () => { setStep('search'); setScanned(false); } },
+          { text: "Retour", style: "cancel", onPress: () => { setStep('search'); resetScan(); } },
           { text: "Créer maintenant", onPress: () => {
             setTracking(data);
             setStep('create');
-            setScanned(false);
+            resetScan();
           }}
         ]);
       }
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Erreur', 'Scan échoué', [{ text: 'Réessayer', onPress: () => setScanned(false) }]);
+      Alert.alert('Erreur', 'Scan échoué', [{ text: 'Réessayer', onPress: resetScan }]);
     } finally {
       setLoading(false);
     }
@@ -258,13 +265,17 @@ export default function ReceptionScreen() {
       )}
 
       {step === 'scan' && (
-        <View style={{ flex: 1 }}>
-          <CameraView style={StyleSheet.absoluteFillObject} onBarcodeScanned={scanned ? undefined : onScan} />
-          <View style={styles.overlay}>
-             <TouchableOpacity style={styles.closeOverlay} onPress={() => { setStep('search'); setScanned(false); }}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <CameraView 
+            style={StyleSheet.absoluteFillObject} 
+            facing="back"
+            onBarcodeScanned={scanned ? undefined : onScan} 
+          />
+          <View style={[styles.overlay, { zIndex: 10 }]}>
+             <TouchableOpacity style={styles.closeOverlay} onPress={() => { setStep('search'); resetScan(); }}>
                <X size={30} color="#fff" />
              </TouchableOpacity>
-            <View style={styles.scanBox} />
+            <View style={[styles.scanBox, { backgroundColor: 'transparent' }]} />
             <Text style={styles.scanHint}>Alignez le code-barres ou QR code</Text>
           </View>
         </View>

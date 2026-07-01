@@ -2,8 +2,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
 import { Alert, Platform } from 'react-native';
 
-const KEY_EMAIL = 'user_email';
-const KEY_PASS = 'user_password';
+const KEY_BIO_REFRESH = 'user_bio_refresh';
 const KEY_BIO_ENABLED = 'biometrics_enabled';
 
 const isWeb = Platform.OS === 'web';
@@ -20,18 +19,16 @@ export const biometricService = {
     }
   },
 
-  async setEnabled(enabled: boolean, email?: string, password?: string) {
+  async setEnabled(enabled: boolean, refreshToken?: string) {
     if (isWeb) return;
     try {
       if (enabled) {
-        if (!email || !password) throw new Error("Credentials missing");
-        await SecureStore.setItemAsync(KEY_EMAIL, email);
-        await SecureStore.setItemAsync(KEY_PASS, password);
+        if (!refreshToken) throw new Error("Refresh token missing");
+        await SecureStore.setItemAsync(KEY_BIO_REFRESH, refreshToken);
         await SecureStore.setItemAsync(KEY_BIO_ENABLED, 'true');
       } else {
-        await SecureStore.deleteItemAsync(KEY_EMAIL);
-        await SecureStore.deleteItemAsync(KEY_PASS);
-        await SecureStore.deleteItemAsync(KEY_BIO_ENABLED, 'false');
+        await SecureStore.deleteItemAsync(KEY_BIO_REFRESH);
+        await SecureStore.deleteItemAsync(KEY_BIO_ENABLED);
       }
     } catch (e) {
       console.warn("Biometrics setEnabled error", e);
@@ -53,14 +50,13 @@ export const biometricService = {
     try {
       const results = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Authentification requise',
-        fallbackLabel: 'Utiliser le mot de passe',
+        fallbackLabel: 'Annuler',
         disableDeviceFallback: false,
       });
 
       if (results.success) {
-        const email = await SecureStore.getItemAsync(KEY_EMAIL);
-        const password = await SecureStore.getItemAsync(KEY_PASS);
-        return { email, password };
+        const refreshToken = await SecureStore.getItemAsync(KEY_BIO_REFRESH);
+        return refreshToken;
       }
       return null;
     } catch {

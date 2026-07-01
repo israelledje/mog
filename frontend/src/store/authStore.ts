@@ -18,6 +18,7 @@ interface AuthState {
   setUser: (u: User) => void;
   updateProfile: (p: Partial<User>) => Promise<User>;
   uploadAvatar: (imageUri: string) => Promise<User>;
+  reset: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -25,6 +26,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   lastPassword: null,
   ready: false,
   loading: false,
+  reset: () => set({ user: null, lastPassword: null, ready: false, loading: false }),
   bootstrap: async () => {
     try {
       const tk = await getAccessToken();

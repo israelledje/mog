@@ -11,13 +11,17 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "http://216.126.224.57"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net"
       },
       "android": {
         "buildType": "apk"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net"
+      }
+    }
   },
   "submit": {
     "production": {}

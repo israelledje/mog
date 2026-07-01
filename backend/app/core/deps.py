@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Query
+from fastapi import Depends, HTTPException, status, Query, Request
 from typing import Optional
 
 from fastapi.security import OAuth2PasswordBearer
@@ -8,11 +8,12 @@ from app.core.database import get_database
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme), 
     token_query: Optional[str] = Query(None, alias="token"),
     db = Depends(get_database)
 ):
-    actual_token = token or token_query
+    actual_token = token or token_query or request.cookies.get("access_token")
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

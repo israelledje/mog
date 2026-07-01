@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -19,6 +19,7 @@ export default function OperatorLoginScreen() {
   
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const isScanningRef = useRef(false);
   const [step, setStep] = useState<'scan' | 'manual' | 'otp'>('scan');
   
   const [email, setEmail] = useState('');
@@ -29,8 +30,14 @@ export default function OperatorLoginScreen() {
     if (!permission) requestPermission();
   }, [permission]);
 
+  const resetScan = () => {
+    setScanned(false);
+    isScanningRef.current = false;
+  };
+
   const onBarcodeScanned = async ({ data }: { data: string }) => {
-    if (scanned || step !== 'scan') return;
+    if (isScanningRef.current || step !== 'scan') return;
+    isScanningRef.current = true;
     setScanned(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     
@@ -42,7 +49,7 @@ export default function OperatorLoginScreen() {
     } catch (e: any) {
       Alert.alert('Erreur', 'Badge invalide ou non reconnu.', [{
         text: 'Réessayer',
-        onPress: () => setScanned(false)
+        onPress: resetScan
       }]);
     }
   };
@@ -75,7 +82,7 @@ export default function OperatorLoginScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, styles.centerContent]}>
         <Text style={styles.message}>Nous avons besoin de la caméra pour scanner votre badge.</Text>
         <TouchableOpacity style={styles.btn} onPress={requestPermission}>
           <Text style={styles.btnText}>Autoriser la caméra</Text>
@@ -86,7 +93,7 @@ export default function OperatorLoginScreen() {
 
   if (step === 'otp') {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, styles.centerContent]}>
         <View style={styles.otpCard}>
           <View style={styles.otpIcon}>
             <ShieldCheck size={40} color={colors.primary} />
@@ -112,7 +119,7 @@ export default function OperatorLoginScreen() {
             <Text style={styles.submitBtnText}>{loading ? 'Vérification...' : 'Confirmer'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); setScanned(false); }}>
+          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); resetScan(); }}>
             <Text style={styles.resendText}>Annuler et recommencer</Text>
           </TouchableOpacity>
         </View>
@@ -122,7 +129,7 @@ export default function OperatorLoginScreen() {
 
   if (step === 'manual') {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, styles.centerContent]}>
         <View style={styles.otpCard}>
           <View style={styles.otpIcon}>
             <KeyRound size={40} color={colors.primary} />
@@ -162,7 +169,7 @@ export default function OperatorLoginScreen() {
             <Text style={styles.submitBtnText}>{loading ? 'Chargement...' : 'Suivant (OTP)'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); setScanned(false); }}>
+          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); resetScan(); }}>
             <Text style={styles.resendText}>← Retour au Scan Badge</Text>
           </TouchableOpacity>
         </View>
@@ -174,13 +181,14 @@ export default function OperatorLoginScreen() {
     <View style={styles.container}>
       <CameraView
         style={StyleSheet.absoluteFillObject}
+        facing="back"
         onBarcodeScanned={scanned ? undefined : onBarcodeScanned}
         barcodeScannerSettings={{
           barcodeTypes: ['qr'],
         }}
       />
 
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { zIndex: 10 }]}>
         <TouchableOpacity style={styles.close} onPress={() => router.back()}>
           <X size={28} color="#fff" />
         </TouchableOpacity>
@@ -203,7 +211,7 @@ export default function OperatorLoginScreen() {
               <QrCode size={32} color="#fff" strokeWidth={1.5} />
               <Text style={styles.hint}>Scannez le code QR de votre badge opérateur</Text>
               
-              <TouchableOpacity style={styles.manualBtn} onPress={() => setStep('manual')}>
+              <TouchableOpacity style={styles.manualBtn} onPress={() => { setStep('manual'); resetScan(); }}>
                 <Text style={styles.manualBtnText}>Je n'ai pas mon badge (Saisie manuelle)</Text>
               </TouchableOpacity>
             </>
@@ -215,13 +223,14 @@ export default function OperatorLoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#000' },
+  centerContent: { justifyContent: 'center', alignItems: 'center' },
   message: { color: '#fff', textAlign: 'center', marginBottom: spacing.lg, paddingHorizontal: spacing.xl },
   btn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: radii.button },
   btnText: { color: '#fff', fontWeight: '700' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   close: { position: 'absolute', top: 60, right: 20, padding: 8 },
-  scanArea: { width: 250, height: 250, position: 'relative' },
+  scanArea: { width: 250, height: 250, position: 'relative', backgroundColor: 'transparent' },
   cornerTopLeft: { position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderTopWidth: 4, borderLeftWidth: 4, borderColor: colors.accent },
   cornerTopRight: { position: 'absolute', top: 0, right: 0, width: 40, height: 40, borderTopWidth: 4, borderRightWidth: 4, borderColor: colors.accent },
   cornerBottomLeft: { position: 'absolute', bottom: 0, left: 0, width: 40, height: 40, borderBottomWidth: 4, borderLeftWidth: 4, borderColor: colors.accent },

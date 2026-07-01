@@ -11,6 +11,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { formatErr } from '../../src/api/client';
 import { biometricService } from '../../src/api/biometrics';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
+import { saveTokens } from '../../src/api/client';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -35,14 +36,20 @@ export default function LoginScreen() {
 
   const handleBiometric = async () => {
     try {
-      const creds = await biometricService.authenticate();
-      if (creds && creds.email && creds.password) {
-        setEmail(creds.email);
-        setPassword(creds.password);
+      const refreshToken = await biometricService.authenticate();
+      if (refreshToken) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        await login(creds.email, creds.password);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(tabs)');
+        // On sauvegarde le refresh token et un access token vide
+        // L'intercepteur Axios tentera de rafraîchir l'access_token automatiquement
+        await saveTokens('', refreshToken);
+        await useAuthStore.getState().bootstrap();
+        
+        if (useAuthStore.getState().user) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.replace('/(tabs)');
+        } else {
+          Toast.show({ type: 'error', text1: 'Session biométrique expirée, veuillez vous reconnecter.' });
+        }
       }
     } catch (e) {
       console.error(e);

@@ -3,16 +3,32 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import { ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { authApi } from '../../src/api/auth';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
+const paramSchema = z.object({
+  email: z.string().email(),
+});
+
 export default function VerifyOtp() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { email } = useLocalSearchParams<{ email: string }>();
+  const rawParams = useLocalSearchParams();
+  const parsed = paramSchema.safeParse(rawParams);
+  
+  if (!parsed.success) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.error}>Lien ou paramètres invalides.</Text>
+      </SafeAreaView>
+    );
+  }
+  
+  const { email } = parsed.data;
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const [seconds, setSeconds] = useState(60);
   const [error, setError] = useState<string | null>(null);

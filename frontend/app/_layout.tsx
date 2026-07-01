@@ -2,8 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ActivityIndicator, View, StatusBar, AppState, AppStateStatus } from 'react-native';
+import { ActivityIndicator, View, StatusBar, AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import Toast from 'react-native-toast-message';
+import JailMonkey from 'jail-monkey';
+import * as ScreenCapture from 'expo-screen-capture';
 import { initI18n } from '../src/i18n';
 import { useAuthStore } from '../src/store/authStore';
 import { useColisStore } from '../src/store/colisStore';
@@ -20,6 +22,22 @@ export default function RootLayout() {
 
   useEffect(() => {
     (async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          await ScreenCapture.preventScreenCaptureAsync();
+        } catch (e) {
+          console.warn('ScreenCapture not supported or failed', e);
+        }
+      }
+
+      if (JailMonkey.isJailBroken()) {
+        Alert.alert(
+          "Sécurité compromise",
+          "Votre appareil est rooté ou jailbreaké. L'application a été bloquée pour protéger vos données."
+        );
+        return; // Stoppe le chargement de l'app
+      }
+
       await initI18n();
       await Promise.all([
         bootstrap(),

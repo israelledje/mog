@@ -17,12 +17,14 @@ interface SettingsState {
   loading: boolean;
   error: string | null;
   fetchSettings: () => Promise<void>;
+  reset: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   settings: null,
   loading: false,
   error: null,
+  reset: () => set({ settings: null, loading: false, error: null }),
   fetchSettings: async () => {
     set({ loading: true, error: null });
     try {
