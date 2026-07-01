@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
+import { useTranslation } from 'react-i18next';
 import { Scan, WifiOff } from 'lucide-react-native';
 import { darkColors as colors, shadow, radii, spacing } from '../../src/constants/theme';
 
 export default function OperatorLayout() {
   const [isConnected, setIsConnected] = useState(true);
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -21,7 +23,7 @@ export default function OperatorLayout() {
       {!isConnected && (
         <SafeAreaView style={styles.offlineBanner} edges={['top']}>
           <WifiOff size={16} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.offlineText}>Mode Hors-Ligne - Synchronisation en attente</Text>
+          <Text style={styles.offlineText}>{t('operator.offline_banner')}</Text>
         </SafeAreaView>
       )}
       
@@ -33,6 +35,7 @@ export default function OperatorLayout() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="reception" />
+        <Stack.Screen name="groupage" />
         <Stack.Screen name="cloture" />
       </Stack>
 

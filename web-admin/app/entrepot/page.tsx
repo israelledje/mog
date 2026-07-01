@@ -242,7 +242,7 @@ export default function EntrepotPage() {
                 const dwell = dwellDays(pkg);
 
                 return (
-                  <div key={pkg.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr] px-6 py-4 items-center gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div key={pkg.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr] px-6 py-4 items-center gap-4 hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => window.location.href = `/colis/${pkg.id}`}>
                     <div>
                       <p className="text-sm font-black text-slate-900">{pkg.tracking_number}</p>
                       <p className="text-[10px] text-slate-400 font-bold truncate max-w-[140px]">{pkg.description}</p>

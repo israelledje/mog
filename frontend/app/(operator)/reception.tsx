@@ -8,6 +8,7 @@ import { ChevronLeft, Scan, Camera, CheckCircle2, Box, Scale, Maximize, Save, Tr
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { colisApi } from '../../src/api/colis';
+import { useAuthStore } from '../../src/store/authStore';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
 
 type Step = 'search' | 'scan' | 'form' | 'photos' | 'create' | 'success';
@@ -15,6 +16,7 @@ type Step = 'search' | 'scan' | 'form' | 'photos' | 'create' | 'success';
 export default function ReceptionScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { user } = useAuthStore();
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -184,7 +186,8 @@ export default function ReceptionScreen() {
         weight_real: Number(weight),
         dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
         nature,
-        status: statusVal
+        status: statusVal,
+        entrepot_id: user?.active_entrepot_id || undefined,
       });
       setStep('success');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -202,7 +205,7 @@ export default function ReceptionScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Réception Colis</Text>
+        <Text style={styles.headerTitle}>{t('operator.reception_title')}</Text>
         <TouchableOpacity onPress={() => setStep('scan')} style={styles.scanBtn}>
           <Scan size={22} color={colors.primary} />
         </TouchableOpacity>
@@ -215,7 +218,8 @@ export default function ReceptionScreen() {
               <Search size={18} color={colors.textSecondary} />
               <TextInput 
                 style={styles.searchInput} 
-                placeholder="N° Tracking ou Shipping Mark" 
+                placeholder="N° Tracking ou Shipping Mark"
+                placeholderTextColor={colors.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={onSearch}
@@ -246,9 +250,12 @@ export default function ReceptionScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.packageTracking}>{item.tracking_number}</Text>
-                  <Text style={styles.packageOwner}>{item.owner_id}</Text>
+                  {item.description ? (
+                    <Text style={styles.packageDescription} numberOfLines={1}>{item.description}</Text>
+                  ) : null}
+                  <Text style={styles.packageOwner} numberOfLines={1}>{item.owner_id}</Text>
                 </View>
-                <ChevronLeft size={20} color={colors.border} style={{ transform: [{ rotate: '180deg' }] }} />
+                <ChevronLeft size={20} color={colors.textSecondary} style={{ transform: [{ rotate: '180deg' }] }} />
               </TouchableOpacity>
             )}
             ListEmptyComponent={
@@ -284,14 +291,15 @@ export default function ReceptionScreen() {
       {step === 'create' && (
         <ScrollView style={styles.scroll}>
           <Text style={styles.label}>N° Tracking (optionnel)</Text>
-          <TextInput style={styles.input} value={tracking} onChangeText={setTracking} placeholder="Shipping Mark fournisseur" />
+          <TextInput style={styles.input} value={tracking} onChangeText={setTracking} placeholder="Shipping Mark fournisseur" placeholderTextColor={colors.textSecondary} />
 
           <Text style={styles.label}>Client Destinataire</Text>
           <View style={styles.searchField}>
             <Search size={18} color={colors.textSecondary} />
             <TextInput 
               style={styles.searchInput} 
-              placeholder="Rechercher un client (Nom ou Email)" 
+              placeholder="Rechercher un client (Nom ou Email)"
+              placeholderTextColor={colors.textSecondary}
               value={userQuery}
               onChangeText={searchClients}
             />
@@ -316,7 +324,7 @@ export default function ReceptionScreen() {
           )}
 
           <Text style={styles.label}>Nature des articles</Text>
-          <TextInput style={styles.input} value={nature} onChangeText={setNature} placeholder="Vêtements, Pièces auto..." />
+          <TextInput style={styles.input} value={nature} onChangeText={setNature} placeholder="Vêtements, Pièces auto..." placeholderTextColor={colors.textSecondary} />
 
           <TouchableOpacity style={styles.primaryBtn} onPress={handleCreate} disabled={loading}>
             <Text style={styles.primaryBtnText}>Créer et Continuer</Text>
@@ -332,25 +340,25 @@ export default function ReceptionScreen() {
           </View>
 
           <Text style={styles.label}>Audit Nature Marchandise</Text>
-          <TextInput style={styles.input} value={nature} onChangeText={setNature} />
+          <TextInput style={styles.input} value={nature} onChangeText={setNature} placeholderTextColor={colors.textSecondary} />
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Poids Réel (kg)</Text>
               <View style={styles.inputIcon}>
                 <Scale size={18} color={colors.textSecondary} />
-                <TextInput style={styles.flexInput} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="0.0" />
+                <TextInput style={styles.flexInput} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="0.0" placeholderTextColor={colors.textSecondary} />
               </View>
             </View>
           </View>
 
           <Text style={styles.label}>Dimensions (L x l x H cm)</Text>
           <View style={styles.row}>
-            <TextInput style={styles.dimInput} value={dims.l} onChangeText={l => setDims({...dims, l})} placeholder="L" keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.l} onChangeText={l => setDims({...dims, l})} placeholder="L" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
             <Text style={styles.x}>×</Text>
-            <TextInput style={styles.dimInput} value={dims.w} onChangeText={w => setDims({...dims, w})} placeholder="l" keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.w} onChangeText={w => setDims({...dims, w})} placeholder="l" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
             <Text style={styles.x}>×</Text>
-            <TextInput style={styles.dimInput} value={dims.h} onChangeText={h => setDims({...dims, h})} placeholder="H" keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.h} onChangeText={h => setDims({...dims, h})} placeholder="H" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
           </View>
 
           <View style={styles.cbmCard}>
@@ -423,46 +431,47 @@ const X = ({ size, color }: { size: number, color: string }) => <PlusCircle size
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: '#fff', ...shadow.card },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border, ...shadow.card },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   back: { padding: 4 },
   scanBtn: { padding: 4 },
-  searchBarWrap: { flexDirection: 'row', padding: spacing.lg, gap: 10, backgroundColor: '#fff' },
-  searchField: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.background, borderRadius: radii.input, paddingHorizontal: 12, height: 48 },
+  searchBarWrap: { flexDirection: 'row', padding: spacing.lg, gap: 10, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchField: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.background, borderRadius: radii.input, paddingHorizontal: 12, height: 48, borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, fontSize: 14, color: colors.text },
   searchBtn: { backgroundColor: colors.primary, paddingHorizontal: 20, borderRadius: radii.button, justifyContent: 'center' },
   searchBtnText: { color: '#fff', fontWeight: '800' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.sm },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: colors.text },
-  packageItem: { flexDirection: 'row', alignItems: 'center', gap: 15, backgroundColor: '#fff', padding: 15, borderRadius: radii.card, marginBottom: 10, ...shadow.card },
-  packageIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.primary}10`, alignItems: 'center', justifyContent: 'center' },
+  packageItem: { flexDirection: 'row', alignItems: 'center', gap: 15, backgroundColor: colors.card, padding: 15, borderRadius: radii.card, marginBottom: 10, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  packageIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.primary}25`, alignItems: 'center', justifyContent: 'center' },
   packageTracking: { fontSize: 15, fontWeight: '800', color: colors.text, fontFamily: fonts.mono },
-  packageOwner: { fontSize: 12, color: colors.textSecondary },
+  packageDescription: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 2 },
+  packageOwner: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   empty: { alignItems: 'center', marginTop: 100 },
   emptyText: { color: colors.textSecondary, marginBottom: 20 },
-  createGhostBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${colors.primary}10`, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20 },
+  createGhostBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${colors.primary}25`, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20 },
   createGhostText: { color: colors.primary, fontWeight: '700' },
   scroll: { padding: spacing.lg },
   label: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 8, marginTop: spacing.lg },
-  input: { backgroundColor: '#fff', borderRadius: radii.input, padding: 14, fontSize: 16, ...shadow.card },
-  resultsList: { backgroundColor: '#fff', borderRadius: radii.card, marginTop: 4, ...shadow.card, padding: 8 },
-  resultItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
+  input: { backgroundColor: colors.card, borderRadius: radii.input, padding: 14, fontSize: 16, color: colors.text, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  resultsList: { backgroundColor: colors.card, borderRadius: radii.card, marginTop: 4, borderWidth: 1, borderColor: colors.border, ...shadow.card, padding: 8 },
+  resultItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   resultText: { fontSize: 13, color: colors.text },
-  selectedUser: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: `${colors.success}10`, padding: 12, borderRadius: radii.card, marginTop: 10, borderWidth: 1, borderColor: colors.success },
+  selectedUser: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: `${colors.success}20`, padding: 12, borderRadius: radii.card, marginTop: 10, borderWidth: 1, borderColor: colors.success },
   selectedUserText: { color: colors.success, fontWeight: '700' },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
   closeOverlay: { position: 'absolute', top: 60, right: 30 },
   scanBox: { width: 250, height: 250, borderWidth: 2, borderColor: colors.accent, borderRadius: 20 },
   scanHint: { color: '#fff', marginTop: 20, fontWeight: '700', textAlign: 'center' },
-  infoCard: { backgroundColor: '#fff', padding: spacing.lg, borderRadius: radii.card, ...shadow.card, marginBottom: spacing.md },
+  infoCard: { backgroundColor: colors.card, padding: spacing.lg, borderRadius: radii.card, borderWidth: 1, borderColor: colors.border, ...shadow.card, marginBottom: spacing.md },
   infoLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' },
   infoValue: { fontSize: 18, fontWeight: '800', color: colors.primary, marginTop: 4, fontFamily: fonts.mono },
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
-  inputIcon: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: radii.input, paddingHorizontal: 14, height: 52, ...shadow.card },
+  inputIcon: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, borderRadius: radii.input, paddingHorizontal: 14, height: 52, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   flexInput: { flex: 1, fontSize: 16, color: colors.text },
-  dimInput: { flex: 1, backgroundColor: '#fff', borderRadius: radii.input, height: 52, textAlign: 'center', fontSize: 16, fontWeight: '700', ...shadow.card },
+  dimInput: { flex: 1, backgroundColor: colors.card, borderRadius: radii.input, height: 52, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   x: { fontSize: 20, fontWeight: '300', color: colors.textSecondary },
-  cbmCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: `${colors.primary}10`, padding: spacing.lg, borderRadius: radii.card, marginTop: spacing.xl },
+  cbmCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: `${colors.primary}20`, padding: spacing.lg, borderRadius: radii.card, marginTop: spacing.xl, borderWidth: 1, borderColor: `${colors.primary}40` },
   cbmLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   cbmValue: { fontSize: 24, fontWeight: '900', color: colors.primary },
   primaryBtn: { backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 16, alignItems: 'center', marginTop: 30, flexDirection: 'row', justifyContent: 'center', gap: 10 },
@@ -470,7 +479,7 @@ const styles = StyleSheet.create({
   disabled: { backgroundColor: colors.border },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  addPhoto: { width: '47%', height: 140, borderRadius: radii.card, backgroundColor: colors.background, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  addPhoto: { width: '47%', height: 140, borderRadius: radii.card, backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   addPhotoText: { color: colors.primary, fontWeight: '700', marginTop: 8 },
   photoWrap: { width: '47%', height: 140, position: 'relative' },
   photo: { width: '100%', height: '100%', borderRadius: radii.card },

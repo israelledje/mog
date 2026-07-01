@@ -38,6 +38,9 @@ export default function LogisticsPage() {
   const [editContainer, setEditContainer] = useState<any>(null);
   const [newForm, setNewForm] = useState({ ...BLANK_CONTAINER });
   const [submitting, setSubmitting] = useState(false);
+  const [closeOtp, setCloseOtp] = useState<{ id: string; number: string } | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
 
   const fetchContainers = useCallback(async () => {
     setLoading(true);
@@ -65,12 +68,52 @@ export default function LogisticsPage() {
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
+    if (status === 'closed') {
+      const c = containers.find(x => x.id === id);
+      setCloseOtp({ id, number: c?.container_number || id });
+      setOtpCode('');
+      setOtpSent(false);
+      return;
+    }
     await fetch(`${API}/groupages/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
       body: JSON.stringify({ status }),
     });
     fetchContainers();
+  };
+
+  const sendCloseOtp = async () => {
+    if (!closeOtp) return;
+    setSubmitting(true);
+    try {
+      await fetch(`${API}/groupages/${closeOtp.id}/close/request-otp`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      setOtpSent(true);
+    } catch {}
+    setSubmitting(false);
+  };
+
+  const confirmClose = async () => {
+    if (!closeOtp || otpCode.length < 6) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/groupages/${closeOtp.id}/close/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ otp_code: otpCode }),
+      });
+      if (res.ok) {
+        setCloseOtp(null);
+        fetchContainers();
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'OTP incorrect');
+      }
+    } catch {}
+    setSubmitting(false);
   };
 
   const handleUpdateInfo = async () => {
@@ -369,6 +412,34 @@ export default function LogisticsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {closeOtp && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h2 className="text-xl font-black text-slate-900 mb-2">Clôture PL — OTP requis</h2>
+            <p className="text-sm text-slate-500 mb-6">Groupage <strong>{closeOtp.number}</strong>. Un code sera envoyé sur WhatsApp.</p>
+            {!otpSent ? (
+              <button onClick={sendCloseOtp} disabled={submitting} className="w-full py-3 bg-blue-600 text-white rounded-xl font-black">
+                {submitting ? 'Envoi…' : 'Envoyer le code OTP'}
+              </button>
+            ) : (
+              <>
+                <input
+                  className="w-full border border-slate-200 rounded-xl p-4 text-center text-2xl font-black tracking-widest mb-4"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                />
+                <button onClick={confirmClose} disabled={submitting || otpCode.length < 6} className="w-full py-3 bg-violet-600 text-white rounded-xl font-black disabled:opacity-50">
+                  Confirmer la clôture
+                </button>
+              </>
+            )}
+            <button onClick={() => setCloseOtp(null)} className="w-full mt-3 py-2 text-slate-400 font-bold">Annuler</button>
           </div>
         </div>
       )}

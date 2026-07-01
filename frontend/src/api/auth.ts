@@ -45,6 +45,10 @@ export const authApi = {
     const { data } = await api.put('/auth/me', payload);
     return data as User;
   },
+  async setActiveEntrepot(entrepotId: string) {
+    const { data } = await api.put('/auth/me/active-entrepot', { entrepot_id: entrepotId });
+    return data as User;
+  },
   async uploadAvatar(imageUri: string) {
     const formData = new FormData();
     const filename = imageUri.split('/').pop() || 'avatar.jpg';

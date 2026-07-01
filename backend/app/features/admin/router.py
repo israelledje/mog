@@ -116,6 +116,9 @@ async def create_user_as_admin(user_in: UserCreate, db = Depends(get_database)):
     user_dict["hashed_password"] = get_password_hash(user_in.password)
     role = user_dict.get("role", "client")
     user_dict["client_code"] = await generate_client_code(db, role)
+    if role in ("operator", "admin") and not user_dict.get("badge_secret"):
+        import secrets
+        user_dict["badge_secret"] = secrets.token_urlsafe(16)
     del user_dict["password"]
     
     # Insérer dans MongoDB

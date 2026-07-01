@@ -6,7 +6,8 @@ from app.core.notification_service import NotificationService
 from .schemas import ContainerCreate, ContainerInDB, ContainerUpdate
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from pydantic import BaseModel
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import random
 import uuid
 
 router = APIRouter(prefix="/groupages", tags=["Groupages"])
@@ -206,6 +207,13 @@ async def update_container_status(
     current_user: dict = Depends(check_role(["admin"])),
     db = Depends(get_database)
 ):
+    # Block direct close without OTP — use /close/confirm instead
+    if status_update.status == "closed":
+        raise HTTPException(
+            status_code=400,
+            detail="Utilisez POST /groupages/{id}/close/request-otp puis /close/confirm pour clôturer",
+        )
+
     # 1. Vérifier le conteneur
     container = await db.containers.find_one({"_id": container_id})
     if not container:
@@ -293,6 +301,134 @@ async def update_container_status(
                     await NotificationService.send_push(user["push_token"], "Packing List Disponible", msg)
     
     return {"message": f"Conteneur et {len(container['packages_ids'])} colis mis à jour avec succès"}
+
+
+class CloseOtpConfirm(BaseModel):
+    otp_code: str
+
+
+async def _do_close_container(container_id: str, current_user: dict, db):
+    """Shared logic for closing a container and notifying clients."""
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+
+    new_status = "closed"
+    await db.containers.update_one(
+        {"_id": container_id},
+        {"$set": {"status": new_status, "updated_at": datetime.now()}},
+    )
+
+    label = "Groupage terminé, prêt pour expédition"
+    package_update = {"status": new_status, "updated_at": datetime.now()}
+
+    await db.packages.update_many(
+        {"_id": {"$in": container.get("packages_ids", [])}},
+        {
+            "$set": package_update,
+            "$push": {
+                "timeline": {
+                    "status": new_status,
+                    "label": label,
+                    "timestamp": datetime.now(),
+                    "location": container.get("origin_city", "Guangzhou"),
+                    "operator": current_user.get("email"),
+                }
+            },
+        },
+    )
+
+    cursor = db.packages.find({"_id": {"$in": container.get("packages_ids", [])}})
+    client_emails = set()
+    async for pkg in cursor:
+        client_emails.add(pkg.get("owner_id"))
+        await NotificationService.notify_status_change(pkg, new_status)
+
+    for email in client_emails:
+        if not email:
+            continue
+        user = await db.users.find_one({"email": email})
+        if user:
+            msg = f"Votre Packing List pour le conteneur {container.get('container_number')} est désormais disponible dans l'application (section Mes Documents)."
+            if user.get("phone"):
+                await NotificationService.send_whatsapp(user["phone"], msg)
+            if user.get("push_token"):
+                await NotificationService.send_push(user["push_token"], "Packing List Disponible", msg)
+
+    return {"message": f"Conteneur clôturé — {len(container.get('packages_ids', []))} colis mis à jour"}
+
+
+@router.post("/{container_id}/close/request-otp")
+async def request_close_otp(
+    container_id: str,
+    current_user: dict = Depends(check_role(["admin"])),
+    db=Depends(get_database),
+):
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+    if container.get("status") != "open":
+        raise HTTPException(status_code=400, detail="Ce conteneur n'est plus ouvert")
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    await db.otp_codes.update_one(
+        {"email": current_user["email"]},
+        {
+            "$set": {
+                "pl_close_otp": otp_code,
+                "pl_close_container_id": container_id,
+                "pl_close_expires_at": expires_at,
+                "pl_close_attempts": 0,
+            }
+        },
+        upsert=True,
+    )
+
+    msg = f"Code de confirmation clôture PL ({container.get('container_number', 'N/A')}) : {otp_code}. Valable 10 minutes."
+    if current_user.get("phone"):
+        await NotificationService.send_whatsapp(current_user["phone"], msg)
+
+    return {"message": "Code OTP envoyé", "channel": "whatsapp" if current_user.get("phone") else "none"}
+
+
+@router.post("/{container_id}/close/confirm")
+async def confirm_close_container(
+    container_id: str,
+    body: CloseOtpConfirm,
+    current_user: dict = Depends(check_role(["admin"])),
+    db=Depends(get_database),
+):
+    otp_record = await db.otp_codes.find_one({"email": current_user["email"]})
+    if not otp_record or otp_record.get("pl_close_container_id") != container_id:
+        raise HTTPException(status_code=400, detail="Aucune demande de clôture en cours")
+
+    attempts = otp_record.get("pl_close_attempts", 0) + 1
+    if attempts > 5:
+        await db.otp_codes.update_one(
+            {"email": current_user["email"]},
+            {"$unset": {"pl_close_otp": "", "pl_close_container_id": "", "pl_close_expires_at": "", "pl_close_attempts": ""}},
+        )
+        raise HTTPException(status_code=429, detail="Trop de tentatives")
+
+    await db.otp_codes.update_one({"email": current_user["email"]}, {"$set": {"pl_close_attempts": attempts}})
+
+    if otp_record.get("pl_close_otp") != body.otp_code:
+        raise HTTPException(status_code=400, detail="Code OTP incorrect")
+
+    expires = otp_record.get("pl_close_expires_at")
+    if expires and datetime.now(timezone.utc) > expires.replace(tzinfo=timezone.utc):
+        raise HTTPException(status_code=400, detail="Code OTP expiré")
+
+    await db.otp_codes.update_one(
+        {"email": current_user["email"]},
+        {"$unset": {"pl_close_otp": "", "pl_close_container_id": "", "pl_close_expires_at": "", "pl_close_attempts": ""}},
+    )
+
+    return await _do_close_container(container_id, current_user, db)
+
+
 @router.patch("/{container_id}")
 async def update_container(
     container_id: str,

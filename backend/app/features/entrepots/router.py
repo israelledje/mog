@@ -100,53 +100,46 @@ async def receive_at_warehouse(
     if not entrepot:
         raise HTTPException(status_code=404, detail="Entrepôt non trouvé")
 
-    now = datetime.now()
-    now_iso = now.isoformat()
-
-    # Build warehouse event
-    warehouse_event = {
-        "entrepot_id": data.entrepot_id,
-        "entrepot_name": entrepot["name"],
-        "city": entrepot["city"],
-        "type": entrepot["type"],   # origin | destination
-        "arrived_at": now_iso,
-        "operator": current_user.get("email", "unknown"),
-        "notes": data.notes,
-    }
-
-    update_fields: dict = {"updated_at": now}
-
-    # If origin warehouse → this is the initial reception
-    if entrepot["type"] == "origin":
-        update_fields["origin_warehouse_entry"] = now_iso
-        update_fields["current_entrepot_id"] = data.entrepot_id
-        update_fields["current_entrepot_name"] = entrepot["name"]
-        update_fields["status"] = "received"
-    else:
-        # Destination warehouse arrival
-        update_fields["dest_warehouse_entry"] = now_iso
-        update_fields["current_entrepot_id"] = data.entrepot_id
-        update_fields["current_entrepot_name"] = entrepot["name"]
-        update_fields["status"] = "arrived"
-
-    await db.packages.update_one(
-        {"_id": package_id},
-        {
-            "$set": update_fields,
-            "$push": {
-                "warehouse_history": warehouse_event,
-                "timeline": {
-                    "status": "received" if entrepot["type"] == "origin" else "arrived",
-                    "label": f"Réceptionné à {entrepot['name']}",
-                    "timestamp": now,
-                    "location": entrepot["city"],
-                    "operator": current_user.get("email"),
-                },
-            },
-        },
+    from app.core.warehouse_service import apply_entrepot_to_package
+    warehouse_event = await apply_entrepot_to_package(
+        db,
+        package_id,
+        data.entrepot_id,
+        current_user.get("email", "unknown"),
+        notes=data.notes,
     )
 
-    return {"message": f"Colis réceptionné à {entrepot['name']}", "event": warehouse_event}
+    return {"message": f"Colis réceptionné à {warehouse_event['entrepot_name']}", "event": warehouse_event}
+
+
+class TransferReceipt(BaseModel):
+    to_entrepot_id: str
+    notes: Optional[str] = None
+
+
+@router.post("/transfer-package/{package_id}")
+async def transfer_package(
+    package_id: str,
+    data: TransferReceipt,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    """Transfer a package to another warehouse (inter-warehouse move)."""
+    from app.core.warehouse_service import apply_entrepot_to_package
+
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    warehouse_event = await apply_entrepot_to_package(
+        db,
+        package_id,
+        data.to_entrepot_id,
+        current_user.get("email", "unknown"),
+        notes=data.notes or "Transfert inter-entrepôt",
+    )
+
+    return {"message": f"Colis transféré vers {warehouse_event['entrepot_name']}", "event": warehouse_event}
 
 
 @router.get("/package/{package_id}/history")

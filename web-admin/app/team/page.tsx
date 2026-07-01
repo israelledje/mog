@@ -20,8 +20,10 @@ export default function TeamPage() {
     phone: '',
     role: 'operator',
     city: 'Douala',
-    gender: 'male'
+    gender: 'male',
+    assigned_entrepot_id: '',
   });
+  const [entrepots, setEntrepots] = useState<any[]>([]);
 
   const fetchUsers = async () => {
     const token = localStorage.getItem('admin_token');
@@ -52,12 +54,19 @@ export default function TeamPage() {
 
   useEffect(() => {
     fetchUsers();
+    const token = localStorage.getItem('admin_token');
+    if (token) {
+      fetch(`${API_BASE_URL}/entrepots/`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then(setEntrepots)
+        .catch(() => {});
+    }
   }, []);
 
   const handleOpenCreate = () => {
     setIsEditing(false);
     setSelectedUserId(null);
-    setFormData({ full_name: '', email: '', password: '', phone: '', role: 'operator', city: 'Douala', gender: 'male' });
+    setFormData({ full_name: '', email: '', password: '', phone: '', role: 'operator', city: 'Douala', gender: 'male', assigned_entrepot_id: '' });
     setError(null);
     setShowModal(true);
   };
@@ -72,7 +81,8 @@ export default function TeamPage() {
       phone: user.phone || '',
       role: user.role || 'operator',
       city: user.city || 'Douala',
-      gender: user.gender || 'male'
+      gender: user.gender || 'male',
+      assigned_entrepot_id: user.assigned_entrepot_id || '',
     });
     setError(null);
     setShowModal(true);
@@ -91,7 +101,8 @@ export default function TeamPage() {
           full_name: formData.full_name,
           phone: formData.phone,
           city: formData.city,
-          email: formData.email
+          email: formData.email,
+          assigned_entrepot_id: formData.assigned_entrepot_id || null,
         };
         // Add password only if provided during edit
         if (formData.password) payload.password = formData.password;
@@ -441,6 +452,22 @@ export default function TeamPage() {
                     </select>
                   </div>
                 </div>
+
+                {(formData.role === 'operator' || formData.role === 'admin') && (
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Entrepôt assigné</label>
+                    <select
+                      className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:border-blue-500 outline-none font-bold text-slate-800 bg-slate-50/50 shadow-sm"
+                      value={formData.assigned_entrepot_id}
+                      onChange={e => setFormData({ ...formData, assigned_entrepot_id: e.target.value })}
+                    >
+                      <option value="">— Aucun / libre —</option>
+                      {entrepots.filter(e => e.type === 'origin').map(e => (
+                        <option key={e.id} value={e.id}>{e.name} ({e.city})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">

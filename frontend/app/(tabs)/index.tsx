@@ -8,10 +8,13 @@ import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import SkeletonCard from '../../src/components/SkeletonCard';
+import StatusBadge from '../../src/components/StatusBadge';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { buildWhatsAppUrl, formatSupportPhoneDisplay, getSupportPhoneDigits } from '../../src/utils/support';
+import HomeTopPanels from '../../src/components/home/HomeTopPanels';
+import HomeBottomPanels from '../../src/components/home/HomeBottomPanels';
 import { colors, fonts, shadow, spacing, radii } from '../../src/constants/theme';
 import type { Colis } from '../../src/types';
 
@@ -47,6 +50,13 @@ export default function HomeScreen() {
     router.push('/colis/nouveau');
   };
 
+  const onWhatsAppPay = () => {
+    const msg = t('home.whatsapp_message');
+    Linking.openURL(buildWhatsAppUrl(supportPhoneDigits, msg)).catch(() => {
+      alert(t('home.whatsapp_install_required'));
+    });
+  };
+
   return (
     <View style={styles.container} testID="home-screen">
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
@@ -69,6 +79,12 @@ export default function HomeScreen() {
               {unread > 0 && <View style={styles.badge} />}
             </TouchableOpacity>
           </View>
+
+          <HomeTopPanels
+            user={user}
+            colis={colis}
+            kpi={kpi}
+          />
 
           {/* MAIN HERO CARD (LIKE PURPLE CARD IN DESIGN) */}
           <TouchableOpacity activeOpacity={0.95} onPress={onShip}>
@@ -172,6 +188,8 @@ export default function HomeScreen() {
             )}
           </View>
 
+          <HomeBottomPanels settings={settings} />
+
           {/* EXCHANGE RATE CARD (VISA STYLE) */}
           <View style={[styles.sectionWrap, { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl }]}>
             
@@ -218,12 +236,7 @@ export default function HomeScreen() {
             <TouchableOpacity 
               style={styles.modernWhatsappBtn}
               activeOpacity={0.8}
-              onPress={() => {
-                const msg = t('home.whatsapp_message');
-                Linking.openURL(buildWhatsAppUrl(supportPhoneDigits, msg)).catch(() => {
-                  alert(t('home.whatsapp_install_required'));
-                });
-              }}
+              onPress={onWhatsAppPay}
             >
               <FontAwesome name="whatsapp" size={24} color="#fff" style={{ marginRight: 10 }} />
               <View style={{ alignItems: 'center' }}>
@@ -255,9 +268,7 @@ function RecentItem({ item, onPress }: { item: Colis; onPress: () => void }) {
         ) : null}
       </View>
       <View style={styles.recentRight}>
-        <Text style={[styles.recentStatus, { color: item.status === 'delivered' ? colors.success : colors.primary }]}>
-          {item.status === 'pending_reception' ? '70%' : '100%'}
-        </Text>
+        <StatusBadge status={item.status} small />
       </View>
     </TouchableOpacity>
   );
@@ -309,8 +320,7 @@ const styles = StyleSheet.create({
   recentTextWrap: { flex: 1, marginLeft: 16 },
   recentTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 4 },
   recentSub: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
-  recentRight: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, borderColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center', borderTopColor: '#E0E0E0' },
-  recentStatus: { fontSize: 12, fontWeight: '800' },
+  recentRight: { alignItems: 'flex-end', justifyContent: 'center', maxWidth: 110 },
 
   empty: { alignItems: 'center', padding: spacing.xl },
   emptyText: { color: colors.textSecondary, marginTop: 12, fontWeight: '500' },

@@ -16,6 +16,7 @@ interface AuthState {
   register: (payload: any) => Promise<User>;
   logout: () => Promise<void>;
   setUser: (u: User) => void;
+  setActiveEntrepot: (entrepotId: string) => Promise<User>;
   updateProfile: (p: Partial<User>) => Promise<User>;
   uploadAvatar: (imageUri: string) => Promise<User>;
   reset: () => void;
@@ -99,6 +100,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: null, lastPassword: null });
   },
   setUser: (u) => set({ user: u }),
+  setActiveEntrepot: async (entrepotId) => {
+    const u = await authApi.setActiveEntrepot(entrepotId);
+    set({ user: u });
+    return u;
+  },
   updateProfile: async (p) => {
     const u = await authApi.updateMe(p);
     set({ user: u });

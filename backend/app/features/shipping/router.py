@@ -290,9 +290,16 @@ async def receive_package(
             "$push": {"timeline": new_timeline_entry}
         }
     )
-    
-    # 🔔 Notifier le client (Simulé)
-    # NotificationService.send_push(package["owner_id"], "Colis reçu à l'entrepôt !")
+
+    if receive_data.entrepot_id:
+        from app.core.warehouse_service import apply_entrepot_to_package
+        await apply_entrepot_to_package(
+            db,
+            package_id,
+            receive_data.entrepot_id,
+            current_user.get("email", "unknown"),
+            notes="Réception opérateur",
+        )
     
     return {"message": "Colis audité avec succès", "status": final_status}
 

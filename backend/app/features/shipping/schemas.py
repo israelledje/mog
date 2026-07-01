@@ -51,6 +51,7 @@ class PackageReceive(BaseModel):
     nature: Optional[str] = None
     warehouse_location: Optional[str] = "Zone A"
     status: Optional[str] = "received" # received, damaged
+    entrepot_id: Optional[str] = None
 
 class PackageInDB(PackageBase):
     id: str

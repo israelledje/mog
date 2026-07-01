@@ -22,7 +22,7 @@ export const colisApi = {
     const { data } = await api.get('/colis/kpi');
     return data as { pending: number; warehouse: number; transit: number; delivered: number };
   },
-  async receive(id: string, payload: { weight_real: number; dimensions: any; nature?: string; warehouse_location?: string; status?: 'received' | 'damaged' }): Promise<void> {
+  async receive(id: string, payload: { weight_real: number; dimensions: any; nature?: string; warehouse_location?: string; status?: 'received' | 'damaged'; entrepot_id?: string }): Promise<void> {
     await api.post(`/colis/${id}/receive`, payload);
   },
   async updateStatus(id: string, status: string, location?: string): Promise<void> {
@@ -71,6 +71,17 @@ export const groupagesApi = {
   },
   async updateStatus(id: string, status: string): Promise<void> {
     await api.patch(`/groupages/${id}/status`, { status });
+  },
+  async requestCloseOtp(id: string): Promise<{ message: string; channel?: string }> {
+    const { data } = await api.post(`/groupages/${id}/close/request-otp`);
+    return data;
+  },
+  async confirmClose(id: string, otpCode: string): Promise<{ message: string }> {
+    const { data } = await api.post(`/groupages/${id}/close/confirm`, { otp_code: otpCode });
+    return data;
+  },
+  async addPackage(containerId: string, packageId: string): Promise<void> {
+    await api.post(`/groupages/${containerId}/add-package/${packageId}`);
   },
   async getManifest(id: string): Promise<string> {
     const { data } = await api.get(`/groupages/${id}/manifest`);

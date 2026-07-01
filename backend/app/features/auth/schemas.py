@@ -8,6 +8,8 @@ class UserBase(BaseModel):
     role: str = "client"
     gender: str = "male"
     badge_secret: Optional[str] = None
+    assigned_entrepot_id: Optional[str] = None
+    active_entrepot_id: Optional[str] = None
     phone: Optional[str] = None
     client_code: Optional[str] = None
     default_delivery_address: Optional[str] = None

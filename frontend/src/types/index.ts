@@ -13,6 +13,10 @@ export interface User {
   gender?: string;
   badge_secret?: string | null;
   client_code?: string | null;
+  assigned_entrepot_id?: string | null;
+  assigned_entrepot_name?: string | null;
+  active_entrepot_id?: string | null;
+  active_entrepot_name?: string | null;
   default_delivery_address?: string | null;
   avatar_url?: string | null;
   preferred_language?: SupportedLang;
@@ -77,6 +81,9 @@ export interface Colis {
   dimensions: Dimensions;
   nature?: string | null;
   warehouse_location?: string | null;
+  current_entrepot_id?: string | null;
+  current_entrepot_name?: string | null;
+  warehouse_history?: Array<Record<string, unknown>>;
   total_price: number;
   include_vat: boolean;
   timeline: TimelineStep[];

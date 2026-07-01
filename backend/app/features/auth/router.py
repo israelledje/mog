@@ -124,6 +124,17 @@ async def get_me(current_user: dict = Depends(get_current_user), db = Depends(ge
     if "hashed_password" in user_copy:
         del user_copy["hashed_password"]
     user_copy["client_code"] = await ensure_client_code(db, current_user)
+
+    for field, name_key in [
+        ("active_entrepot_id", "active_entrepot_name"),
+        ("assigned_entrepot_id", "assigned_entrepot_name"),
+    ]:
+        eid = user_copy.get(field)
+        if eid:
+            ent = await db.entrepots.find_one({"_id": eid})
+            if ent:
+                user_copy[name_key] = ent.get("name")
+
     return user_copy
 
 from pydantic import BaseModel
@@ -137,6 +148,10 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = None
     default_delivery_address: Optional[str] = None
     avatar_url: Optional[str] = None
+    active_entrepot_id: Optional[str] = None
+
+class ActiveEntrepotUpdate(BaseModel):
+    entrepot_id: str
 
 @router.put("/me")
 async def update_me(update_data: UserUpdate, current_user: dict = Depends(get_current_user), db = Depends(get_database)):
@@ -162,6 +177,36 @@ async def update_me(update_data: UserUpdate, current_user: dict = Depends(get_cu
         user_copy["_id"] = str(user_copy["_id"])
     if "hashed_password" in user_copy:
         del user_copy["hashed_password"]
+    return user_copy
+
+@router.put("/me/active-entrepot")
+async def set_active_entrepot(
+    data: ActiveEntrepotUpdate,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_database),
+):
+    if current_user.get("role") not in ["admin", "operator"]:
+        raise HTTPException(status_code=403, detail="Réservé aux opérateurs")
+
+    entrepot = await db.entrepots.find_one({"_id": data.entrepot_id})
+    if not entrepot:
+        raise HTTPException(status_code=404, detail="Entrepôt non trouvé")
+
+    assigned = current_user.get("assigned_entrepot_id")
+    if assigned and assigned != data.entrepot_id and current_user.get("role") == "operator":
+        raise HTTPException(status_code=403, detail="Entrepôt non autorisé pour cet opérateur")
+
+    await db.users.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"active_entrepot_id": data.entrepot_id}},
+    )
+
+    user = await db.users.find_one({"email": current_user["email"]})
+    user_copy = user.copy()
+    if "_id" in user_copy:
+        user_copy["_id"] = str(user_copy["_id"])
+    user_copy.pop("hashed_password", None)
+    user_copy["active_entrepot_name"] = entrepot.get("name")
     return user_copy
 
 @router.post("/phone/send-otp")
@@ -386,6 +431,14 @@ async def qr_login_step2(request: QRVerifyRequest, response: Response, db = Depe
         raise HTTPException(status_code=400, detail="Code OTP expiré")
     
     user = await db.users.find_one({"email": request.email})
+    
+    # Auto-set active entrepot from assignment if not set
+    if user.get("assigned_entrepot_id") and not user.get("active_entrepot_id"):
+        await db.users.update_one(
+            {"email": request.email},
+            {"$set": {"active_entrepot_id": user["assigned_entrepot_id"]}},
+        )
+        user["active_entrepot_id"] = user["assigned_entrepot_id"]
     
     # Invalider l'OTP
     await db.otp_codes.update_one({"email": request.email}, {"$unset": {"qr_otp": "", "qr_expires_at": ""}})
