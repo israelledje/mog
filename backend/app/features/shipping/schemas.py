@@ -58,6 +58,13 @@ class PackageInDB(PackageBase):
     tracking_number: str
     owner_id: str
     status: str = "draft"
+    nature: Optional[str] = None
+    warehouse_location: Optional[str] = None
+    current_entrepot_id: Optional[str] = None
+    current_entrepot_name: Optional[str] = None
+    origin_warehouse_entry: Optional[str] = None
+    dest_warehouse_entry: Optional[str] = None
+    warehouse_history: List[dict] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     timeline: List[TimelineEvent] = Field(default_factory=list)

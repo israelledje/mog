@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
 import { useTranslation } from 'react-i18next';
 import { Scan, WifiOff } from 'lucide-react-native';
@@ -10,6 +10,8 @@ export default function OperatorLayout() {
   const [isConnected, setIsConnected] = useState(true);
   const router = useRouter();
   const { t } = useTranslation();
+  const segments = useSegments();
+  const showFab = segments[segments.length - 1] === 'index' || segments[segments.length - 1] === 'reception';
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
@@ -39,6 +41,7 @@ export default function OperatorLayout() {
         <Stack.Screen name="cloture" />
       </Stack>
 
+      {showFab && (
       <TouchableOpacity 
         style={styles.fab} 
         onPress={() => router.push('/(operator)/reception')}
@@ -46,6 +49,7 @@ export default function OperatorLayout() {
       >
         <Scan size={28} color="#fff" />
       </TouchableOpacity>
+      )}
     </View>
   );
 }

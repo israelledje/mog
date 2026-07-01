@@ -57,9 +57,10 @@ async def list_containers(
     containers = []
     async for doc in cursor:
         doc["id"] = doc["_id"]
-        # Compatibilité : si mode est absent mais transport_mode existe
-        if "mode" not in doc and "transport_mode" in doc:
-            doc["mode"] = doc["transport_mode"]
+        if "origin_city" not in doc:
+            doc["origin_city"] = doc.get("origin_port") or "Guangzhou"
+        if "transport_mode" not in doc and "mode" in doc:
+            doc["transport_mode"] = doc["mode"]
         containers.append(doc)
     return containers
 

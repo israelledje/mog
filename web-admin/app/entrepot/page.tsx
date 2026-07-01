@@ -132,11 +132,39 @@ export default function EntrepotPage() {
     loadData();
   };
 
-  const dwellDays = (pkg: any) => {
-    if (!pkg.dest_warehouse_entry) return null;
-    const entry = new Date(pkg.dest_warehouse_entry);
-    return Math.floor((Date.now() - entry.getTime()) / 86400000);
+  const pkgId = (p: any) => p.id || p._id;
+  const entId = (e: any) => e.id || e._id;
+
+  const packageInEntrepot = (p: any, e: any) => {
+    const eid = entId(e);
+    if (p.current_entrepot_id && eid && p.current_entrepot_id === eid) return true;
+    if (p.current_entrepot_name && e.name && p.current_entrepot_name === e.name) return true;
+    if (p.warehouse_location && e.name && p.warehouse_location === e.name) return true;
+    const history = p.warehouse_history || [];
+    const last = history.length ? history[history.length - 1] : null;
+    if (last?.entrepot_id === eid) return true;
+    return false;
   };
+
+  const dwellDays = (pkg: any) => {
+    const entryStr = pkg.origin_warehouse_entry || pkg.dest_warehouse_entry;
+    if (entryStr) {
+      const entry = new Date(entryStr);
+      if (!isNaN(entry.getTime())) return Math.floor((Date.now() - entry.getTime()) / 86400000);
+    }
+    const history = pkg.warehouse_history || [];
+    if (history.length) {
+      const last = history[history.length - 1];
+      if (last?.arrived_at) {
+        const entry = new Date(last.arrived_at);
+        if (!isNaN(entry.getTime())) return Math.floor((Date.now() - entry.getTime()) / 86400000);
+      }
+    }
+    return null;
+  };
+
+  const entrepotLabel = (pkg: any) =>
+    pkg.current_entrepot_name || pkg.warehouse_location || null;
 
   const filtered = packages.filter(p => {
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
@@ -242,7 +270,7 @@ export default function EntrepotPage() {
                 const dwell = dwellDays(pkg);
 
                 return (
-                  <div key={pkg.id} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr] px-6 py-4 items-center gap-4 hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => window.location.href = `/colis/${pkg.id}`}>
+                  <div key={pkgId(pkg)} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr] px-6 py-4 items-center gap-4 hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => window.location.href = `/colis/${pkgId(pkg)}`}>
                     <div>
                       <p className="text-sm font-black text-slate-900">{pkg.tracking_number}</p>
                       <p className="text-[10px] text-slate-400 font-bold truncate max-w-[140px]">{pkg.description}</p>
@@ -257,10 +285,10 @@ export default function EntrepotPage() {
                       </span>
                     </div>
                     <div>
-                      {pkg.current_entrepot_name ? (
+                      {entrepotLabel(pkg) ? (
                         <div className="flex items-center gap-1.5">
                           <Building2 size={12} className="text-slate-400 shrink-0" />
-                          <span className="text-xs font-bold text-slate-700 truncate">{pkg.current_entrepot_name}</span>
+                          <span className="text-xs font-bold text-slate-700 truncate">{entrepotLabel(pkg)}</span>
                         </div>
                       ) : <span className="text-slate-300 text-xs">—</span>}
                     </div>
@@ -311,8 +339,10 @@ export default function EntrepotPage() {
                     <Building2 size={32} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-slate-400 font-bold text-sm">Aucun entrepôt enregistré</p>
                   </div>
-                ) : list.map(e => (
-                  <div key={e.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 hover:border-blue-200 transition-all group">
+                ) : list.map(e => {
+                  const count = packages.filter(p => packageInEntrepot(p, e)).length;
+                  return (
+                  <div key={entId(e)} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 hover:border-blue-200 transition-all group">
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
                         <Building2 size={22} className="text-slate-400 group-hover:text-blue-600" />
@@ -321,7 +351,7 @@ export default function EntrepotPage() {
                         <button onClick={() => setEditEntrepot({ ...e })} className="p-2 rounded-xl text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all">
                           <Edit3 size={14} />
                         </button>
-                        <button onClick={() => deleteEntrepot(e.id)} className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                        <button onClick={() => deleteEntrepot(entId(e))} className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -335,11 +365,12 @@ export default function EntrepotPage() {
                     {e.contact && <p className="text-[10px] text-blue-500 mt-1 font-bold">{e.contact}</p>}
                     <div className="mt-4 pt-4 border-t border-slate-50">
                       <p className="text-[10px] text-slate-400 font-bold uppercase">
-                        {packages.filter(p => p.current_entrepot_id === e.id).length} colis actuellement
+                        {count} colis actuellement
                       </p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))}
