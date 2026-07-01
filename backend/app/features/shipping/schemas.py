@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -33,7 +33,17 @@ class PackageBase(BaseModel):
     dimensions: Optional[dict] = Field(default_factory=lambda: {"l": 0, "w": 0, "h": 0})
     total_price: float = 0.0
     include_vat: bool = False
-    
+
+    @field_validator("declared_value", mode="before")
+    @classmethod
+    def coerce_declared_value(cls, v):
+        if v is None or v == "":
+            return 0.0
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
 class PackageCreate(PackageBase):
     owner_id: Optional[str] = None
     tracking_number: Optional[str] = None

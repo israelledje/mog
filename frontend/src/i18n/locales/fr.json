@@ -93,7 +93,8 @@
                     "no_packages":  "Aucun colis pour l\u0027instant",
                     "no_packages_sub":  "Expédiez votre premier colis depuis la Chine",
                     "timeline":  "Suivi",
-                    "progress":  "Progression"
+                    "progress":  "Progression",
+                    "details":  "Détails"
                 },
     "steps":  {
                   "order_created":  "Commande créée",

@@ -15,6 +15,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { colisApi } from '../../src/api/colis';
 import { formatErr } from '../../src/api/client';
+import { parseDeclaredValue } from '../../src/utils/format';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 import ShippingMark from '../../src/components/ShippingMark';
@@ -111,7 +112,7 @@ export default function NewColisScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       const payload = {
         ...form,
-        declared_value: parseFloat(form.declared_value) || 0,
+        declared_value: parseDeclaredValue(form.declared_value),
         weight_real: 0,
         weight_volumetric: 0,
         dimensions: { l: 0, w: 0, h: 0 },

@@ -93,7 +93,8 @@
                     "no_packages":  "No packages yet",
                     "no_packages_sub":  "Ship your first package from China",
                     "timeline":  "Timeline",
-                    "progress":  "Progress"
+                    "progress":  "Progress",
+                    "details":  "Details"
                 },
     "steps":  {
                   "order_created":  "Order created",

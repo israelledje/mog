@@ -1,10 +1,24 @@
 import { api } from './client';
 import type { Colis, Groupage, AppNotification } from '../types';
+import { parseDeclaredValue } from '../utils/format';
+
+function normalizeColis(data: any): Colis {
+  const dims = data?.dimensions;
+  return {
+    ...data,
+    declared_value: parseDeclaredValue(data?.declared_value ?? data?.valeur_declaree),
+    currency: data?.currency || 'CNY',
+    dimensions:
+      dims && typeof dims === 'object'
+        ? { l: dims.l ?? 0, w: dims.w ?? 0, h: dims.h ?? 0 }
+        : { l: 0, w: 0, h: 0 },
+  };
+}
 
 export const colisApi = {
   async list(params?: { tracking_number?: string; status?: string; skip?: number; limit?: number }): Promise<Colis[]> {
     const { data } = await api.get('/colis/', { params });
-    return data;
+    return data.map(normalizeColis);
   },
   async searchUsers(q: string) {
     const { data } = await api.get('/colis/users/search', { params: { q } });
@@ -12,11 +26,11 @@ export const colisApi = {
   },
   async get(id: string): Promise<Colis> {
     const { data } = await api.get(`/colis/${id}`);
-    return data;
+    return normalizeColis(data);
   },
   async create(payload: Partial<Colis> & any): Promise<Colis> {
     const { data } = await api.post('/colis/', payload);
-    return data;
+    return normalizeColis(data);
   },
   async kpi() {
     const { data } = await api.get('/colis/kpi');

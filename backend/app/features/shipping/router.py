@@ -104,8 +104,7 @@ async def list_packages(
     
     packages = []
     async for doc in cursor:
-        doc["id"] = doc["_id"]
-        packages.append(doc)
+        packages.append(_prepare_package(doc))
         
     return packages
 
@@ -212,6 +211,26 @@ def _filter_existing_photos(photos: list) -> list:
     return valid
 
 
+def _prepare_package(doc: dict) -> dict:
+    """Normalise un document colis avant sérialisation API."""
+    doc = dict(doc)
+    doc["id"] = doc.get("id") or doc.get("_id")
+    raw_value = doc.get("declared_value")
+    if raw_value is None:
+        raw_value = doc.get("valeur_declaree")
+    try:
+        doc["declared_value"] = float(raw_value or 0)
+    except (TypeError, ValueError):
+        doc["declared_value"] = 0.0
+    if not doc.get("currency"):
+        doc["currency"] = "CNY"
+    dims = doc.get("dimensions")
+    if not isinstance(dims, dict):
+        doc["dimensions"] = {"l": 0, "w": 0, "h": 0}
+    doc["photos"] = _filter_existing_photos(doc.get("photos", []))
+    return doc
+
+
 @router.get("/{package_id}/photos/{filename}")
 async def get_package_photo(
     package_id: str,
@@ -253,9 +272,7 @@ async def get_package_detail(
             detail="Vous n'avez pas accès à ce colis"
         )
     
-    package["id"] = package["_id"]
-    package["photos"] = _filter_existing_photos(package.get("photos", []))
-    return package
+    return _prepare_package(package)
 
 @router.patch("/{package_id}/status")
 async def update_package_status(

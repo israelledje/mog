@@ -93,7 +93,8 @@
                     "no_packages":  "暂无包裹",
                     "no_packages_sub":  "从中国发送您的第一个包裹",
                     "timeline":  "进度",
-                    "progress":  "进度"
+                    "progress":  "进度",
+                    "details":  "详情"
                 },
     "steps":  {
                   "order_created":  "订单已创建",

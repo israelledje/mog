@@ -27,6 +27,7 @@ import ShippingMark from '../../src/components/ShippingMark';
 import { useAuthStore } from '../../src/store/authStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { fileService } from '../../src/api/files';
+import { formatDeclaredValue } from '../../src/utils/format';
 
 export default function ColisDetailScreen() {
   const { t } = useTranslation();
@@ -141,11 +142,11 @@ export default function ColisDetailScreen() {
         <View style={styles.grid}>
           <Info label={t('package.weight_real')} value={`${colis.weight_real} kg`} Icon={Scale} color="#3b82f6" />
           <Info label={t('package.weight_vol')} value={`${colis.weight_volumetric} kg`} Icon={Box} color="#0ea5e9" />
-          <Info label={t('package.dimensions')} value={`${colis.dimensions.l}×${colis.dimensions.w}×${colis.dimensions.h}`} Icon={Ruler} color="#8b5cf6" />
+          <Info label={t('package.dimensions')} value={`${colis.dimensions?.l ?? 0}×${colis.dimensions?.w ?? 0}×${colis.dimensions?.h ?? 0}`} Icon={Ruler} color="#8b5cf6" />
           <Info label={t('package.category')} value={t(`categories.${colis.category}`)} Icon={Tag} color="#10b981" />
           <Info label={t('package.supplier')} value={colis.supplier_name || '-'} Icon={Store} color="#f59e0b" />
           <Info label={t('package.platform')} value={colis.platform || '-'} Icon={Globe} color="#6366f1" />
-          <Info label={t('package.declared_value')} value={`${colis.declared_value} ${colis.currency}`} Icon={DollarSign} color="#f43f5e" />
+          <Info label={t('package.declared_value')} value={formatDeclaredValue(colis.declared_value, colis.currency)} Icon={DollarSign} color="#f43f5e" />
           <Info label={t('form.insurance')} value={colis.insurance_enabled ? t('common.yes') : t('common.no')} Icon={ShieldCheck} color={colis.insurance_enabled ? "#10b981" : "#9ca3af"} />
         </View>
 
@@ -200,9 +201,9 @@ function Info({ label, value, Icon, color }: { label: string; value: string; Ico
       <View style={[styles.iconWrap, { backgroundColor: `${color}15` }]}>
         <Icon size={16} color={color} />
       </View>
-      <View style={{ flex: 1 }}>
+      <View style={styles.infoContent}>
         <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+        <Text style={styles.infoValue} numberOfLines={2} ellipsizeMode="tail">{value || '—'}</Text>
       </View>
     </View>
   );
@@ -222,9 +223,10 @@ const styles = StyleSheet.create({
   desc: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1, marginRight: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   infoBox: { backgroundColor: '#fff', borderRadius: radii.card, padding: spacing.md, width: '48.5%', ...shadow.card, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  infoContent: { flex: 1, minWidth: 0 },
   iconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   infoLabel: { fontSize: 10, color: colors.textSecondary, fontWeight: '700', textTransform: 'uppercase' },
-  infoValue: { fontSize: 13, color: colors.text, fontWeight: '800', marginTop: 2 },
+  infoValue: { fontSize: 13, color: '#1A1A1A', fontWeight: '800', marginTop: 2 },
   containerCard: { backgroundColor: '#fff', borderRadius: radii.card, padding: spacing.lg, marginTop: spacing.md, flexDirection: 'row', gap: spacing.md, ...shadow.card, alignItems: 'center', borderLeftWidth: 4, borderLeftColor: colors.primary },
   cLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   cValue: { color: colors.primary, fontFamily: fonts.mono, fontWeight: '700', fontSize: 14, marginTop: 2 },
