@@ -24,6 +24,7 @@ function CreateInvoiceContent() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [availablePackages, setAvailablePackages] = useState<any[]>([]);
+  const [loadingPackages, setLoadingPackages] = useState(false);
   
   // Edit mode tracking
   const [existingInvoice, setExistingInvoice] = useState<any>(null);
@@ -87,7 +88,7 @@ function CreateInvoiceContent() {
           setManualUnitPrices(mPrices);
           
           // Fetch packages for this customer to show in the list
-          fetchCustomerPackages(inv.customer_id, selIds);
+          fetchCustomerPackages(inv.customer_id, selIds, editId);
         }
       }
     } catch (err) {
@@ -99,21 +100,59 @@ function CreateInvoiceContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const fetchCustomerPackages = async (email: string, preSelected?: Set<string>) => {
+  const pkgId = (p: any) => p?.id || p?._id;
+
+  const fetchCustomerPackages = async (email: string, preSelected?: Set<string>, currentEditId?: string | null) => {
+    if (!token || !email) return;
+    setLoadingPackages(true);
     try {
-      const pRes = await fetch(`${API_BASE_URL}/colis/?limit=200`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const params = new URLSearchParams({
+        owner_id: email,
+        billable: 'true',
+        limit: '500',
       });
-      if (pRes.ok) {
-        const all = await pRes.json();
-        const clientPkgs = all.filter((p: any) => p.owner_id === email);
-        const eligiblePkgs = clientPkgs.filter((p: any) => 
-          p.status === 'received' || (preSelected && preSelected.has(p.id))
-        );
-        setAvailablePackages(eligiblePkgs);
+      const pRes = await fetch(`${API_BASE_URL}/colis/?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!pRes.ok) {
+        setAvailablePackages([]);
+        return;
       }
+      let pkgs: any[] = await pRes.json();
+
+      // Mode édition : inclure les colis déjà sur cette facture même s'ils sont "final"
+      if (preSelected && preSelected.size > 0) {
+        const knownIds = new Set(pkgs.map(pkgId));
+        const missingIds = [...preSelected].filter(id => !knownIds.has(id));
+        if (missingIds.length > 0) {
+          const allRes = await fetch(
+            `${API_BASE_URL}/colis/?owner_id=${encodeURIComponent(email)}&limit=500`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          if (allRes.ok) {
+            const allPkgs: any[] = await allRes.json();
+            for (const p of allPkgs) {
+              const id = pkgId(p);
+              if (missingIds.includes(id)) pkgs.push(p);
+            }
+          }
+        }
+      }
+
+      // Exclure colis déjà facturés sur une autre facture finalisée
+      pkgs = pkgs.filter(p => {
+        const id = pkgId(p);
+        if (preSelected?.has(id)) return true;
+        if (p.invoice_status === 'final' && p.invoice_id && p.invoice_id !== currentEditId) return false;
+        return true;
+      });
+
+      setAvailablePackages(pkgs);
     } catch (err) {
       console.error(err);
+      setAvailablePackages([]);
+    } finally {
+      setLoadingPackages(false);
     }
   };
 
@@ -147,16 +186,16 @@ function CreateInvoiceContent() {
     return `${cbm.toFixed(3)} CBM`;
   };
 
-  const togglePackage = (pkgId: string) => {
+  const togglePackage = (rawId: string) => {
     const newSel = new Set(selectedPackageIds);
-    if (newSel.has(pkgId)) {
-      newSel.delete(pkgId);
+    if (newSel.has(rawId)) {
+      newSel.delete(rawId);
     } else {
-      newSel.add(pkgId);
-      if (!(pkgId in manualUnitPrices)) {
-        const pkg = availablePackages.find(p => p.id === pkgId);
+      newSel.add(rawId);
+      if (!(rawId in manualUnitPrices)) {
+        const pkg = availablePackages.find(p => pkgId(p) === rawId);
         if (pkg) {
-          setManualUnitPrices(prev => ({...prev, [pkgId]: calculateAutoUnitPrice(pkg)}));
+          setManualUnitPrices(prev => ({ ...prev, [rawId]: calculateAutoUnitPrice(pkg) }));
         }
       }
     }
@@ -174,7 +213,7 @@ function CreateInvoiceContent() {
   const calculateTotals = () => {
     let ht = 0;
     selectedPackageIds.forEach(id => {
-      const pkg = availablePackages.find(p => p.id === id);
+      const pkg = availablePackages.find(p => pkgId(p) === id);
       const qte = getPackageQteValue(pkg);
       ht += (manualUnitPrices[id] || 0) * qte;
     });
@@ -188,7 +227,7 @@ function CreateInvoiceContent() {
     setSubmitting(true);
     try {
       const packagesPayload = Array.from(selectedPackageIds).map(id => {
-        const pkg = availablePackages.find(p => p.id === id);
+        const pkg = availablePackages.find(p => pkgId(p) === id);
         return {
           package_id: id,
           transport_mode: pkg?.transport_mode,
@@ -440,11 +479,18 @@ function CreateInvoiceContent() {
           <div className="flex-1 p-0 flex flex-col bg-slate-50/30">
             {activeTab === 'items' ? (
               <div className="overflow-x-auto p-6">
+                {loadingPackages ? (
+                  <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+                    <Loader2 className="animate-spin text-blue-600" size={32} />
+                    <p className="text-sm font-bold">Chargement des colis du client...</p>
+                  </div>
+                ) : (
                 <table className="w-full text-left text-sm bg-white rounded-xl shadow-sm overflow-hidden border border-slate-100">
                   <thead>
                     <tr className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black border-b border-slate-100">
                       <th className="px-6 py-4 w-10"></th>
                       <th className="px-6 py-4 font-black">Colis</th>
+                      <th className="px-6 py-4 font-black">Statut</th>
                       <th className="px-6 py-4 font-black">Mode</th>
                       <th className="px-6 py-4 font-black text-right">Qté</th>
                       <th className="px-6 py-4 font-black text-right">P.U (FCFA)</th>
@@ -452,14 +498,16 @@ function CreateInvoiceContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {availablePackages.map((pkg) => (
-                      <tr key={pkg.id} className={`transition-colors group ${selectedPackageIds.has(pkg.id) ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
+                    {availablePackages.map((pkg) => {
+                      const id = pkgId(pkg);
+                      return (
+                      <tr key={id} className={`transition-colors group ${selectedPackageIds.has(id) ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
                         <td className="px-6 py-4">
                           <input 
                             type="checkbox" 
                             disabled={isFinal}
-                            checked={selectedPackageIds.has(pkg.id)}
-                            onChange={() => togglePackage(pkg.id)}
+                            checked={selectedPackageIds.has(id)}
+                            onChange={() => togglePackage(id)}
                             className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                           />
                         </td>
@@ -470,25 +518,30 @@ function CreateInvoiceContent() {
                              </div>
                              <div>
                                <p className="font-black text-slate-900">{pkg.tracking_number}</p>
-                               <p className="text-[10px] text-slate-400 font-bold">{pkg.description || 'Sans description'}</p>
+                               <p className="text-[10px] text-slate-400 font-bold">{pkg.description || pkg.nature || 'Sans description'}</p>
                              </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-1 rounded">
-                            {pkg.transport_mode || 'Inconnu'}
+                            {pkg.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 px-2 py-1 rounded">
+                            {pkg.transport_mode || 'sea'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right font-bold text-slate-700">
                           {getPackageQteStr(pkg)}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {selectedPackageIds.has(pkg.id) ? (
+                          {selectedPackageIds.has(id) ? (
                             <input 
                               type="number"
                               disabled={isFinal}
-                              value={manualUnitPrices[pkg.id] ?? ''}
-                              onChange={(e) => handlePriceChange(pkg.id, e.target.value)}
+                              value={manualUnitPrices[id] ?? ''}
+                              onChange={(e) => handlePriceChange(id, e.target.value)}
                               className="w-24 px-3 py-1.5 text-right font-black border border-slate-200 rounded focus:border-blue-500 outline-none text-slate-900 bg-white"
                             />
                           ) : (
@@ -496,26 +549,28 @@ function CreateInvoiceContent() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right font-black text-[#00A09D]">
-                           {selectedPackageIds.has(pkg.id) ? (
-                             ((manualUnitPrices[pkg.id] || 0) * getPackageQteValue(pkg)).toLocaleString('fr-FR')
+                           {selectedPackageIds.has(id) ? (
+                             ((manualUnitPrices[id] || 0) * getPackageQteValue(pkg)).toLocaleString('fr-FR')
                            ) : (
                              <span className="text-slate-300">—</span>
                            )}
                         </td>
                       </tr>
-                    ))}
+                    );})}
                     {availablePackages.length === 0 && (
                        <tr>
-                         <td colSpan={6} className="py-20 text-center">
+                         <td colSpan={7} className="py-20 text-center">
                             <div className="max-w-xs mx-auto space-y-3 opacity-30">
                                <Package size={40} className="mx-auto" />
-                               <p className="text-sm font-black uppercase tracking-widest">Aucun colis réceptionné trouvé pour ce client</p>
+                               <p className="text-sm font-black uppercase tracking-widest">Aucun colis facturable pour ce client</p>
+                               <p className="text-xs font-medium normal-case">Colis réceptionnés, non encore facturés définitivement.</p>
                             </div>
                          </td>
                        </tr>
                     )}
                   </tbody>
                 </table>
+                )}
               </div>
             ) : (
               <div className="p-10 space-y-10 max-w-2xl">

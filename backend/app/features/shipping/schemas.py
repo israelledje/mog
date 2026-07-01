@@ -24,6 +24,7 @@ class PackageBase(BaseModel):
     payment_status: str = "pending" # pending, waiting_validation, paid, rejected
     payment_proof_url: Optional[str] = None
     invoice_status: str = "none" # none, draft, final
+    invoice_id: Optional[str] = None
     photos: List[str] = Field(default_factory=list)
     
     # Keeping some logistics fields for operators

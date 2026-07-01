@@ -19,8 +19,11 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
     environment:
       - MONGO_URI=mongodb://mongodb:27017
+      - UPLOAD_DIR=/app/uploads
     env_file:
       - ./backend/.env
     networks:
@@ -89,3 +92,4 @@ networks:
 volumes:
   mongodb_data:
   whatsapp_session:
+  uploads_data:

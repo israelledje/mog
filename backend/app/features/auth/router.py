@@ -8,6 +8,7 @@ from app.core.security import verify_password, create_access_token, create_refre
 from app.core.user_codes import generate_client_code, ensure_client_code
 from app.core.phone_utils import normalize_phone, is_valid_phone
 from app.core.database import get_database
+from app.core.paths import UPLOAD_DIR
 import random
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -308,10 +309,10 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Le fichier doit être une image")
     
-    os.makedirs("uploads/avatars", exist_ok=True)
+    os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     filename = f"{uuid.uuid4().hex}.{file_ext}"
-    file_path = os.path.join("uploads", "avatars", filename)
+    file_path = os.path.join(UPLOAD_DIR, "avatars", filename)
     
     content = await file.read()
     with open(file_path, "wb") as f:

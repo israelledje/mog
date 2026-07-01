@@ -116,7 +116,7 @@ export default function ColisDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <PhotoCarousel photos={colis.photos} fallbackUrl={PLACEHOLDER} />
+        <PhotoCarousel photos={colis.photos} packageId={colis.id} fallbackUrl={PLACEHOLDER} />
 
         <View style={[styles.card, { marginTop: spacing.lg }]}>
           <View style={styles.trackRow}>

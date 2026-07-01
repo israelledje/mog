@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { BASE } from '../api/client';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 import { Plane, Ship, Package } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import StatusBadge from './StatusBadge';
@@ -10,7 +11,9 @@ import type { Colis } from '../types';
 
 export default function ColisCard({ item }: { item: Colis }) {
   const router = useRouter();
+  const [thumbError, setThumbError] = useState(false);
   const Icon = item.transport_mode === 'air' ? Plane : Ship;
+  const thumbUri = item.photos?.[0] ? resolveMediaUrl(item.photos[0]) : null;
 
   const onPress = () => {
     Haptics.selectionAsync();
@@ -23,11 +26,12 @@ export default function ColisCard({ item }: { item: Colis }) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85} testID={`colis-card-${item.id}`}>
       <View style={styles.thumb}>
-        {item.photos && item.photos.length > 0 ? (
-          <Image 
-            source={{ uri: item.photos[0].startsWith('http') ? item.photos[0] : `${BASE}${item.photos[0]}` }} 
-            style={{ width: '100%', height: '100%', borderRadius: radii.input }} 
-            resizeMode="cover" 
+        {thumbUri && !thumbError ? (
+          <Image
+            source={{ uri: thumbUri }}
+            style={{ width: '100%', height: '100%', borderRadius: radii.input }}
+            contentFit="cover"
+            onError={() => setThumbError(true)}
           />
         ) : (
           <Package size={26} color={colors.primary} strokeWidth={1.6} />

@@ -101,11 +101,13 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(whatsapp_router, prefix="/api")
 app.include_router(notifs_router)
 
-# Serve Uploads
-
+# Serve Uploads (volume persistant Docker : /app/uploads)
 import os
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+from app.core.paths import UPLOAD_DIR
+
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.get("/health", tags=["Health"])
 async def health_check():

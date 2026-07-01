@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query, Response
+from fastapi.responses import FileResponse
+from app.core.paths import UPLOAD_DIR, upload_file_path, public_upload_url
 from app.features.shipping.schemas import PackageCreate, PackageInDB, PackageUpdate, PackageReceive, InvoiceUpdate
 from app.core.database import get_database
 from app.core.utils import apply_watermark
@@ -71,6 +73,8 @@ async def list_packages(
     limit: int = Query(default=200, le=1000),
     status: Optional[str] = None,
     tracking_number: Optional[str] = None,
+    owner_id: Optional[str] = None,
+    billable: Optional[bool] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_database)
 ):
@@ -80,11 +84,21 @@ async def list_packages(
     # 🔐 Sécurité : Filtrage par rôle
     if current_user.get("role") == "client":
         query["owner_id"] = current_user["email"]
+    elif owner_id and current_user.get("role") in ["admin", "operator"]:
+        query["owner_id"] = {"$regex": f"^{owner_id.strip()}$", "$options": "i"}
         
     if status:
         query["status"] = status
     if tracking_number:
-        query["tracking_number"] = {"$regex": tracking_number, "$options": "i"} 
+        query["tracking_number"] = {"$regex": tracking_number, "$options": "i"}
+
+    if billable:
+        query["status"] = {"$nin": ["draft", "pending_reception"]}
+        query["$or"] = [
+            {"invoice_status": {"$in": ["none", "draft"]}},
+            {"invoice_status": {"$exists": False}},
+            {"invoice_status": None},
+        ]
         
     cursor = db.packages.find(query).sort("created_at", -1).skip(skip).limit(limit)
     
@@ -162,12 +176,12 @@ async def upload_package_photo(
         )
     
     # 3. Préparer le chemin du fichier
-    file_extension = os.path.splitext(file.filename)[1]
+    file_extension = os.path.splitext(file.filename or "")[1] or ".jpg"
     file_name = f"{package_id}_{uuid.uuid4()}{file_extension}"
-    upload_dir = "uploads"
-    file_path = os.path.join(upload_dir, file_name)
+    file_path = upload_file_path(file_name)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     
-    # 3. Sauvegarder le fichier localement
+    # Sauvegarder le fichier
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
@@ -179,13 +193,45 @@ async def upload_package_photo(
         print(f"Erreur Watermark: {e}")
     
     # 5. Mettre à jour le colis en base
-    photo_url = f"/uploads/{file_name}" # Chemin relatif pour l'API
+    photo_url = public_upload_url(file_name)
     await db.packages.update_one(
         {"_id": package_id},
         {"$push": {"photos": photo_url}}
     )
     
     return {"url": photo_url, "message": "Photo ajoutée avec succès"}
+
+
+def _filter_existing_photos(photos: list) -> list:
+    """Ne renvoie que les URLs dont le fichier existe encore sur disque."""
+    valid = []
+    for url in photos or []:
+        fname = os.path.basename(url.replace("\\", "/"))
+        if fname and os.path.isfile(upload_file_path(fname)):
+            valid.append(public_upload_url(fname) if not url.startswith("/") else url)
+    return valid
+
+
+@router.get("/{package_id}/photos/{filename}")
+async def get_package_photo(
+    package_id: str,
+    filename: str,
+    db=Depends(get_database),
+):
+    """Sert une photo de colis (accès public — noms de fichiers non devinables)."""
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    expected = public_upload_url(filename)
+    if not any(filename in p or p.endswith(filename) for p in package.get("photos", [])):
+        raise HTTPException(status_code=404, detail="Photo non associée à ce colis")
+
+    file_path = upload_file_path(filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="Fichier photo introuvable")
+
+    return FileResponse(file_path, media_type="image/jpeg")
 
 @router.get("/{package_id}", response_model=PackageInDB)
 async def get_package_detail(
@@ -208,6 +254,7 @@ async def get_package_detail(
         )
     
     package["id"] = package["_id"]
+    package["photos"] = _filter_existing_photos(package.get("photos", []))
     return package
 
 @router.patch("/{package_id}/status")
@@ -320,12 +367,13 @@ async def upload_payment_proof(
     
     file_extension = os.path.splitext(file.filename)[1]
     file_name = f"PAY_{package_id}_{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join("uploads", file_name)
+    file_path = upload_file_path(file_name)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     
-    proof_url = f"/uploads/{file_name}"
+    proof_url = public_upload_url(file_name)
     await db.packages.update_one(
         {"_id": package_id},
         {"$set": {"payment_proof_url": proof_url, "payment_status": "waiting_validation"}}
