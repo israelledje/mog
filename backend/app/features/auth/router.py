@@ -45,7 +45,6 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     user_response = user_dict.copy()
     user_response.pop("hashed_password", None)
     
-    return {
     access_token = create_access_token({"sub": user_in.email, "role": "client"})
     refresh_token = create_refresh_token({"sub": user_in.email})
     
@@ -77,18 +76,23 @@ async def login(login_data: LoginRequest, response: Response, db = Depends(get_d
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    return {
     access_token = create_access_token({"sub": user["email"], "role": user["role"]})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
     response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+
+    user_copy = user.copy()
+    if "_id" in user_copy:
+        user_copy["_id"] = str(user_copy["_id"])
+    if "hashed_password" in user_copy:
+        del user_copy["hashed_password"]
     
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": user,
+        "user": user_copy,
     }
 
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -279,18 +283,23 @@ async def qr_login_step2(request: QRVerifyRequest, response: Response, db = Depe
     # Invalider l'OTP
     await db.otp_codes.update_one({"email": request.email}, {"$unset": {"qr_otp": "", "qr_expires_at": ""}})
     
-    return {
     access_token = create_access_token({"sub": user["email"], "role": user.get("role", "operator")})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
     response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+
+    user_copy = user.copy()
+    if "_id" in user_copy:
+        user_copy["_id"] = str(user_copy["_id"])
+    if "hashed_password" in user_copy:
+        del user_copy["hashed_password"]
     
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": user,
+        "user": user_copy,
     }
 
 @router.post("/refresh", response_model=Token)
@@ -313,7 +322,6 @@ async def refresh(refresh_data: RefreshRequest, response: Response, db = Depends
     if "hashed_password" in user_copy:
         del user_copy["hashed_password"]
 
-    return {
     access_token = create_access_token({"sub": email, "role": user.get("role", "operator")})
     
     response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
