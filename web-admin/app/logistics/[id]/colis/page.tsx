@@ -8,8 +8,7 @@ import {
   DollarSign, CreditCard, BadgeCheck, ArrowRight, Filter,
   Download, Trash2
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
 
 const PAY_STATUS: Record<string, { label: string; color: string; bg: string }> = {

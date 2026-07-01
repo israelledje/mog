@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Users, UserPlus, ShieldCheck, Mail, Phone, MoreVertical, X, Loader2, Check, AlertCircle, QrCode, Share2, Edit2, Trash2 } from 'lucide-react';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+import { API_BASE_URL } from '@/lib/api';
 
 export default function TeamPage() {
   const [users, setUsers] = useState<any[]>([]);

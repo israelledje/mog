@@ -6,8 +6,7 @@ import {
   Clock, CheckCircle2, Truck, Archive, ChevronRight,
   Building2, Edit3, Trash2, Save, AlertCircle, Calendar
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
 
 const PKG_STATUS: Record<string, { label: string; bg: string; text: string; icon: any }> = {

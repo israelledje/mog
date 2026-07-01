@@ -34,7 +34,10 @@ services:
     restart: always
 
   web-admin:
-    build: ./web-admin
+    build:
+      context: ./web-admin
+      args:
+        NEXT_PUBLIC_API_URL: /api
     container_name: cargo-tracker-web
     depends_on:
       backend:

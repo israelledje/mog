@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Settings, Save, Loader2, DollarSign, Clock, CheckCircle2, TrendingUp, Anchor, Plane, ShieldCheck } from 'lucide-react';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+import { API_BASE_URL } from '@/lib/api';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState({

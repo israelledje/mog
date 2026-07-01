@@ -7,8 +7,7 @@ import {
   Edit3, Package, ChevronRight, Search, Filter, MoreHorizontal,
   MapPin, AlertCircle, ArrowRight, Save
 } from 'lucide-react';
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
 
 const STATUS_CFG: Record<string, { label: string; dot: string; text: string; bg: string }> = {
