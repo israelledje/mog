@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     NEXAH_PASSWORD: str = ""
     NEXAH_API_URL: str = "https://smsvas.com/bulk/public/index.php/api/v1/sendsms"
     NEXAH_SENDER_ID: str = "CargoLine"
+
+    # DeepSeek Assistant
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_API_URL: str = "https://api.deepseek.com/chat/completions"
+    DEEPSEEK_MODEL: str = "deepseek-chat"
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

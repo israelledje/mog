@@ -1,5 +1,5 @@
 import {
-  Headphones, Plane, GraduationCap, Hotel, Languages, Car,
+  Headphones, Plane, GraduationCap, Hotel, Languages, Car, Container,
 } from 'lucide-react-native';
 
 export type FieldType = 'text' | 'phone' | 'email' | 'number' | 'date' | 'datetime' | 'textarea' | 'select';
@@ -23,6 +23,8 @@ export type ServiceDef = {
   Icon: any;
   href: string;
   intro: string[];
+  /** Image de fond pour la carte d'en-tête du formulaire */
+  heroImage: any;
   fields: ServiceField[];
 };
 
@@ -35,6 +37,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#2563EB',
     Icon: Headphones,
     href: '/services/assistance',
+    heroImage: require('../../assets/images/portrait-beautiful-young-asian-woman-happy-smile-relax-around-neary-beach-sea.jpg'),
     intro: [
       'Un conseiller M.O.G vous accompagne pendant votre séjour en Chine.',
       'Remplissez le formulaire : un opérateur vous rappellera avec toutes les infos nécessaires.',
@@ -67,6 +70,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#0EA5E9',
     Icon: Plane,
     href: '/services/airport',
+    heroImage: require('../../assets/images/man-preparing-travel.jpg'),
     intro: [
       'Prise en charge à l’aéroport et transfert vers hôtel ou entrepôt.',
       'Réservez idéalement 48h avant l’arrivée.',
@@ -97,6 +101,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#7C3AED',
     Icon: GraduationCap,
     href: '/services/student',
+    heroImage: require('../../assets/images/business-women-signature-document.jpg'),
     intro: [
       'Accompagnement pour inscriptions universitaires et écoles en Chine.',
       'Aide au dossier, traduction et suivi administratif.',
@@ -130,6 +135,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#D97706',
     Icon: Hotel,
     href: '/services/hotel',
+    heroImage: require('../../assets/images/type-entertainment-complex-popular-resort-with-pools-water-parks-turkey-with-more-than-5-million-visitors-year-amara-dolce-vita-luxury-hotel-resort-tekirova-kemer.jpg'),
     intro: [
       'Hôtels partenaires près des zones commerciales et entrepôts, tarifs négociés M.O.G.',
     ],
@@ -163,6 +169,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#059669',
     Icon: Languages,
     href: '/services/translator',
+    heroImage: require('../../assets/images/flag-countries-foreign-word-translation-concept.jpg'),
     intro: [
       'Traducteur pour rendez-vous fournisseurs, usines, négociation et contrôle qualité.',
     ],
@@ -200,6 +207,7 @@ export const SERVICES: ServiceDef[] = [
     color: '#DC2626',
     Icon: Car,
     href: '/services/vehicles',
+    heroImage: require('../../assets/images/stylish-black-woman-car-salon.jpg'),
     intro: [
       'Achat en Chine et acheminement en conteneur vers l’Afrique centrale et la Côte d’Ivoire.',
     ],
@@ -233,6 +241,71 @@ export const SERVICES: ServiceDef[] = [
         { value: 'either', label: 'Indifférent' },
       ]},
       { key: 'notes', label: 'Précisions', type: 'textarea', placeholder: 'Couleur, options, délai…' },
+    ],
+  },
+  {
+    slug: 'container',
+    title: 'Remplissage de conteneur',
+    shortTitle: 'Conteneur',
+    subtitle: 'Partenaire groupage & expédition',
+    color: '#0F766E',
+    Icon: Container,
+    href: '/services/container',
+    heroImage: require('../../assets/images/logistics-transportation-container-cargo-ship-cargo-plane-with-working-crane-bridge-shipyard-sunrise-logistic-import-export-transport-industry-background-ai-generative.jpg'),
+    intro: [
+      'Vous avez déjà effectué vos achats en Chine ? M.O.G devient votre partenaire pour regrouper, remplir un conteneur et expédier vers l’Afrique.',
+      'Indiquez le volume, le lieu de stockage et la destination : un opérateur vous propose un slot de groupage.',
+    ],
+    fields: [
+      { key: 'full_name', label: 'Nom complet', type: 'text', required: true },
+      { key: 'phone', label: 'Téléphone WhatsApp', type: 'phone', required: true, placeholder: '+237 6XX XXX XXX' },
+      { key: 'goods_ready', label: 'Marchandises déjà achetées ?', type: 'select', required: true, options: [
+        { value: 'yes', label: 'Oui, prêtes à expédier' },
+        { value: 'partial', label: 'Partiellement (achats en cours)' },
+        { value: 'soon', label: 'Bientôt prêtes (sous 2 semaines)' },
+      ]},
+      { key: 'goods_location', label: 'Lieu actuel des marchandises', type: 'select', required: true, options: [
+        { value: 'supplier', label: 'Chez le fournisseur' },
+        { value: 'own_warehouse', label: 'Mon entrepôt / dépôt' },
+        { value: 'mog', label: 'Déjà chez M.O.G' },
+        { value: 'other', label: 'Autre (préciser en notes)' },
+      ]},
+      { key: 'city_china', label: 'Ville en Chine', type: 'select', required: true, options: [
+        { value: 'guangzhou', label: 'Guangzhou' },
+        { value: 'shenzhen', label: 'Shenzhen' },
+        { value: 'yiwu', label: 'Yiwu' },
+        { value: 'foshan', label: 'Foshan' },
+        { value: 'other', label: 'Autre' },
+      ]},
+      { key: 'goods_nature', label: 'Nature des marchandises', type: 'text', required: true, placeholder: 'Ex. textile, électronique, pièces auto…' },
+      { key: 'volume_cbm', label: 'Volume estimé (CBM)', type: 'number', required: true, placeholder: 'Ex. 8.5' },
+      { key: 'packages_count', label: 'Nombre de colis / cartons', type: 'number', placeholder: 'Ex. 120' },
+      { key: 'weight_kg', label: 'Poids estimé (kg)', type: 'number', placeholder: 'Ex. 2500' },
+      { key: 'ready_date', label: 'Date de disponibilité', type: 'date', required: true },
+      { key: 'destination', label: 'Pays de destination', type: 'select', required: true, options: [
+        { value: 'cm', label: 'Cameroun' },
+        { value: 'ga', label: 'Gabon' },
+        { value: 'gq', label: 'Guinée équatoriale' },
+        { value: 'cg', label: 'Congo' },
+        { value: 'cd', label: 'RD Congo' },
+        { value: 'td', label: 'Tchad' },
+        { value: 'ci', label: "Côte d'Ivoire" },
+        { value: 'other', label: 'Autre' },
+      ]},
+      { key: 'destination_city', label: 'Ville de destination', type: 'text', required: true, placeholder: 'Ex. Douala, Libreville…' },
+      { key: 'fill_mode', label: 'Type de remplissage', type: 'select', required: true, options: [
+        { value: 'lcl', label: 'Part de conteneur (LCL / groupage)' },
+        { value: 'fcl_share', label: 'Remplir un conteneur avec d’autres clients' },
+        { value: 'fcl_full', label: 'Conteneur entier (FCL) pour moi' },
+        { value: 'advise', label: 'Je souhaite un conseil M.O.G' },
+      ]},
+      { key: 'needs', label: 'Services souhaités', type: 'select', required: true, options: [
+        { value: 'fill_only', label: 'Remplissage + expédition seulement' },
+        { value: 'pickup', label: 'Enlèvement chez fournisseur + remplissage' },
+        { value: 'packing', label: 'Emballage / reconditionnement + remplissage' },
+        { value: 'full', label: 'Pack complet (enlèvement, docs, groupage, expédition)' },
+      ]},
+      { key: 'notes', label: 'Précisions', type: 'textarea', placeholder: 'Adresse dépôt, contraintes, urgence, références commandes…' },
     ],
   },
 ];

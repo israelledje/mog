@@ -18,6 +18,7 @@ import HomeTopPanels from '../../src/components/home/HomeTopPanels';
 import HomeBottomPanels from '../../src/components/home/HomeBottomPanels';
 import HomeServicesMenu from '../../src/components/home/HomeServicesMenu';
 import { colors, fonts, shadow, spacing, radii } from '../../src/constants/theme';
+import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 import type { Colis } from '../../src/types';
 
 const { width } = Dimensions.get('window');
@@ -69,9 +70,22 @@ export default function HomeScreen() {
         >
           {/* HEADER (LIKE IN DESIGN) */}
           <View style={styles.headerRow}>
-            <View style={styles.avatarWrap}>
-              <Text style={styles.avatarText}>{user?.full_name?.charAt(0) || 'C'}</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.avatarWrap}
+              activeOpacity={0.85}
+              onPress={() => router.push('/(tabs)/profil')}
+              accessibilityRole="button"
+              accessibilityLabel={t('tabs.profile', { defaultValue: 'Profil' })}
+            >
+              {user?.avatar_url ? (
+                <Image
+                  source={{ uri: resolveMediaUrl(user.avatar_url) }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarText}>{user?.full_name?.charAt(0)?.toUpperCase() || 'C'}</Text>
+              )}
+            </TouchableOpacity>
             <View style={styles.headerTextWrap}>
               <Text style={styles.greeting}>{t('home.greeting')}!</Text>
               <Text style={styles.userName}>{user?.full_name || t('home.client_fallback')}</Text>
@@ -283,7 +297,16 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 100 },
   
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.lg },
-  avatarWrap: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  avatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: { width: 52, height: 52, borderRadius: 26 },
   avatarText: { color: '#fff', fontSize: 24, fontWeight: '800', fontFamily: fonts.heading },
   headerTextWrap: { flex: 1, marginLeft: 14 },
   greeting: { fontSize: 15, color: colors.textSecondary, fontWeight: '500', marginBottom: 2 },
@@ -346,7 +369,16 @@ const styles = StyleSheet.create({
   visaMastercardLogo: { flexDirection: 'row', alignItems: 'center', position: 'relative', width: 40, height: 24, justifyContent: 'center' },
   mastercardCircle: { position: 'absolute', width: 24, height: 24, borderRadius: 12 },
 
-  modernWhatsappBtn: { backgroundColor: '#25D366', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: radii.button, ...shadow.card },
+  modernWhatsappBtn: {
+    backgroundColor: '#25D366',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: radii.button,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
   modernWhatsappBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   modernWhatsappBtnSub: { color: 'rgba(255,255,255,0.9)', fontWeight: '600', fontSize: 13, marginTop: 2 },
 });

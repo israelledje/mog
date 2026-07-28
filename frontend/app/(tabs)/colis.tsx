@@ -174,18 +174,20 @@ export default function ColisListScreen() {
         />
       )}
 
-      {/* FAB - Floating Action Button */}
+      {/* FAB — groupage à gauche, nouveau colis à droite, même niveau */}
       <TouchableOpacity
-        style={[styles.fab, { bottom: 88, backgroundColor: colors.secondary }]}
+        style={[styles.fab, styles.fabLeft]}
         activeOpacity={0.8}
         onPress={() => { Haptics.selectionAsync(); router.push('/colis/grouper'); }}
+        accessibilityLabel="Grouper des colis"
       >
         <Activity size={24} color="#fff" strokeWidth={2.5} />
       </TouchableOpacity>
-      <TouchableOpacity 
-        style={styles.fab}
+      <TouchableOpacity
+        style={[styles.fab, styles.fabRight]}
         activeOpacity={0.8}
         onPress={() => { Haptics.selectionAsync(); router.push('/colis/nouveau'); }}
+        accessibilityLabel="Nouveau colis"
       >
         <Plus size={28} color="#fff" strokeWidth={2.5} />
       </TouchableOpacity>
@@ -221,13 +223,19 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     bottom: 24,
-    right: 24,
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadow.floating,
-  }
+  },
+  fabLeft: {
+    left: 24,
+    backgroundColor: colors.secondary,
+  },
+  fabRight: {
+    right: 24,
+    backgroundColor: colors.primary,
+  },
 });

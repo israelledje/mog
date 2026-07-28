@@ -148,6 +148,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="assistant" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="colis/[id]" />
             <Stack.Screen name="colis/nouveau" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="notifications" />
