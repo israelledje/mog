@@ -16,6 +16,7 @@ import { useColisStore } from '../../src/store/colisStore';
 import { getActiveContainers, containerProgressIndex, CONTAINER_PROGRESS_STAGES } from '../../src/utils/logistics';
 import { api } from '../../src/api/client';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
+import { CategoryChips } from '../../src/components/ui/HorizontalChips';
 
 // ─────────────────────────────────────────────
 // Types
@@ -182,39 +183,19 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
                 </View>
               </View>
 
-              {/* Category */}
+              {/* Category — scroll horizontal, tuiles lisibles */}
               <View style={sim.section}>
                 <Text style={sim.label}>TYPE DE MARCHANDISE</Text>
-                <View style={sim.catRow}>
-                  {mode === 'air'
-                    ? AIR_CATEGORIES.map((cat) => {
-                        const active = airCategory === cat.key;
-                        return (
-                          <TouchableOpacity
-                            key={cat.key}
-                            style={[sim.catBtn, active && { backgroundColor: cat.color, borderColor: cat.color }]}
-                            onPress={() => { Haptics.selectionAsync(); setAirCategory(cat.key); setResult(null); }}
-                          >
-                            <Text style={sim.catIcon}>{cat.icon}</Text>
-                            <Text style={[sim.catLabel, active && { color: '#fff' }]}>{cat.label}</Text>
-                          </TouchableOpacity>
-                        );
-                      })
-                    : SEA_CATEGORIES.map((cat) => {
-                        const active = seaCategory === cat.key;
-                        return (
-                          <TouchableOpacity
-                            key={cat.key}
-                            style={[sim.catBtn, sim.catBtnWide, active && { backgroundColor: cat.color, borderColor: cat.color }]}
-                            onPress={() => { Haptics.selectionAsync(); setSeaCategory(cat.key); setResult(null); }}
-                          >
-                            <Text style={sim.catIcon}>{cat.icon}</Text>
-                            <Text style={[sim.catLabel, active && { color: '#fff' }]}>{cat.label}</Text>
-                          </TouchableOpacity>
-                        );
-                      })
-                  }
-                </View>
+                <CategoryChips
+                  items={mode === 'air' ? AIR_CATEGORIES : SEA_CATEGORIES}
+                  activeKey={mode === 'air' ? airCategory : seaCategory}
+                  onSelect={(key) => {
+                    Haptics.selectionAsync();
+                    if (mode === 'air') setAirCategory(key);
+                    else setSeaCategory(key);
+                    setResult(null);
+                  }}
+                />
               </View>
 
               {/* Compact Input */}
@@ -553,14 +534,14 @@ const sim = StyleSheet.create({
   modeTxt: { fontWeight: '700', fontSize: 13, color: colors.textSecondary },
   modeTxtActive: { color: '#fff' },
 
-  // Compact Category
+  // Compact Category (legacy — CategoryChips used instead)
   catRow: { flexDirection: 'row', gap: 8 },
   catBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10,
+    minWidth: 112, paddingVertical: 10, borderRadius: 10,
     backgroundColor: '#F3F4F6',
     alignItems: 'center', gap: 4,
   },
-  catBtnWide: { flex: 1 },
+  catBtnWide: { minWidth: 112 },
   catIcon: { fontSize: 16 },
   catLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
 

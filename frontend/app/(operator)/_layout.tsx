@@ -43,6 +43,7 @@ export default function OperatorLayout() {
         <Stack.Screen name="reception" />
         <Stack.Screen name="groupage" />
         <Stack.Screen name="cloture" />
+        <Stack.Screen name="service-requests" />
       </Stack>
 
       {showFab && (

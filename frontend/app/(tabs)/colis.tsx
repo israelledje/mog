@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, RefreshControl, ScrollView } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Search, Package, Plus, QrCode, Plane, Ship, Activity } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import ColisCard from '../../src/components/ColisCard';
 import SkeletonCard from '../../src/components/SkeletonCard';
 import { useColisStore } from '../../src/store/colisStore';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
+import { FilterChips } from '../../src/components/ui/HorizontalChips';
 
 const FILTERS: { key: string; statuses: string[] }[] = [
   { key: 'all', statuses: [] },
@@ -113,43 +114,40 @@ export default function ColisListScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {/* Quick Transport Filters */}
-        <TouchableOpacity
-          onPress={() => { Haptics.selectionAsync(); setTransportFilter(transportFilter === 'air' ? 'all' : 'air'); }}
-          style={[styles.chip, transportFilter === 'air' && styles.chipActive]}
-        >
-          <Plane size={14} color={transportFilter === 'air' ? '#fff' : colors.text} style={{ marginRight: 6 }} />
-          <Text style={[styles.chipText, transportFilter === 'air' && styles.chipTextActive]}>Aérien</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => { Haptics.selectionAsync(); setTransportFilter(transportFilter === 'sea' ? 'all' : 'sea'); }}
-          style={[styles.chip, transportFilter === 'sea' && { backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' }]}
-        >
-          <Ship size={14} color={transportFilter === 'sea' ? '#fff' : colors.text} style={{ marginRight: 6 }} />
-          <Text style={[styles.chipText, transportFilter === 'sea' && styles.chipTextActive]}>Maritime</Text>
-        </TouchableOpacity>
-        
-        <View style={styles.chipDivider} />
-
-        {/* Status Filters */}
-        {FILTERS.map((f) => {
-          const active = filter === f.key;
-          return (
-            <TouchableOpacity
-              key={f.key}
-              onPress={() => { Haptics.selectionAsync(); setFilter(f.key); }}
-              style={[styles.chip, active && styles.chipActive]}
-              testID={`filter-${f.key}`}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {f.key === 'all' ? t('package.all') : t(`status.${f.key}`)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <FilterChips
+        items={[
+          {
+            key: 'transport:air',
+            label: 'Aérien',
+            activeColor: colors.primary,
+            icon: <Plane size={14} color={transportFilter === 'air' ? '#fff' : colors.text} />,
+          },
+          {
+            key: 'transport:sea',
+            label: 'Maritime',
+            activeColor: '#0EA5E9',
+            icon: <Ship size={14} color={transportFilter === 'sea' ? '#fff' : colors.text} />,
+          },
+          ...FILTERS.map((f) => ({
+            key: `status:${f.key}`,
+            label: f.key === 'all' ? t('package.all') : t(`status.${f.key}`),
+            activeColor: colors.primary,
+          })),
+        ]}
+        activeKeys={[
+          ...(transportFilter !== 'all' ? [`transport:${transportFilter}`] : []),
+          `status:${filter}`,
+        ]}
+        onSelect={(key) => {
+          Haptics.selectionAsync();
+          if (key.startsWith('transport:')) {
+            const mode = key.replace('transport:', '') as 'air' | 'sea';
+            setTransportFilter((prev) => (prev === mode ? 'all' : mode));
+            return;
+          }
+          setFilter(key.replace('status:', ''));
+        }}
+      />
 
       {loading && filtered.length === 0 ? (
         <View style={styles.list}>
@@ -214,15 +212,8 @@ const styles = StyleSheet.create({
   },
   search: { flex: 1, fontSize: 15, color: colors.text, marginLeft: spacing.sm },
   scanBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(42, 29, 229, 0.1)', alignItems: 'center', justifyContent: 'center' },
-  
-  chips: { gap: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, alignItems: 'center' },
-  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  chipDivider: { width: 1, height: 20, backgroundColor: colors.border, marginHorizontal: 4 },
 
-  list: { padding: spacing.lg, paddingTop: 0, paddingBottom: 100 }, // extra padding for FAB
+  list: { padding: spacing.lg, paddingTop: spacing.md, paddingBottom: 100 }, // extra padding for FAB
   empty: { padding: spacing.xxl, alignItems: 'center', gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginTop: 12 },
   emptySub: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },

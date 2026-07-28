@@ -101,6 +101,8 @@ app.include_router(billing_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
 app.include_router(whatsapp_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
+from app.features.services.router import router as services_router
+app.include_router(services_router, prefix="/api")
 app.include_router(notifs_router)
 
 # Serve Uploads (volume persistant Docker : /app/uploads)

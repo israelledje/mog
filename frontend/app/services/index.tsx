@@ -3,19 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import {
-  ChevronLeft, Headphones, Plane, GraduationCap, Hotel, Languages, Car, ChevronRight,
-} from 'lucide-react-native';
-import { colors, radii, spacing, shadow } from '../../src/constants/theme';
-
-const SERVICES = [
-  { href: '/services/assistance', title: 'Assistance client pendant le séjour', Icon: Headphones, color: '#2563EB' },
-  { href: '/services/airport', title: "Accueil à l'aéroport", Icon: Plane, color: '#0EA5E9' },
-  { href: '/services/student', title: 'Inscription étudiant', Icon: GraduationCap, color: '#7C3AED' },
-  { href: '/services/hotel', title: "Réservation d'hôtel", Icon: Hotel, color: '#D97706' },
-  { href: '/services/translator', title: 'Traducteur', Icon: Languages, color: '#059669' },
-  { href: '/services/vehicles', title: 'Achat & expédition de véhicules', Icon: Car, color: '#DC2626' },
-];
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { SERVICES } from '../../src/constants/services';
+import { colors, spacing, shadow } from '../../src/constants/theme';
 
 export default function ServicesHubScreen() {
   const router = useRouter();
@@ -33,40 +23,54 @@ export default function ServicesHubScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.intro}>
           {t('services.intro', {
-            defaultValue: 'M.O.G Group Multiservice — accompagnement logistique et services sur mesure Chine ↔ Afrique.',
+            defaultValue: 'Choisissez un service et remplissez le formulaire. Un opérateur M.O.G vous rappellera avec les informations déjà collectées.',
           })}
         </Text>
-        {SERVICES.map((s) => (
-          <TouchableOpacity key={s.href} style={styles.row} onPress={() => router.push(s.href as any)}>
-            <View style={[styles.icon, { backgroundColor: `${s.color}18` }]}>
-              <s.Icon size={22} color={s.color} />
-            </View>
-            <Text style={styles.rowTitle}>{s.title}</Text>
-            <ChevronRight size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-        ))}
+
+        <View style={styles.grid}>
+          {SERVICES.map((s) => (
+            <TouchableOpacity
+              key={s.slug}
+              style={styles.card}
+              activeOpacity={0.88}
+              onPress={() => router.push(s.href as any)}
+            >
+              <View style={[styles.icon, { backgroundColor: `${s.color}18` }]}>
+                <s.Icon size={22} color={s.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{s.title}</Text>
+                <Text style={styles.rowSub}>{s.subtitle}</Text>
+              </View>
+              <ChevronRight size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FB' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.borderLight },
   back: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: colors.text },
   scroll: { padding: spacing.lg },
   intro: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: spacing.lg },
-  row: {
+  grid: { gap: 10 },
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 10,
     gap: 12,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
     ...shadow.sm,
   },
-  icon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  rowTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
+  icon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  rowTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
+  rowSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });

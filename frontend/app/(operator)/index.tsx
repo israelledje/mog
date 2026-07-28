@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box } from 'lucide-react-native';
+import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -175,6 +175,14 @@ export default function OperatorDashboard() {
         <TouchableOpacity style={[styles.subAction, { marginBottom: spacing.lg }]} onPress={goCloture}>
           <Lock size={24} color={isAdmin ? colors.danger : colors.textSecondary} />
           <Text style={styles.subActionTitle}>{t('operator.close_pl')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.subAction, { marginBottom: spacing.lg, borderColor: colors.primary }]}
+          onPress={() => router.push('/(operator)/service-requests')}
+        >
+          <Headphones size={24} color={colors.primary} />
+          <Text style={styles.subActionTitle}>Demandes services clients</Text>
         </TouchableOpacity>
 
         <View style={styles.statsCard}>
