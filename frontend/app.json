@@ -1,26 +1,30 @@
 {
   "expo": {
-    "name": "MOG Group",
+    "name": "MOG Group Multiservice",
     "slug": "mog",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/logo_MOG.png",
-    "scheme": "frontend",
+    "icon": "./assets/MOG.png",
+    "scheme": "mog",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.cargoline.app",
+      "buildNumber": "2",
       "infoPlist": {
+        "CFBundleDisplayName": "MOG Group Multiservice",
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",
         "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à la galerie pour vous permettre d'uploader vos preuves de paiement.",
+        "NSFaceIDUsageDescription": "L'application utilise Face ID pour vous permettre de vous connecter rapidement et en toute sécurité.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.cargoline.app",
+      "label": "MOG Group Multiservice",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo_MOG.png",
+        "foregroundImage": "./assets/MOG.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
@@ -33,17 +37,36 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/logo_MOG.png"
+      "favicon": "./assets/MOG.png"
     },
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo_MOG.png",
+          "image": "./assets/MOG.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#000"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/MOG.png",
+          "color": "#3366CC"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "L'application utilise Face ID pour vous permettre de vous connecter rapidement et en toute sécurité."
         }
       ],
       "expo-localization",
@@ -52,7 +75,8 @@
       "expo-image",
       "expo-sharing",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

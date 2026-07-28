@@ -9,7 +9,7 @@ import StatusBadge from './StatusBadge';
 import { colors, radii, shadow, fonts, spacing } from '../constants/theme';
 import type { Colis } from '../types';
 
-export default function ColisCard({ item }: { item: Colis }) {
+function ColisCard({ item }: { item: Colis }) {
   const router = useRouter();
   const [thumbError, setThumbError] = useState(false);
   const Icon = item.transport_mode === 'air' ? Plane : Ship;
@@ -62,6 +62,8 @@ export default function ColisCard({ item }: { item: Colis }) {
     </TouchableOpacity>
   );
 }
+
+export default React.memo(ColisCard);
 
 const styles = StyleSheet.create({
   card: {

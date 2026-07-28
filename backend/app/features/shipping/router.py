@@ -8,6 +8,7 @@ from app.core.pdf_service import generate_invoice_pdf
 from app.core.notification_service import NotificationService
 from app.core.config import settings
 from typing import List, Optional
+from pydantic import BaseModel
 import shutil
 import os
 from app.core.deps import get_current_user, check_role
@@ -151,6 +152,70 @@ async def create_colis(
     
     package_dict["id"] = package_dict["_id"]
     return package_dict
+
+
+class ClientGroupRequest(BaseModel):
+    package_ids: List[str]
+    label: Optional[str] = None
+
+
+@router.post("/group-client")
+async def group_client_packages(
+    data: ClientGroupRequest,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_database),
+):
+    """Regroupe plusieurs colis du client en une expédition logique."""
+    if not data.package_ids or len(data.package_ids) < 2:
+        raise HTTPException(status_code=400, detail="Sélectionnez au moins 2 colis")
+
+    pkgs = []
+    async for p in db.packages.find({"_id": {"$in": data.package_ids}, "owner_id": current_user["email"]}):
+        pkgs.append(p)
+    if len(pkgs) != len(data.package_ids):
+        raise HTTPException(status_code=404, detail="Un ou plusieurs colis sont introuvables")
+
+    group_id = str(uuid.uuid4())
+    group = {
+        "_id": group_id,
+        "owner_id": current_user["email"],
+        "label": data.label or f"Expédition {datetime.now().strftime('%d/%m/%Y')}",
+        "package_ids": data.package_ids,
+        "created_at": datetime.now().isoformat(),
+        "status": "open",
+    }
+    await db.client_groups.insert_one(group)
+    await db.packages.update_many(
+        {"_id": {"$in": data.package_ids}},
+        {
+            "$set": {"client_group_id": group_id, "updated_at": datetime.now()},
+            "$push": {
+                "timeline": {
+                    "status": "grouped",
+                    "label": "Groupé pour expédition client",
+                    "timestamp": datetime.now(),
+                    "location": "",
+                }
+            },
+        },
+    )
+    group["id"] = group_id
+    group.pop("_id", None)
+    return group
+
+
+@router.get("/client-groups")
+async def list_client_groups(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_database),
+):
+    items = []
+    async for g in db.client_groups.find({"owner_id": current_user["email"]}).sort("created_at", -1):
+        g["id"] = str(g["_id"])
+        g.pop("_id", None)
+        items.append(g)
+    return items
+
 
 @router.post("/{package_id}/photos")
 async def upload_package_photo(
@@ -319,11 +384,11 @@ async def receive_package(
     if not package:
         raise HTTPException(status_code=404, detail="Colis non trouvé")
         
-    # 🛡️ Vérification stricte des 3 photos obligatoires (Epic 3)
-    if len(package.get("photos", [])) < 3:
+    # Photos de déclaration client (1–3) + audit opérateur recommandé
+    if len(package.get("photos", [])) < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Audit incomplet : au moins 3 photos sont requises avant la réception du colis."
+            detail="Aucune photo : le colis doit avoir au moins 1 photo avant réception."
         )
     
     # Calculer le poids volumétrique
@@ -423,3 +488,41 @@ async def get_package_invoice(
             "Content-Disposition": f"attachment; filename=Facture_{package.get('tracking_number', 'Colis')}.pdf"
         }
     )
+
+
+@router.post("/{package_id}/clear-customs")
+async def clear_customs(
+    package_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    """Passe le colis de 'customs' à disponible (arrived) après dédouanement."""
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+    if package.get("status") != "customs":
+        raise HTTPException(status_code=400, detail="Le colis n'est pas en douane")
+
+    mode = package.get("transport_mode", "sea")
+    location = (
+        "Entrepôt Maritime Douala"
+        if mode == "sea"
+        else "Bureau Yaoundé / Douala (fret aérien)"
+    )
+    await db.packages.update_one(
+        {"_id": package_id},
+        {
+            "$set": {"status": "arrived", "updated_at": datetime.now()},
+            "$push": {
+                "timeline": {
+                    "status": "arrived",
+                    "label": f"Disponible — {location}",
+                    "timestamp": datetime.now(),
+                    "location": location,
+                    "operator": current_user.get("email"),
+                }
+            },
+        },
+    )
+    return {"message": "Dédouanement validé", "new_status": "arrived", "location": location}
+

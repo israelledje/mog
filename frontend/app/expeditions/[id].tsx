@@ -100,8 +100,8 @@ export default function ExpeditionDetailScreen() {
             <Text style={styles.port}>{groupage.destination_port}</Text>
           </View>
           <View style={styles.datesRow}>
-            <Text style={styles.dateLabel}>DÉPART : {new Date(groupage.departure_date).toLocaleDateString()}</Text>
-            <Text style={styles.dateLabel}>ETA : {new Date(groupage.estimated_arrival).toLocaleDateString()}</Text>
+            <Text style={styles.dateLabel}>DÉPART : {groupage.departure_date ? new Date(groupage.departure_date).toLocaleDateString() : '—'}</Text>
+            <Text style={styles.dateLabel}>ETA : {groupage.estimated_arrival ? new Date(groupage.estimated_arrival).toLocaleDateString() : '—'}</Text>
           </View>
         </View>
 

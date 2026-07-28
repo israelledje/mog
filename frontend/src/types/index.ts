@@ -21,6 +21,7 @@ export interface User {
   avatar_url?: string | null;
   preferred_language?: SupportedLang;
   notification_preferences?: Record<string, boolean>;
+  loyalty_points?: number;
 }
 
 export type TransportMode = 'sea' | 'air' | 'air_express';
@@ -37,6 +38,7 @@ export type ColisStatus =
   | 'closed'
   | 'departed'
   | 'in_transit'
+  | 'customs'
   | 'arrived'
   | 'distributed'
   | 'delivered';
@@ -63,6 +65,7 @@ export interface Colis {
   supplier_name?: string | null;
   platform?: string | null;
   order_ref?: string | null;
+  supplier_tracking?: string | null;
   description: string;
   category: string;
   declared_value: number;
@@ -71,11 +74,14 @@ export interface Colis {
   delivery_address?: string | null;
   insurance_enabled: boolean;
   instructions?: string | null;
-  payment_status: 'pending' | 'waiting_validation' | 'paid' | 'rejected' | string;
+  payment_status: 'pending' | 'waiting_validation' | 'paid' | 'rejected' | 'bank_pending' | string;
+  payment_method?: string | null;
   payment_proof_url?: string | null;
   invoice_status: 'none' | 'draft' | 'final' | string;
   invoice_id?: string | null;
   photos: string[];
+  client_group_id?: string | null;
+  loyalty_points_used?: number;
   weight_real: number;
   weight_volumetric: number;
   dimensions: Dimensions;
@@ -100,6 +106,7 @@ export type GroupageStatus = 'open' | 'closed' | 'in_transit' | 'arrived' | 'dis
 
 export interface Groupage {
   id: string;
+  _id?: string;
   container_number?: string;
   mode?: TransportMode;
   transport_mode?: TransportMode;
@@ -123,6 +130,8 @@ export interface AppNotification {
   id: string;
   title?: string;
   message?: string;
+  message_key?: string;
+  tracking_number?: string;
   body?: string;
   type?: string;
   read?: boolean;

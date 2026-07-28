@@ -1,7 +1,8 @@
 {
   "cli": {
     "version": ">= 8.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local",
+    "promptToConfigurePushNotifications": false
   },
   "build": {
     "development": {
@@ -11,19 +12,53 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net",
+        "EXPO_PUBLIC_ALLOW_SCREENSHOTS": "true"
       },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net",
+        "EXPO_NO_CAPABILITY_SYNC": "1",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
+      }
+    },
+    "screenshots": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net",
+        "EXPO_PUBLIC_ALLOW_SCREENSHOTS": "true",
+        "EXPO_NO_CAPABILITY_SYNC": "1",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "philltatch@gmail.com",
+        "appleTeamId": "VAPJL3SY8L",
+        "ascApiKeyPath": "../API APPLE/AuthKey_VRSZ96RRQR.p8",
+        "ascApiKeyIssuerId": "37414abe-1d4a-47b1-8602-927b60b52736",
+        "ascApiKeyId": "VRSZ96RRQR",
+        "ascAppId": "6786317523"
+      }
+    },
+    "screenshots": {
+      "ios": {
+        "appleId": "philltatch@gmail.com",
+        "appleTeamId": "VAPJL3SY8L",
+        "ascApiKeyPath": "../API APPLE/AuthKey_VRSZ96RRQR.p8",
+        "ascApiKeyIssuerId": "37414abe-1d4a-47b1-8602-927b60b52736",
+        "ascApiKeyId": "VRSZ96RRQR",
+        "ascAppId": "6786317523"
+      }
+    }
   }
 }

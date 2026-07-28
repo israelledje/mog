@@ -45,6 +45,10 @@ dump.rdb
 # System files
 .DS_Store
 *.pem
+*.p8
+*.p12
+*.mobileprovision
+API APPLE/
 
 # Python
 __pycache__/

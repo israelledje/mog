@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { X, QrCode, RefreshCcw, ShieldCheck, Mail, Lock, KeyRound } from 'lucide-react-native';
+import { RefreshCcw, ShieldCheck, Mail, Lock, KeyRound, ScanLine } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useAuthStore } from '../../src/store/authStore';
+import QRScanner from '../../src/components/QRScanner';
 import { colors, radii, spacing, shadow } from '../../src/constants/theme';
 
 export default function OperatorLoginScreen() {
@@ -15,27 +15,23 @@ export default function OperatorLoginScreen() {
   const loginWithQR = useAuthStore((s) => s.loginWithQR);
   const loginManualOTP = useAuthStore((s) => s.loginManualOTP);
   const confirmQRLogin = useAuthStore((s) => s.confirmQRLogin);
+  const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
-  
-  const [permission, requestPermission] = useCameraPermissions();
+
   const [scanned, setScanned] = useState(false);
   const isScanningRef = useRef(false);
-  const [step, setStep] = useState<'scan' | 'manual' | 'otp'>('scan');
-  
+  const [step, setStep] = useState<'scan' | 'manual' | 'otp'>('manual');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-
-  useEffect(() => {
-    if (!permission) requestPermission();
-  }, [permission]);
 
   const resetScan = () => {
     setScanned(false);
     isScanningRef.current = false;
   };
 
-  const onBarcodeScanned = async ({ data }: { data: string }) => {
+  const onBarcodeScanned = async (data: string) => {
     if (isScanningRef.current || step !== 'scan') return;
     isScanningRef.current = true;
     setScanned(true);
@@ -45,12 +41,28 @@ export default function OperatorLoginScreen() {
       const res = await loginWithQR(data);
       setEmail(res.email);
       setStep('otp');
-      Toast.show({ type: 'info', text1: 'OTP envoyé sur WhatsApp' });
+      Toast.show({ type: 'info', text1: t('operator.otp_sent_whatsapp') });
     } catch (e: any) {
-      Alert.alert('Erreur', 'Badge invalide ou non reconnu.', [{
-        text: 'Réessayer',
+      Alert.alert(t('errors.server'), t('operator.badge_invalid'), [{
+        text: t('common.retry'),
         onPress: resetScan
       }]);
+    }
+  };
+
+  // Connexion directe email + mot de passe (sans QR ni OTP)
+  const handleDirectLogin = async () => {
+    if (!email || !password) return;
+    try {
+      const user = await login(email.trim(), password);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (user.role === 'operator' || user.role === 'admin') {
+        router.replace('/(operator)');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (e: any) {
+      Alert.alert(t('errors.server'), t('operator.access_denied'));
     }
   };
 
@@ -60,9 +72,9 @@ export default function OperatorLoginScreen() {
       const res = await loginManualOTP(email, password);
       setEmail(res.email);
       setStep('otp');
-      Toast.show({ type: 'info', text1: 'OTP envoyé sur WhatsApp' });
+      Toast.show({ type: 'info', text1: t('operator.otp_sent_whatsapp') });
     } catch (e: any) {
-      Alert.alert('Erreur', 'Identifiants incorrects ou accès refusé.');
+      Alert.alert(t('errors.server'), t('operator.access_denied'));
     }
   };
 
@@ -71,25 +83,12 @@ export default function OperatorLoginScreen() {
     try {
       await confirmQRLogin(email, otp);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({ type: 'success', text1: 'Authentification réussie' });
+      Toast.show({ type: 'success', text1: t('operator.auth_success') });
       router.replace('/(operator)');
     } catch (e: any) {
-      Alert.alert('Erreur', 'Code OTP incorrect ou expiré.');
+      Alert.alert(t('errors.server'), t('operator.otp_incorrect'));
     }
   };
-
-  if (!permission) return <View style={styles.container} />;
-
-  if (!permission.granted) {
-    return (
-      <View style={[styles.container, styles.centerContent]}>
-        <Text style={styles.message}>Nous avons besoin de la caméra pour scanner votre badge.</Text>
-        <TouchableOpacity style={styles.btn} onPress={requestPermission}>
-          <Text style={styles.btnText}>Autoriser la caméra</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   if (step === 'otp') {
     return (
@@ -119,7 +118,7 @@ export default function OperatorLoginScreen() {
             <Text style={styles.submitBtnText}>{loading ? 'Vérification...' : 'Confirmer'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); resetScan(); }}>
+          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('manual'); resetScan(); }}>
             <Text style={styles.resendText}>Annuler et recommencer</Text>
           </TouchableOpacity>
         </View>
@@ -127,120 +126,104 @@ export default function OperatorLoginScreen() {
     );
   }
 
-  if (step === 'manual') {
+  if (step === 'scan') {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, styles.centerContent]}>
-        <View style={styles.otpCard}>
-          <View style={styles.otpIcon}>
-            <KeyRound size={40} color={colors.primary} />
-          </View>
-          <Text style={styles.otpTitle}>Saisie Manuelle</Text>
-          <Text style={styles.otpDesc}>Identifiez-vous sans badge. Vous devrez tout de même confirmer par OTP WhatsApp.</Text>
-          
-          <View style={[styles.inputWrapper, { marginBottom: spacing.md }]}>
-            <Mail size={20} color={colors.textSecondary} />
-            <TextInput
-              style={styles.input}
-              placeholder="Email ou Pseudo"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
-
-          <View style={[styles.inputWrapper, { marginBottom: spacing.xl }]}>
-            <Lock size={20} color={colors.textSecondary} />
-            <TextInput
-              style={styles.input}
-              placeholder="Mot de passe"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.submitBtn, loading && { opacity: 0.7 }]} 
-            onPress={handleManualSubmit}
-            disabled={loading || !email || !password}
-          >
-            <Text style={styles.submitBtnText}>{loading ? 'Chargement...' : 'Suivant (OTP)'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.resendBtn} onPress={() => { setStep('scan'); resetScan(); }}>
-            <Text style={styles.resendText}>← Retour au Scan Badge</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+      <QRScanner
+        active={!scanned}
+        onScan={onBarcodeScanned}
+        onClose={() => { setStep('manual'); resetScan(); }}
+        hint="Scannez le code QR de votre badge opérateur"
+        barcodeTypes={['qr']}
+        footer={
+          scanned ? (
+            <View style={{ alignItems: 'center', marginTop: 8 }}>
+              <RefreshCcw size={26} color={colors.accent} />
+              <Text style={{ color: colors.accent, marginTop: 8, fontWeight: '700' }}>Envoi de l'OTP WhatsApp...</Text>
+            </View>
+          ) : null
+        }
+      />
     );
   }
 
+  // Écran principal : connexion opérateur par email + mot de passe
   return (
-    <View style={styles.container}>
-      <CameraView
-        style={StyleSheet.absoluteFillObject}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : onBarcodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ['qr'],
-        }}
-      />
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, styles.centerContent]}>
+      <View style={styles.otpCard}>
+        <View style={styles.otpIcon}>
+          <KeyRound size={40} color={colors.primary} />
+        </View>
+        <Text style={styles.otpTitle}>Connexion Opérateur</Text>
+        <Text style={styles.otpDesc}>Identifiez-vous avec votre email et mot de passe professionnels.</Text>
 
-      <View style={[styles.overlay, { zIndex: 10 }]}>
-        <TouchableOpacity style={styles.close} onPress={() => router.back()}>
-          <X size={28} color="#fff" />
+        <View style={[styles.inputWrapper, { marginBottom: spacing.md }]}>
+          <Mail size={20} color={colors.textSecondary} />
+          <TextInput
+            style={styles.input}
+            placeholder={t('operator.pro_email')}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
+
+        <View style={[styles.inputWrapper, { marginBottom: spacing.xl }]}>
+          <Lock size={20} color={colors.textSecondary} />
+          <TextInput
+            style={styles.input}
+            placeholder={t('auth.password')}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.submitBtn, loading && { opacity: 0.7 }]}
+          onPress={handleDirectLogin}
+          disabled={loading || !email || !password}
+        >
+          <Text style={styles.submitBtnText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
         </TouchableOpacity>
 
-        <View style={styles.scanArea}>
-          <View style={styles.cornerTopLeft} />
-          <View style={styles.cornerTopRight} />
-          <View style={styles.cornerBottomLeft} />
-          <View style={styles.cornerBottomRight} />
+        <TouchableOpacity style={styles.secondaryLink} onPress={handleManualSubmit} disabled={loading || !email || !password}>
+          <Text style={styles.secondaryLinkText}>Connexion sécurisée avec code OTP WhatsApp</Text>
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>OU</Text>
+          <View style={styles.divider} />
         </View>
 
-        <View style={styles.footer}>
-          {scanned ? (
-            <View style={{ alignItems: 'center' }}>
-              <RefreshCcw size={32} color={colors.accent} />
-              <Text style={[styles.hint, { color: colors.accent, marginTop: 10 }]}>Envoi de l'OTP WhatsApp...</Text>
-            </View>
-          ) : (
-            <>
-              <QrCode size={32} color="#fff" strokeWidth={1.5} />
-              <Text style={styles.hint}>Scannez le code QR de votre badge opérateur</Text>
-              
-              <TouchableOpacity style={styles.manualBtn} onPress={() => { setStep('manual'); resetScan(); }}>
-                <Text style={styles.manualBtnText}>Je n'ai pas mon badge (Saisie manuelle)</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+        <TouchableOpacity style={styles.badgeBtn} onPress={() => { setStep('scan'); resetScan(); }}>
+          <ScanLine size={20} color={colors.primary} />
+          <Text style={styles.badgeBtnText}>Scanner mon badge QR</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.resendBtn} onPress={() => router.back()}>
+          <Text style={styles.resendText}>← Retour</Text>
+        </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  centerContent: { justifyContent: 'center', alignItems: 'center' },
-  message: { color: '#fff', textAlign: 'center', marginBottom: spacing.lg, paddingHorizontal: spacing.xl },
-  btn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: radii.button },
-  btnText: { color: '#fff', fontWeight: '700' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  close: { position: 'absolute', top: 60, right: 20, padding: 8 },
-  scanArea: { width: 250, height: 250, position: 'relative', backgroundColor: 'transparent' },
-  cornerTopLeft: { position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderTopWidth: 4, borderLeftWidth: 4, borderColor: colors.accent },
-  cornerTopRight: { position: 'absolute', top: 0, right: 0, width: 40, height: 40, borderTopWidth: 4, borderRightWidth: 4, borderColor: colors.accent },
-  cornerBottomLeft: { position: 'absolute', bottom: 0, left: 0, width: 40, height: 40, borderBottomWidth: 4, borderLeftWidth: 4, borderColor: colors.accent },
-  cornerBottomRight: { position: 'absolute', bottom: 0, right: 0, width: 40, height: 40, borderBottomWidth: 4, borderRightWidth: 4, borderColor: colors.accent },
-  footer: { position: 'absolute', bottom: 60, alignItems: 'center', gap: spacing.md, width: '100%' },
-  hint: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', paddingHorizontal: spacing.xl },
-  manualBtn: { marginTop: spacing.xl, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: radii.button, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  manualBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  
-  otpCard: { backgroundColor: '#fff', width: '85%', borderRadius: radii.card, padding: spacing.xl, alignItems: 'center', ...shadow.floating },
+  container: { flex: 1, backgroundColor: colors.background },
+  centerContent: { justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  secondaryLink: { marginTop: spacing.md, alignItems: 'center' },
+  secondaryLinkText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.lg, width: '100%' },
+  divider: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { fontSize: 12, color: colors.textSecondary, fontWeight: '700' },
+  badgeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, width: '100%', paddingVertical: 14, borderRadius: radii.button, borderWidth: 2, borderColor: colors.primary },
+  badgeBtnText: { color: colors.primary, fontWeight: '700', fontSize: 15 },
+
+  otpCard: { backgroundColor: '#fff', width: '90%', borderRadius: radii.card, padding: spacing.xl, alignItems: 'center', ...shadow.floating },
   otpIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: `${colors.primary}10`, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   otpTitle: { fontSize: 22, fontWeight: '800', color: colors.text, marginBottom: 8 },
   otpDesc: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl },

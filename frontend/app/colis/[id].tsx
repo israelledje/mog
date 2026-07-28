@@ -111,7 +111,7 @@ export default function ColisDetailScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="colis-detail-screen">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} testID="detail-back"><ChevronLeft size={26} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} testID="detail-back" accessibilityRole="button" accessibilityLabel={t('common.back')}><ChevronLeft size={26} color={colors.text} /></TouchableOpacity>
         <Text style={styles.headerTitle}>{t('package.title')}</Text>
         <View style={{ width: 26 }} />
       </View>
@@ -122,7 +122,7 @@ export default function ColisDetailScreen() {
         <View style={[styles.card, { marginTop: spacing.lg }]}>
           <View style={styles.trackRow}>
             <Text style={styles.tracking} selectable testID="detail-tracking">{colis.tracking_number}</Text>
-            <TouchableOpacity onPress={onCopyTracking} onLongPress={onCopyTracking} style={styles.copyBtn} testID="detail-copy">
+            <TouchableOpacity onPress={onCopyTracking} onLongPress={onCopyTracking} style={styles.copyBtn} testID="detail-copy" accessibilityRole="button" accessibilityLabel={t('package.copy_tracking')}>
               <Copy size={16} color={colors.primary} />
             </TouchableOpacity>
           </View>
@@ -171,6 +171,14 @@ export default function ColisDetailScreen() {
         />
 
         <View style={styles.actions}>
+          {colis.total_price > 0 && colis.payment_status !== 'paid' && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.accent }]}
+              onPress={() => router.push({ pathname: '/colis/paiement', params: { id: colis.id } })}
+            >
+              <Text style={[styles.actionText, { color: colors.accent }]}>Payer (OM / MoMo / Virement)</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity 
             style={[styles.actionBtn, (colis.status === 'pending_reception' || colis.invoice_status === 'none') && styles.actionBtnDisabled]} 

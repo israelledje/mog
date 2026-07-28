@@ -41,6 +41,7 @@ export default function NewColisScreen() {
     supplier_name: '',
     platform: 'Alibaba',
     order_ref: '',
+    supplier_tracking: '',
     description: '',
     category: 'electronics',
     declared_value: '',
@@ -55,6 +56,10 @@ export default function NewColisScreen() {
   const update = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
   const onPickImage = async () => {
+    if (photos.length >= 3) {
+      Toast.show({ type: 'error', text1: t('form.photos_max3', { defaultValue: 'Maximum 3 photos' }) });
+      return;
+    }
     Haptics.selectionAsync();
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -73,7 +78,7 @@ export default function NewColisScreen() {
       const data = asset.base64
         ? `data:image/jpeg;base64,${asset.base64}`
         : asset.uri;
-      setPhotos((p) => [...p, data].slice(0, 5));
+      setPhotos((p) => [...p, data].slice(0, 3));
     } catch (e: any) {
       Toast.show({ type: 'error', text1: t('errors.upload_failed') });
     }
@@ -86,8 +91,15 @@ export default function NewColisScreen() {
 
   const validateStep = (): boolean => {
     if (step === 0) {
-      if (!form.supplier_name || !form.description) {
+      if (!form.supplier_name || !form.description || !form.supplier_tracking.trim()) {
         Toast.show({ type: 'error', text1: t('errors.required') });
+        return false;
+      }
+      if (photos.length < 1) {
+        Toast.show({
+          type: 'error',
+          text1: t('form.photos_required', { defaultValue: 'Ajoutez 1 à 3 photos du colis' }),
+        });
         return false;
       }
     }
@@ -209,6 +221,34 @@ export default function NewColisScreen() {
               <FieldLabel label={t('form.order_ref')} />
               <TextInput style={styles.input} value={form.order_ref} onChangeText={(v) => update('order_ref', v)} />
 
+              <FieldLabel label={t('form.supplier_tracking', { defaultValue: 'Tracking fournisseur' })} required />
+              <TextInput
+                style={styles.input}
+                value={form.supplier_tracking}
+                onChangeText={(v) => update('supplier_tracking', v)}
+                placeholder={t('form.supplier_tracking_ph', { defaultValue: 'N° de suivi donné par le fournisseur' })}
+                placeholderTextColor={colors.textSecondary}
+                testID="step1-supplier-tracking"
+              />
+
+              <FieldLabel label={t('form.photos', { defaultValue: 'Photos du colis (1 à 3)' })} required />
+              <View style={styles.photoRow}>
+                {photos.map((uri, idx) => (
+                  <View key={idx} style={styles.photoThumbWrap}>
+                    <Image source={{ uri }} style={styles.photoThumb} />
+                    <TouchableOpacity style={styles.photoRemove} onPress={() => onRemovePhoto(idx)}>
+                      <X size={10} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                {photos.length < 3 && (
+                  <TouchableOpacity style={styles.photoAdd} onPress={onPickImage} testID="step1-add-photo">
+                    <Text style={styles.photoAddText}>+</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={styles.instr}>{t('form.photos_hint', { defaultValue: `${photos.length}/3 photos — obligatoires pour la déclaration` })}</Text>
+
               <FieldLabel label={t('form.description')} required />
               <TextInput style={[styles.input, { height: 80 }]} multiline value={form.description} onChangeText={(v) => update('description', v)} testID="step1-description" />
 
@@ -277,12 +317,21 @@ export default function NewColisScreen() {
             <View style={styles.card}>
               <Text style={styles.recap}>{t('form.recap')}</Text>
               <RecapRow label={t('form.supplier_name')} value={form.supplier_name} />
+              <RecapRow label={t('form.supplier_tracking', { defaultValue: 'Tracking fournisseur' })} value={form.supplier_tracking} />
               <RecapRow label={t('form.platform')} value={form.platform} />
               <RecapRow label={t('form.description')} value={form.description} />
+              <RecapRow label={t('form.photos', { defaultValue: 'Photos' })} value={`${photos.length} photo(s)`} />
               <RecapRow label={t('form.category')} value={t(`categories.${form.category}`)} />
               <RecapRow label={t('form.declared_value')} value={`${form.declared_value || 0} ${form.currency}`} />
               <RecapRow label={t('form.transport_mode')} value={t(`transport.${form.transport_mode}`)} />
               <RecapRow label={t('form.insurance')} value={form.insurance_enabled ? t('common.yes') : t('common.no')} />
+              {photos.length > 0 && (
+                <View style={[styles.photoRow, { marginTop: spacing.md }]}>
+                  {photos.map((uri, idx) => (
+                    <Image key={idx} source={{ uri }} style={styles.photoThumb} />
+                  ))}
+                </View>
+              )}
               <Text style={[styles.instr, { marginTop: spacing.md }]}>{t('form.instruction_message')}</Text>
             </View>
           )}

@@ -4,30 +4,33 @@ import Constants from 'expo-constants';
 
 let cachedToken: string | null = null;
 
+/** Expo Go (SDK 53+) : les push distants sont retirés — ne jamais importer expo-notifications. */
+function isExpoGo(): boolean {
+  return Constants.executionEnvironment === 'storeClient';
+}
+
 /**
  * Cross-platform push notifications setup.
- * - On native (iOS/Android): requests permission, gets Expo push token, registers with backend.
- * - On web or Expo Go: gracefully no-ops (Expo Go SDK 53+ doesn't support remote pushes).
+ * - On native (iOS/Android) en build natif : permission + token Expo + enregistrement backend.
+ * - Sur web ou Expo Go : no-op (évite l'erreur fatale d'import d'expo-notifications).
  */
 export async function registerForPushNotifications(): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
-  
-  // 🚀 CRITICAL: Detect Expo Go or missing Project ID
-  // SDK 53+ removed remote notifications from Expo Go.
-  const isExpoGo = Constants.executionEnvironment === 'storeClient'; 
-  
+  if (Platform.OS === 'web' || isExpoGo()) {
+    if (__DEV__ && isExpoGo()) {
+      console.log('Push notifications skipped: not supported in Expo Go (SDK 53+)');
+    }
+    return null;
+  }
+
   const projectId =
     Constants?.expoConfig?.extra?.eas?.projectId ??
     (Constants as any)?.easConfig?.projectId ??
     undefined;
 
-  if (isExpoGo) {
-    console.log("Push notifications skipped: Not supported in Expo Go (SDK 53+)");
-    return null;
-  }
-
   if (!projectId) {
-    console.warn("Push notifications skipped: No EAS projectId found in app.json. Run 'eas project:init' or add it manually.");
+    console.warn(
+      "Push notifications skipped: No EAS projectId found in app.json. Run 'eas project:init' or add it manually.",
+    );
     return null;
   }
 
@@ -36,7 +39,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
     if (cachedToken) return cachedToken;
 
-    // Configure default behavior when notification arrives in foreground
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
@@ -46,7 +48,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
       }),
     });
 
-    // Android requires a channel for notifications to be displayed
     if (Platform.OS === 'android') {
       try {
         await Notifications.setNotificationChannelAsync('default', {
@@ -58,7 +59,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
       } catch {}
     }
 
-    // Permission flow
     const existing = await Notifications.getPermissionsAsync();
     let status = existing.status;
     if (status !== 'granted') {
@@ -71,11 +71,9 @@ export async function registerForPushNotifications(): Promise<string | null> {
     const token = tokenResp.data;
     cachedToken = token;
 
-    // Register with backend
     try {
       await api.post('/auth/push-token', { token, platform: Platform.OS });
     } catch (e) {
-      // Non-fatal
       console.warn('push-token register failed', e);
     }
     return token;
@@ -86,7 +84,7 @@ export async function registerForPushNotifications(): Promise<string | null> {
 }
 
 export async function setupNotificationTapHandler(onTap: (data: any) => void) {
-  if (Platform.OS === 'web') return () => {};
+  if (Platform.OS === 'web' || isExpoGo()) return () => {};
   try {
     const Notifications = await import('expo-notifications');
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -96,5 +94,19 @@ export async function setupNotificationTapHandler(onTap: (data: any) => void) {
     return () => sub.remove();
   } catch {
     return () => {};
+  }
+}
+
+/**
+ * Données de la notification ayant lancé l'app (cold start), ou null.
+ */
+export async function getInitialNotificationData(): Promise<any | null> {
+  if (Platform.OS === 'web' || isExpoGo()) return null;
+  try {
+    const Notifications = await import('expo-notifications');
+    const response = await Notifications.getLastNotificationResponseAsync();
+    return response?.notification?.request?.content?.data ?? null;
+  } catch {
+    return null;
   }
 }

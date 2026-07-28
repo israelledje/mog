@@ -13,6 +13,7 @@ class PackageBase(BaseModel):
     supplier_name: Optional[str] = None
     platform: Optional[str] = "Other"
     order_ref: Optional[str] = None
+    supplier_tracking: Optional[str] = None  # Tracking fournisseur (obligatoire à la déclaration)
     description: str
     category: str = "other"
     declared_value: float = 0.0
@@ -21,11 +22,14 @@ class PackageBase(BaseModel):
     delivery_address: Optional[str] = None
     insurance_enabled: bool = False
     instructions: Optional[str] = None
-    payment_status: str = "pending" # pending, waiting_validation, paid, rejected
+    payment_status: str = "pending" # pending, waiting_validation, paid, rejected, bank_pending
+    payment_method: Optional[str] = None  # om, momo, bank, points
     payment_proof_url: Optional[str] = None
     invoice_status: str = "none" # none, draft, final
     invoice_id: Optional[str] = None
     photos: List[str] = Field(default_factory=list)
+    client_group_id: Optional[str] = None  # Groupement client d'expédition
+    loyalty_points_used: int = 0
     
     # Keeping some logistics fields for operators
     weight_real: float = 0.0
@@ -44,9 +48,26 @@ class PackageBase(BaseModel):
         except (TypeError, ValueError):
             return 0.0
 
+
 class PackageCreate(PackageBase):
     owner_id: Optional[str] = None
     tracking_number: Optional[str] = None
+
+    @field_validator("supplier_tracking")
+    @classmethod
+    def require_supplier_tracking(cls, v):
+        if not v or not str(v).strip():
+            raise ValueError("Le tracking number fournisseur est obligatoire")
+        return str(v).strip()
+
+    @field_validator("photos")
+    @classmethod
+    def require_photos(cls, v):
+        if not v or len(v) < 1:
+            raise ValueError("Au moins 1 photo du colis est obligatoire")
+        if len(v) > 3:
+            raise ValueError("Maximum 3 photos autorisées à la déclaration")
+        return v
 
 class PackageUpdate(BaseModel):
     status: Optional[str] = None

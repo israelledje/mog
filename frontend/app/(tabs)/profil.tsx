@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
 import LanguageSelector from '../../src/components/LanguageSelector';
@@ -258,10 +259,17 @@ export default function ProfileScreen() {
             />
           </Section>
 
-          <TouchableOpacity style={styles.logout} onPress={onLogout} testID="profile-logout" activeOpacity={0.7}>
+          <TouchableOpacity style={styles.logout} onPress={onLogout} testID="profile-logout" activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('profile.logout')}>
             <LogOut size={20} color={colors.danger} />
             <Text style={styles.logoutText}>{t('profile.logout')}</Text>
           </TouchableOpacity>
+
+          <Text style={styles.versionText}>
+            {t('profile.version', {
+              version: Constants.expoConfig?.version || '1.0.0',
+              build: Constants.nativeBuildVersion || '—',
+            })}
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -277,9 +285,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function ItemRow({ icon, label, value, onPress }: { icon: React.ReactNode; label: string; value?: string; onPress: () => void }) {
+function ItemRow({ icon, label, value, onPress, testID }: { icon: React.ReactNode; label: string; value?: string; onPress: () => void; testID?: string }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6} testID={testID}>
       <View style={styles.rowLeft}>
         {icon}
         <Text style={styles.rowText}>{label}</Text>
@@ -413,4 +421,5 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.borderLight, marginLeft: 50 },
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: spacing.lg, backgroundColor: '#fff', borderRadius: radii.card, marginTop: spacing.sm, ...shadow.card },
   logoutText: { color: colors.danger, fontWeight: '700', fontSize: 16 },
+  versionText: { textAlign: 'center', color: colors.textSecondary, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.lg },
 });

@@ -36,9 +36,9 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="notifications-screen">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} testID="notif-back"><ChevronLeft size={26} color={colors.text} /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} testID="notif-back" accessibilityRole="button" accessibilityLabel={t('common.back')}><ChevronLeft size={26} color={colors.text} /></TouchableOpacity>
         <Text style={styles.title}>{t('notifications.title')}</Text>
-        <TouchableOpacity onPress={onMarkAll} testID="notif-mark-all">
+        <TouchableOpacity onPress={onMarkAll} testID="notif-mark-all" accessibilityRole="button" accessibilityLabel={t('notifications.mark_all_read')}>
           <CheckCheck size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
@@ -55,9 +55,11 @@ export default function NotificationsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.message, !item.read && styles.messageUnread]} numberOfLines={2}>
-                {t(item.message_key, { ref: item.tracking_number })}
+                {item.message_key
+                  ? t(item.message_key, { ref: item.tracking_number })
+                  : (item.message || item.body || item.title || '')}
               </Text>
-              <Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>
+              <Text style={styles.time}>{new Date(item.created_at || Date.now()).toLocaleString()}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -72,7 +74,8 @@ export default function NotificationsScreen() {
   );
 }
 
-function getIconBg(type: string) {
+function getIconBg(type?: string) {
+  if (!type) return colors.primary;
   const map: Record<string, string> = {
     received: '#1D4ED8', quoted: '#C2410C', grouped: '#4338CA',
     departed: '#3366CC', arrived: '#15803D', delivered: '#009933',

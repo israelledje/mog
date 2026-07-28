@@ -162,6 +162,10 @@ export default function ColisListScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <ColisCard item={item} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews
           ListEmptyComponent={
             <View style={styles.empty}>
               <Package size={64} color={colors.textSecondary} strokeWidth={1.2} />
@@ -173,6 +177,13 @@ export default function ColisListScreen() {
       )}
 
       {/* FAB - Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { bottom: 88, backgroundColor: colors.secondary }]}
+        activeOpacity={0.8}
+        onPress={() => { Haptics.selectionAsync(); router.push('/colis/grouper'); }}
+      >
+        <Activity size={24} color="#fff" strokeWidth={2.5} />
+      </TouchableOpacity>
       <TouchableOpacity 
         style={styles.fab}
         activeOpacity={0.8}

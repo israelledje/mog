@@ -41,7 +41,7 @@ export default function GroupageScreen() {
       setRecentColis(assignable);
       setContainers(allContainers.filter(c => c.status === 'open'));
     } catch {
-      Alert.alert('Erreur', 'Impossible de charger les données');
+      Alert.alert(t('errors.server'), t('operator.load_error'));
     } finally {
       setLoadingRecent(false);
     }
@@ -63,15 +63,15 @@ export default function GroupageScreen() {
       const match = res.find(c => !c.container_id) || res[0];
       if (match) {
         if (match.container_id) {
-          Alert.alert('Déjà groupé', 'Ce colis est déjà affecté à un conteneur.');
+          Alert.alert(t('operator.already_grouped'), t('operator.already_grouped_msg'));
           return;
         }
         selectColis(match);
       } else {
-        Alert.alert('Non trouvé', 'Aucun colis avec ce numéro.');
+        Alert.alert(t('operator.not_found'), t('operator.no_colis_found'));
       }
     } catch {
-      Alert.alert('Erreur', 'Recherche impossible');
+      Alert.alert(t('errors.server'), t('operator.search_impossible'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export default function GroupageScreen() {
     const cid = containerId(container);
     const pkgId = colisIdOf(selectedColis);
     if (!cid || !pkgId) {
-      Alert.alert('Erreur', 'Identifiant manquant');
+      Alert.alert(t('errors.server'), t('operator.missing_id'));
       return;
     }
 
@@ -103,8 +103,8 @@ export default function GroupageScreen() {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Alert.alert('OK', t('operator.groupage_success'), [{ text: 'OK', onPress: () => router.back() }]);
             } catch (e: any) {
-              const msg = e?.response?.data?.detail || e?.message || 'Affectation échouée';
-              Alert.alert('Erreur', String(msg));
+              const msg = e?.response?.data?.detail || e?.message || t('operator.save_failed');
+              Alert.alert(t('errors.server'), String(msg));
             } finally {
               setAssigning(null);
             }

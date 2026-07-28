@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Check, Clock, Package, Truck, MapPin, CheckCircle2 } from 'lucide-react-native';
+import { Check, Clock, Package, Truck, MapPin, CheckCircle2, FileCheck } from 'lucide-react-native';
 import { colors, fonts, spacing } from '../constants/theme';
 import type { TimelineStep } from '../types';
 
@@ -14,6 +14,7 @@ const STEP_ICONS: Record<string, any> = {
   loading: Package,
   departed: Truck,
   in_transit: MapPin,
+  customs: FileCheck,
   arrived: MapPin,
   distributed: MapPin,
   delivered: CheckCircle2,
@@ -24,9 +25,10 @@ const FULL_STEPS = [
   'received',
   'loaded',
   'in_transit',
+  'customs',
   'arrived',
   'distributed',
-  'delivered'
+  'delivered',
 ];
 
 export default function Timeline({ steps, currentStatus }: { steps: TimelineStep[], currentStatus?: string }) {

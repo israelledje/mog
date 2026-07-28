@@ -38,7 +38,7 @@ export default function ClotureScreen() {
       const data = await groupagesApi.list();
       setContainers(data.filter(c => c.status === 'open'));
     } catch {
-      Alert.alert('Erreur', 'Impossible de charger les conteneurs.');
+      Alert.alert(t('errors.server'), t('operator.containers_load_error'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export default function ClotureScreen() {
       setOtpSent(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert('Erreur', 'Envoi OTP échoué');
+      Alert.alert(t('errors.server'), t('operator.otp_send_error'));
     } finally {
       setClosing(null);
     }
@@ -74,11 +74,11 @@ export default function ClotureScreen() {
     try {
       await groupagesApi.confirmClose(otpModal.id, otpCode);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Succès', t('operator.close_success'));
+      Alert.alert(t('operator.success'), t('operator.close_success'));
       setOtpModal(null);
       fetchContainers();
     } catch {
-      Alert.alert('Erreur', 'Code OTP incorrect ou expiré');
+      Alert.alert(t('errors.server'), t('operator.otp_incorrect'));
     } finally {
       setClosing(null);
     }

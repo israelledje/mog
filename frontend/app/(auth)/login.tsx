@@ -3,25 +3,39 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Link } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { useForm, Controller } from 'react-hook-form';
+import { z } from 'zod';
 import { Mail, Lock, Ship, Fingerprint } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import LanguageSelector from '../../src/components/LanguageSelector';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatErr } from '../../src/api/client';
+import { zodResolver } from '../../src/utils/zodResolver';
 import { biometricService } from '../../src/api/biometrics';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 import { saveTokens } from '../../src/api/client';
+
+type LoginForm = { email: string; password: string };
 
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
-  const [email, setEmail] = useState('jean@mog.cm');
-  const [password, setPassword] = useState('demo123');
   const [error, setError] = useState<string | null>(null);
   const [bioEnabled, setBioEnabled] = useState(false);
+
+  const schema = z.object({
+    email: z.string().min(1, t('errors.required')).email(t('errors.invalid_email')),
+    password: z.string().min(6, t('errors.password_min')),
+  });
+
+  const { control, handleSubmit, formState: { errors } } = useForm<LoginForm>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: '', password: '' },
+    mode: 'onTouched',
+  });
 
   React.useEffect(() => {
     (async () => {
@@ -44,9 +58,14 @@ export default function LoginScreen() {
         await saveTokens('', refreshToken);
         await useAuthStore.getState().bootstrap();
         
-        if (useAuthStore.getState().user) {
+        const authedUser = useAuthStore.getState().user;
+        if (authedUser) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.replace('/(tabs)');
+          if (authedUser.role === 'operator' || authedUser.role === 'admin') {
+            router.replace('/(operator)');
+          } else {
+            router.replace('/(tabs)');
+          }
         } else {
           Toast.show({ type: 'error', text1: 'Session biométrique expirée, veuillez vous reconnecter.' });
         }
@@ -56,24 +75,24 @@ export default function LoginScreen() {
     }
   };
 
-  const onSubmit = async () => {
+  const onSubmit = handleSubmit(async ({ email, password }) => {
     Keyboard.dismiss();
     setError(null);
-    if (!email || !password) {
-      setError(t('errors.required'));
-      return;
-    }
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await login(email.trim(), password);
+      const user = await login(email.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/(tabs)');
+      if (user.role === 'operator' || user.role === 'admin') {
+        router.replace('/(operator)');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (e: any) {
       const msg = formatErr(e, t('errors.invalid_credentials'));
       setError(msg.includes('Invalid') ? t('errors.invalid_credentials') : msg);
       Toast.show({ type: 'error', text1: t('errors.invalid_credentials') });
     }
-  };
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']} testID="login-screen">
@@ -87,37 +106,54 @@ export default function LoginScreen() {
               <View style={styles.logo}>
                 <Image source={require('../../assets/images/logo_MOG.jpeg')} style={{ width: 60, height: 60 }} resizeMode="contain" />
               </View>
-              <Text style={styles.brandTitle}>MOG GROUP Multiservice</Text>
+              <Text style={styles.brandTitle}>MOG Group Multiservice</Text>
               <Text style={styles.brandSubtitle}>{t('auth.welcome_subtitle')}</Text>
             </View>
             <View style={styles.card}>
               <Text style={styles.welcome}>{t('auth.welcome_back')}</Text>
 
-              <View style={styles.inputWrap}>
-                <Mail size={18} color={colors.textSecondary} />
-                <TextInput
-                  testID="login-email"
-                  style={styles.input}
-                  placeholder={t('auth.email')}
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
-              <View style={styles.inputWrap}>
-                <Lock size={18} color={colors.textSecondary} />
-                <TextInput
-                  testID="login-password"
-                  style={styles.input}
-                  placeholder={t('auth.password')}
-                  placeholderTextColor={colors.textSecondary}
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                />
-              </View>
+              <Controller
+                control={control}
+                name="email"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[styles.inputWrap, errors.email && styles.inputError]}>
+                    <Mail size={18} color={colors.textSecondary} />
+                    <TextInput
+                      testID="login-email"
+                      style={styles.input}
+                      placeholder={t('auth.email')}
+                      placeholderTextColor={colors.textSecondary}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      value={value}
+                      onChangeText={onChange}
+                      onBlur={onBlur}
+                    />
+                  </View>
+                )}
+              />
+              {errors.email && <Text style={styles.fieldError} testID="login-email-error">{errors.email.message}</Text>}
+
+              <Controller
+                control={control}
+                name="password"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[styles.inputWrap, errors.password && styles.inputError]}>
+                    <Lock size={18} color={colors.textSecondary} />
+                    <TextInput
+                      testID="login-password"
+                      style={styles.input}
+                      placeholder={t('auth.password')}
+                      placeholderTextColor={colors.textSecondary}
+                      secureTextEntry
+                      value={value}
+                      onChangeText={onChange}
+                      onBlur={onBlur}
+                    />
+                  </View>
+                )}
+              />
+              {errors.password && <Text style={styles.fieldError} testID="login-password-error">{errors.password.message}</Text>}
 
               <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgotBtn} testID="login-forgot">
                 <Text style={styles.forgotText}>{t('auth.forgot_password')}</Text>
@@ -126,12 +162,12 @@ export default function LoginScreen() {
               {error && <Text style={styles.error}>{error}</Text>}
 
               <View style={styles.submitRow}>
-                <TouchableOpacity style={styles.submit} onPress={onSubmit} disabled={loading} testID="login-submit-button">
+                <TouchableOpacity style={styles.submit} onPress={onSubmit} disabled={loading} testID="login-submit-button" accessibilityRole="button" accessibilityLabel={t('auth.sign_in')}>
                   <Text style={styles.submitText}>{loading ? t('common.loading') : t('auth.sign_in')}</Text>
                 </TouchableOpacity>
                 
                 {bioEnabled && (
-                  <TouchableOpacity style={styles.bioBtn} onPress={handleBiometric}>
+                  <TouchableOpacity style={styles.bioBtn} onPress={handleBiometric} accessibilityRole="button" accessibilityLabel={t('profile.biometrics')}>
                     <Fingerprint size={28} color={colors.primary} />
                   </TouchableOpacity>
                 )}
@@ -156,8 +192,10 @@ export default function LoginScreen() {
                 style={styles.operatorBtn} 
                 onPress={() => router.push('/(auth)/operator-login')} 
                 testID="login-operator"
+                accessibilityRole="button"
+                accessibilityLabel={t('auth.operator_login')}
               >
-                <Text style={styles.operatorBtnText}>Connexion Opérateur (Badge QR)</Text>
+                <Text style={styles.operatorBtnText}>{t('auth.operator_login')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -189,6 +227,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md, height: 52,
   },
   input: { flex: 1, fontSize: 15, color: colors.text },
+  inputError: { borderWidth: 1, borderColor: colors.danger },
+  fieldError: { color: colors.danger, fontSize: 12, marginTop: -spacing.sm, marginBottom: spacing.sm, marginLeft: spacing.xs },
   forgotBtn: { alignSelf: 'flex-end', marginBottom: spacing.md },
   forgotText: { color: colors.secondary, fontSize: 13, fontWeight: '600' },
   error: { color: colors.danger, fontSize: 13, marginBottom: spacing.sm },

@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, FileText, Download, Receipt, Package } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { invoicesApi, groupagesApi } from '../../src/api/colis';
+import { colisApi, groupagesApi } from '../../src/api/colis';
 import { fileService } from '../../src/api/files';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 import Toast from 'react-native-toast-message';
@@ -20,19 +20,23 @@ export default function DocumentsScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [invoices, packingLists] = await Promise.all([
-          invoicesApi.list().catch(() => []),
+        const [colis, packingLists] = await Promise.all([
+          colisApi.list().catch(() => []),
           groupagesApi.getMyPackingLists().catch(() => [])
         ]);
 
-        const invoiceDocs = invoices.map(i => ({
-          id: i.id || i._id,
-          title: `Facture ${i.invoice_number || 'N/A'}`,
-          date: i.created_at,
-          type: 'invoice',
-          downloadPath: `/invoices/${i.id || i._id}/pdf`,
-          filename: `Facture_${i.invoice_number || 'MOG'}.pdf`
-        }));
+        // Factures : on réutilise exactement le mécanisme du détail colis
+        // (endpoint /colis/{id}/invoice). On ne liste que les colis déjà facturés.
+        const invoiceDocs = colis
+          .filter((c) => c.invoice_status && c.invoice_status !== 'none' && c.status !== 'pending_reception')
+          .map((c) => ({
+            id: c.id,
+            title: `Facture ${c.tracking_number}`,
+            date: c.updated_at || c.created_at,
+            type: 'invoice',
+            downloadPath: `/colis/${c.id}/invoice`,
+            filename: `Facture_${c.tracking_number}.pdf`
+          }));
 
         const packingDocs = packingLists.map(pl => ({
           id: pl.id || pl._id,
@@ -44,7 +48,7 @@ export default function DocumentsScreen() {
         }));
 
         const allDocs = [...invoiceDocs, ...packingDocs].sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
         );
 
         setDocs(allDocs);
@@ -72,7 +76,7 @@ export default function DocumentsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="documents-screen">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} testID="docs-back">
+        <TouchableOpacity onPress={() => router.back()} testID="docs-back" accessibilityRole="button" accessibilityLabel={t('common.back')}>
           <ChevronLeft size={26} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{t('profile.my_documents')}</Text>
@@ -103,6 +107,8 @@ export default function DocumentsScreen() {
                 style={styles.downloadBtn} 
                 onPress={() => onDownload(item)}
                 disabled={downloading === item.id}
+                accessibilityRole="button"
+                accessibilityLabel={t('package.download_invoice')}
               >
                 {downloading === item.id ? (
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -115,7 +121,7 @@ export default function DocumentsScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <FileText size={48} color={colors.textSecondary} strokeWidth={1} />
-              <Text style={styles.emptyText}>Aucun document disponible</Text>
+              <Text style={styles.emptyText}>{t('common.no_data')}</Text>
             </View>
           }
         />

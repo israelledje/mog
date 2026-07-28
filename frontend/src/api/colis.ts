@@ -1,6 +1,7 @@
 import { api } from './client';
 import type { Colis, Groupage, AppNotification } from '../types';
 import { parseDeclaredValue } from '../utils/format';
+import { normalizeGroupage } from '../utils/logistics';
 
 function normalizeColis(data: any): Colis {
   const dims = data?.dimensions;
@@ -72,8 +73,8 @@ export const colisApi = {
 
 export const groupagesApi = {
   async list(): Promise<Groupage[]> {
-    const { data } = await api.get('/groupages');
-    return data;
+    const { data } = await api.get('/groupages/');
+    return (Array.isArray(data) ? data : []).map(normalizeGroupage);
   },
   async next(): Promise<{ sea?: Groupage | null; air?: Groupage | null }> {
     const { data } = await api.get('/groupages/next/info');
@@ -81,7 +82,17 @@ export const groupagesApi = {
   },
   async getMyPackingLists(): Promise<Groupage[]> {
     const { data } = await api.get('/groupages/my-packing-lists');
-    return data;
+    return (Array.isArray(data) ? data : []).map(normalizeGroupage);
+  },
+  /** Conteneurs du client en priorité, repli sur la liste globale si besoin */
+  async listForUser(): Promise<Groupage[]> {
+    try {
+      const mine = await groupagesApi.getMyPackingLists();
+      if (mine.length > 0) return mine;
+    } catch {
+      // Non connecté ou endpoint indisponible
+    }
+    return groupagesApi.list();
   },
   async updateStatus(id: string, status: string): Promise<void> {
     await api.patch(`/groupages/${id}/status`, { status });

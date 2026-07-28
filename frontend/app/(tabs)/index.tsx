@@ -13,8 +13,10 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { buildWhatsAppUrl, formatSupportPhoneDisplay, getSupportPhoneDigits } from '../../src/utils/support';
+import { getActiveShipments } from '../../src/utils/logistics';
 import HomeTopPanels from '../../src/components/home/HomeTopPanels';
 import HomeBottomPanels from '../../src/components/home/HomeBottomPanels';
+import HomeServicesMenu from '../../src/components/home/HomeServicesMenu';
 import { colors, fonts, shadow, spacing, radii } from '../../src/constants/theme';
 import type { Colis } from '../../src/types';
 
@@ -24,7 +26,7 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { colis, kpi, fetchAll, loading, unreadCount } = useColisStore();
+  const { colis, groupages, kpi, fetchAll, loading, unreadCount } = useColisStore();
   const { settings, fetchSettings } = useSettingsStore();
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -39,7 +41,7 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [fetchAll, fetchSettings]);
 
-  const activeShipments = colis.filter(c => ['in_transit', 'loading', 'loaded', 'closed', 'departed', 'pending_reception', 'received'].includes(c.status)).slice(0, 5);
+  const activeShipments = getActiveShipments(colis, groupages).slice(0, 5);
   const recent = colis.slice(0, 5);
   const unread = unreadCount();
   const supportPhoneDigits = getSupportPhoneDigits(settings);
@@ -244,6 +246,8 @@ export default function HomeScreen() {
                 <Text style={styles.modernWhatsappBtnSub}>{supportPhoneDisplay}</Text>
               </View>
             </TouchableOpacity>
+
+            <HomeServicesMenu />
             
           </View>
         </ScrollView>

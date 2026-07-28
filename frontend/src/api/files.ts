@@ -55,7 +55,7 @@ export const fileService = {
 
       const downloadRes = await resumable.downloadAsync();
 
-      if (downloadRes.status !== 200) {
+      if (!downloadRes || downloadRes.status !== 200) {
         throw new Error("Erreur de téléchargement");
       }
 

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 import httpx
 from app.core.config import settings
 from app.core.database import get_database
@@ -85,14 +86,83 @@ class NotificationService:
         if msg:
             if to_phone:
                 await NotificationService.send_whatsapp(to_phone, msg)
-            
+
             if push_token:
-                await NotificationService.send_push(push_token, "Mise à jour CargoLine", msg)
+                colis_id = package_data.get("id") or package_data.get("_id")
+                await NotificationService.send_push(
+                    push_token,
+                    "Mise à jour MOG Group",
+                    msg,
+                    data={
+                        "colis_id": str(colis_id) if colis_id else None,
+                        "type": "status_change",
+                        "status": new_status,
+                        "tracking_number": tracking,
+                    },
+                    owner_email=user.get("email"),
+                )
 
     @staticmethod
-    async def send_push(token: str, title: str, body: str):
+    async def send_push(
+        token: str,
+        title: str,
+        body: str,
+        data: Optional[dict] = None,
+        owner_email: Optional[str] = None,
+    ):
         """
-        Envoie une notification push via Expo Server SDK.
+        Envoie une notification push via l'API Expo Push.
+        Le champ `data` est transmis à l'app pour permettre la navigation au tap.
+        Si Expo signale un token invalide (DeviceNotRegistered), on le purge de la BDD
+        pour éviter d'envoyer dans le vide à l'avenir.
         """
-        logging.info(f"[PUSH] Envoi à {token}: {title} - {body}")
-        return True
+        if not token:
+            return False
+
+        payload = {
+            "to": token,
+            "title": title,
+            "body": body,
+            "sound": "default",
+            "priority": "high",
+        }
+        if data:
+            payload["data"] = {k: v for k, v in data.items() if v is not None}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json=payload,
+                    headers={
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=15.0,
+                )
+            result = resp.json() if resp.content else {}
+            ticket = result.get("data") if isinstance(result.get("data"), dict) else {}
+            status = ticket.get("status")
+
+            if resp.status_code == 200 and status != "error":
+                logger.info(f"[PUSH OK] Envoyé à {token[:20]}...: {title}")
+                return True
+
+            # Purge des tokens invalides
+            error_code = (ticket.get("details") or {}).get("error")
+            if error_code in ("DeviceNotRegistered", "InvalidCredentials") and owner_email:
+                try:
+                    db = await get_database()
+                    await db.users.update_one(
+                        {"email": owner_email},
+                        {"$unset": {"push_token": "", "push_platform": ""}},
+                    )
+                    logger.info(f"[PUSH] Token invalide purgé pour {owner_email} ({error_code})")
+                except Exception as purge_err:
+                    logger.warning(f"[PUSH] Échec purge token {owner_email}: {purge_err}")
+
+            logger.warning(f"[PUSH ERR] {token[:20]}...: {result}")
+            return False
+        except Exception as e:
+            logger.error(f"[PUSH CONN ERR] Impossible d'envoyer la notification push: {e}")
+            return False

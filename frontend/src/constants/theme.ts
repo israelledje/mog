@@ -49,9 +49,11 @@ export const statusColors: Record<string, { bg: string; text: string }> = {
   closed: { bg: '#E0E7FF', text: '#4338CA' },
   departed: { bg: '#3366CC', text: '#FFFFFF' },
   in_transit: { bg: '#3366CC', text: '#FFFFFF' },
+  customs: { bg: '#FEF3C7', text: '#B45309' },
   arrived: { bg: '#DCFCE7', text: '#15803D' },
   distributed: { bg: '#DCFCE7', text: '#15803D' },
   delivered: { bg: '#009933', text: '#FFFFFF' },
+  bank_pending: { bg: '#FFEDD5', text: '#C2410C' },
 };
 
 export const radii = {
@@ -77,6 +79,13 @@ export const fonts = {
 };
 
 export const shadow = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
   card: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl,
   Modal, ScrollView, TextInput, Animated, Pressable, Platform, ActivityIndicator,
@@ -13,6 +13,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import StatusBadge from '../../src/components/StatusBadge';
 import { useColisStore } from '../../src/store/colisStore';
+import { getActiveContainers, containerProgressIndex, CONTAINER_PROGRESS_STAGES } from '../../src/utils/logistics';
 import { api } from '../../src/api/client';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
@@ -36,10 +37,11 @@ interface TarifResult {
 function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { height: screenHeight } = useWindowDimensions();
   const [mode, setMode] = useState<'air' | 'sea'>('air');
-  const [airCategory, setAirCategory] = useState('normal');
-  const [seaCategory, setSeaCategory] = useState('normal');
+  const [airCategory, setAirCategory] = useState('standard');
+  const [seaCategory, setSeaCategory] = useState('standard');
   const [weight, setWeight] = useState('');
   const [cbm, setCbm] = useState('');
+  const [quantity, setQuantity] = useState('1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
@@ -59,18 +61,31 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
       setError(null);
       setLoading(true);
 
-      const val = mode === 'air' ? weight : cbm;
-      if (!val || isNaN(Number(val)) || Number(val) <= 0) {
-        throw new Error(`Veuillez entrer ${mode === 'air' ? 'un poids' : 'un volume'} valide.`);
+      const category = mode === 'air' ? airCategory : seaCategory;
+      const unitBased = ['phone_boxed', 'phone_unboxed', 'laptop', 'tablet_adult', 'tablet_child', 'powerbank'].includes(category);
+
+      if (mode === 'air' && !unitBased) {
+        if (!weight || isNaN(Number(weight)) || Number(weight) <= 0) {
+          throw new Error('Veuillez entrer un poids valide.');
+        }
+      } else if (mode === 'sea') {
+        if (!cbm || isNaN(Number(cbm)) || Number(cbm) <= 0) {
+          throw new Error('Veuillez entrer un volume valide.');
+        }
+      } else if (unitBased) {
+        if (!quantity || isNaN(Number(quantity)) || Number(quantity) <= 0) {
+          throw new Error('Veuillez entrer une quantité valide.');
+        }
       }
 
-      const category = mode === 'air' ? airCategory : seaCategory;
       const res = await api.get('/tarifs/calculate', {
         params: {
           transport_mode: mode,
-          weight_kg: mode === 'air' ? Number(val) : 0,
-          volume_cbm: mode === 'sea' ? Number(val) : 0,
+          weight_kg: mode === 'air' && !unitBased ? Number(weight) : 0,
+          volume_cbm: mode === 'sea' ? Number(cbm) : 0,
+          quantity: unitBased ? Number(quantity) : 1,
           category_key: category,
+          powerbank_tier: category === 'powerbank' && Number(quantity) >= 2 ? 'high' : 'low',
         },
       });
 
@@ -82,15 +97,32 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
     }
   };
 
-  const AIR_CATEGORIES: { key: string; label: string; icon: string; desc: string; color: string; badge?: string }[] = [
-    { key: 'normal', label: 'Standard', icon: '📦', desc: 'Vêtements, chaussures', color: colors.primary },
-    { key: 'machine', label: 'Sensible', icon: '📱', desc: 'Appareils, électronique', color: '#F59E0B' },
+  const AIR_CATEGORIES: { key: string; label: string; icon: string; desc: string; color: string }[] = [
+    { key: 'express', label: 'Express', icon: '⚡', desc: '13 500 F/kg · 2–3 j', color: colors.accent },
+    { key: 'standard', label: 'Normal', icon: '📦', desc: '9 000 F/kg · 7–14 j', color: colors.primary },
+    { key: 'phone_boxed', label: 'Tél. carton', icon: '📱', desc: '10k / 7k dès 10', color: '#F59E0B' },
+    { key: 'phone_unboxed', label: 'Tél. s/carton', icon: '📲', desc: '6k / 5k dès 10', color: '#F97316' },
+    { key: 'laptop', label: 'Ordinateur', icon: '💻', desc: '30 000 F/u', color: '#6366F1' },
+    { key: 'tablet_adult', label: 'Tablette', icon: '📟', desc: '10 000 F/u', color: '#8B5CF6' },
+    { key: 'tablet_child', label: 'Tab. enfant', icon: '🎮', desc: '8–9 000 F/u', color: '#A855F7' },
+    { key: 'battery', label: 'Batterie', icon: '🔋', desc: '11 000 F/kg', color: '#EF4444' },
+    { key: 'powerbank', label: 'Powerbank', icon: '🔌', desc: '5k / 11k', color: '#14B8A6' },
+    { key: 'liquid', label: 'Liquide/Poudre', icon: '🧴', desc: '11 000 F/kg', color: '#06B6D4' },
   ];
 
   const SEA_CATEGORIES: { key: string; label: string; icon: string; desc: string; color: string }[] = [
-    { key: 'normal', label: 'Standard', icon: '🚢', desc: 'Meubles, matériaux', color: '#0EA5E9' },
-    { key: 'machine', label: 'Lourd', icon: '🏗️', desc: 'Machines, batteries', color: colors.accent },
+    { key: 'standard', label: 'Standard', icon: '📦', desc: '355 000 F/CBM', color: '#0EA5E9' },
+    { key: 'bales', label: 'Balles', icon: '🧺', desc: '400 000 F/CBM', color: '#0284C7' },
+    { key: 'bigball', label: 'Big Ball', icon: '🗜️', desc: '415 000 F/CBM', color: '#0369A1' },
+    { key: 'cosmetics', label: 'Cosmétiques', icon: '💄', desc: '360 000 F/CBM', color: '#DB2777' },
+    { key: 'medical', label: 'Médical', icon: '🏥', desc: '360 000 F/CBM', color: '#059669' },
+    { key: 'chemical', label: 'Industriel', icon: '🏭', desc: '370 000 F/CBM', color: '#64748B' },
+    { key: 'building', label: 'Carreaux/Fer', icon: '🏗️', desc: '380 000 F/t', color: colors.accent },
+    { key: 'machines', label: 'Machines', icon: '⚙️', desc: '370–400k F/CBM', color: '#B45309' },
+    { key: 'supplements', label: 'Bien-être', icon: '💊', desc: '370 000 F/CBM', color: '#7C3AED' },
   ];
+
+  const unitBasedAir = ['phone_boxed', 'phone_unboxed', 'laptop', 'tablet_adult', 'tablet_child', 'powerbank'].includes(airCategory);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -187,27 +219,38 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
 
               {/* Compact Input */}
               <View style={sim.section}>
-                <Text style={sim.label}>{mode === 'air' ? 'POIDS TOTAL' : 'VOLUME TOTAL'}</Text>
+                <Text style={sim.label}>
+                  {mode === 'sea'
+                    ? 'VOLUME TOTAL'
+                    : unitBasedAir
+                      ? 'QUANTITÉ'
+                      : 'POIDS TOTAL'}
+                </Text>
                 <View style={sim.compactInputWrap}>
                   <View style={sim.compactInputLeft}>
-                    <Text style={sim.compactInputIcon}>{mode === 'air' ? '⚖️' : '📐'}</Text>
+                    <Text style={sim.compactInputIcon}>{mode === 'sea' ? '📐' : unitBasedAir ? '🔢' : '⚖️'}</Text>
                   </View>
                   <TextInput
                     style={sim.compactInput}
                     keyboardType="decimal-pad"
-                    value={mode === 'air' ? weight : cbm}
+                    value={mode === 'sea' ? cbm : unitBasedAir ? quantity : weight}
                     onChangeText={(v) => {
-                      if (mode === 'air') { setWeight(v); } else { setCbm(v); }
+                      if (mode === 'sea') setCbm(v);
+                      else if (unitBasedAir) setQuantity(v);
+                      else setWeight(v);
                       setResult(null);
                     }}
-                    placeholder={mode === 'air' ? '25.5' : '2.5'}
+                    placeholder={mode === 'sea' ? '2.5' : unitBasedAir ? '1' : '25.5'}
                     placeholderTextColor={colors.textSecondary}
                     returnKeyType="done"
                   />
                   <View style={sim.compactInputRight}>
-                    <Text style={sim.compactInputUnit}>{mode === 'air' ? 'KG' : 'CBM'}</Text>
+                    <Text style={sim.compactInputUnit}>{mode === 'sea' ? 'CBM' : unitBasedAir ? 'U' : 'KG'}</Text>
                   </View>
                 </View>
+                {result?.note ? (
+                  <Text style={{ marginTop: 8, fontSize: 11, color: colors.textSecondary, fontStyle: 'italic' }}>{result.note}</Text>
+                ) : null}
               </View>
 
               {/* Error */}
@@ -256,7 +299,11 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
                     <View style={sim.premiumRow}>
                       <Text style={sim.premiumLabel}>Délai estimé</Text>
                       <Text style={sim.premiumValue}>
-                        {mode === 'sea' ? '~40 à 45 jours' : airCategory === 'machine' ? '~5 à 7 jours' : '~7 à 10 jours'}
+                        {mode === 'sea'
+                          ? '~40 à 45 jours'
+                          : airCategory === 'express'
+                            ? '~2 à 3 jours'
+                            : '~7 à 14 jours'}
                       </Text>
                     </View>
                   </View>
@@ -309,6 +356,8 @@ export default function ExpeditionsScreen() {
     setRefreshing(false);
   }, [fetchGroupages]);
 
+  const activeGroupages = useMemo(() => getActiveContainers(groupages), [groupages]);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="expeditions-screen">
       <View style={styles.header}>
@@ -317,14 +366,18 @@ export default function ExpeditionsScreen() {
 
       <FlatList
         contentContainerStyle={styles.list}
-        data={groupages}
+        data={activeGroupages}
         keyExtractor={(g) => g.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews
         renderItem={({ item }) => {
-          const Icon = item.mode === 'air' ? Plane : Ship;
+          const mode = item.mode || item.transport_mode || 'sea';
+          const Icon = mode === 'air' ? Plane : Ship;
           const count = colis.filter((c: any) => c.container_id === item.id || c.groupage_id === item.id).length;
-          const stages = ['loading', 'departed', 'in_transit', 'arrived'];
-          const idx = stages.indexOf(item.status);
+          const idx = containerProgressIndex(item.status);
           return (
             <TouchableOpacity
               style={styles.card}
@@ -338,7 +391,7 @@ export default function ExpeditionsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.containerNum}>{item.container_number}</Text>
-                  <Text style={styles.mode}>{t(`transport.${item.mode}`)}</Text>
+                  <Text style={styles.mode}>{t(`transport.${mode}`)}</Text>
                 </View>
                 <StatusBadge status={item.status as any} small />
               </View>
@@ -360,18 +413,22 @@ export default function ExpeditionsScreen() {
                 </View>
                 <View style={styles.detailBlock}>
                   <Text style={styles.detailLabel}>{t('shipment.departure')}</Text>
-                  <Text style={styles.detailValue}>{new Date(item.departure_date).toLocaleDateString()}</Text>
+                  <Text style={styles.detailValue}>
+                    {item.departure_date ? new Date(item.departure_date).toLocaleDateString() : '—'}
+                  </Text>
                 </View>
                 <View style={styles.detailBlock}>
                   <Text style={styles.detailLabel}>{t('shipment.eta')}</Text>
-                  <Text style={styles.detailValue}>{new Date(item.estimated_arrival).toLocaleDateString()}</Text>
+                  <Text style={styles.detailValue}>
+                    {item.estimated_arrival ? new Date(item.estimated_arrival).toLocaleDateString() : '—'}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.bottomRow}>
                 <Text style={styles.count}>{t('shipment.packages_count', { count })}</Text>
                 <View style={styles.progressBarMini}>
-                  {stages.map((_, i) => (
+                  {CONTAINER_PROGRESS_STAGES.map((_, i) => (
                     <View key={i} style={[styles.segmentMini, i <= idx && styles.segmentActiveMini]} />
                   ))}
                 </View>

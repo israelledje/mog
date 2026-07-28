@@ -61,7 +61,7 @@ export default function OperatorDashboard() {
       setShowEntrepotModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
-      Alert.alert('Erreur', 'Impossible de sélectionner cet entrepôt');
+      Alert.alert(t('errors.server'), t('operator.warehouse_select_error'));
     }
   };
 
@@ -108,7 +108,7 @@ export default function OperatorDashboard() {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             fetchData();
           } catch {
-            Alert.alert('Erreur', 'Impossible d\'annuler');
+            Alert.alert(t('errors.server'), t('operator.undo_error'));
           }
         },
       },

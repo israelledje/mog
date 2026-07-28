@@ -69,11 +69,20 @@ async def get_my_packing_lists(
     current_user: dict = Depends(get_current_user),
     db = Depends(get_database)
 ):
-    # Trouver tous les colis du client
-    cursor = db.packages.find({"owner_id": current_user["email"], "container_id": {"$exists": True, "$ne": None}})
+    # Trouver tous les colis du client rattachés à un conteneur
+    cursor = db.packages.find({
+        "owner_id": current_user["email"],
+        "$or": [
+            {"container_id": {"$exists": True, "$ne": None}},
+            {"groupage_id": {"$exists": True, "$ne": None}},
+        ],
+    })
     container_ids = set()
     async for pkg in cursor:
-        container_ids.add(pkg["container_id"])
+        if pkg.get("container_id"):
+            container_ids.add(pkg["container_id"])
+        if pkg.get("groupage_id"):
+            container_ids.add(pkg["groupage_id"])
         
     if not container_ids:
         return []
@@ -83,6 +92,10 @@ async def get_my_packing_lists(
     containers = []
     async for doc in cursor:
         doc["id"] = doc["_id"]
+        if "origin_city" not in doc:
+            doc["origin_city"] = doc.get("origin_port") or "Guangzhou"
+        if "transport_mode" not in doc and "mode" in doc:
+            doc["transport_mode"] = doc["mode"]
         if "mode" not in doc and "transport_mode" in doc:
             doc["mode"] = doc["transport_mode"]
         containers.append(doc)
@@ -235,11 +248,17 @@ async def update_container_status(
     label_map = {
         "closed": "Groupage terminé, prêt pour expédition",
         "in_transit": "Expédition en cours (Mer/Air)",
-        "arrived": "Arrivé à l'entrepôt de destination",
-        "distributed": "Colis prêt pour retrait"
+        "arrived": "Arrivé — formalités douanières en cours",
+        "customs": "En douane",
+        "distributed": "Colis disponible pour retrait",
     }
-    
-    label = label_map.get(new_status, f"Mise à jour logistique : {new_status}")
+
+    # À l'arrivée du conteneur : étape douane avant disponibilité entrepôt/bureau
+    package_status = "customs" if new_status == "arrived" else new_status
+    label = label_map.get(
+        "customs" if new_status == "arrived" else new_status,
+        f"Mise à jour logistique : {new_status}",
+    )
     
     eta = None
     if new_status == "in_transit":
@@ -254,13 +273,13 @@ async def update_container_status(
         eta = datetime.now() + timedelta(days=delay)
 
     # Prepare package update
-    package_update = {"status": new_status, "updated_at": datetime.now()}
+    package_update = {"status": package_status, "updated_at": datetime.now()}
     if eta:
         package_update["estimated_arrival"] = eta.isoformat()
         
     await db.containers.update_one(
         {"_id": container_id},
-        {"$set": package_update}
+        {"$set": {**package_update, "status": new_status}}
     )
 
     # Mettre à jour tous les colis liés
@@ -270,10 +289,10 @@ async def update_container_status(
             "$set": package_update,
             "$push": {
                 "timeline": {
-                    "status": new_status,
+                    "status": package_status,
                     "label": label,
                     "timestamp": datetime.now(),
-                    "location": container.get("origin_city", "Guangzhou") if new_status == "closed" else ("En transit" if new_status == "in_transit" else container.get("destination_city", "Douala")),
+                    "location": container.get("origin_city", "Guangzhou") if new_status == "closed" else ("En transit" if new_status == "in_transit" else ("Douane Cameroun" if package_status == "customs" else container.get("destination_city", "Douala"))),
                     "operator": current_user.get("email")
                 }
             }
@@ -285,7 +304,7 @@ async def update_container_status(
     client_emails = set()
     async for pkg in cursor:
         client_emails.add(pkg.get("owner_id"))
-        await NotificationService.notify_status_change(pkg, new_status)
+        await NotificationService.notify_status_change(pkg, package_status)
         
     # 5. NOTIFICATION SPECIALE PACKING LIST
     if new_status == "closed":
@@ -450,6 +469,17 @@ async def update_container(
     
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Groupage non trouvé")
+
+    # Resynchroniser le statut des colis liés si le statut conteneur change
+    new_status = container_update.get("status")
+    if new_status:
+        container = await db.containers.find_one({"_id": container_id})
+        if container and container.get("packages_ids"):
+            package_update = {"status": new_status, "updated_at": datetime.now()}
+            await db.packages.update_many(
+                {"_id": {"$in": container["packages_ids"]}},
+                {"$set": package_update},
+            )
         
     return {"message": "Groupage mis à jour"}
 

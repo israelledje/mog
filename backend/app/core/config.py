@@ -3,8 +3,8 @@ from typing import List
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Cargo Tracker"
-    COMPANY_NAME: str = "CargoLine Logistics"
-    COMPANY_TAGLINE: str = "Expédition China - Cameroon"
+    COMPANY_NAME: str = "SARL M.O.G GROUP MULTISERVICE"
+    COMPANY_TAGLINE: str = "Prestations de services - commerce general - import-export"
     TRACKING_PREFIX: str = "CTG"
     
     # MongoDB

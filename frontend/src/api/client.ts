@@ -1,5 +1,17 @@
 import axios from 'axios';
+import { router } from 'expo-router';
 import { storage } from './storage';
+
+const MAX_NETWORK_RETRIES = 2;
+const RETRY_BASE_DELAY = 800; // ms
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Vrai pour les erreurs transitoires (pas de réponse serveur / timeout). */
+const isRetriableError = (error: any) =>
+  error?.code === 'ECONNABORTED' ||
+  error?.message === 'Network Error' ||
+  (!error?.response && !!error?.request);
 
 /**
  * Configuration de l'URL de base de l'API.
@@ -58,13 +70,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    // Si c'est une 401 et qu'on n'a pas encore réessayé cette requête
-    if (error.response?.status === 401 && !originalRequest._retry) {
+
+    // 1) Rafraîchissement automatique du token sur 401
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
         const refreshToken = await storage.getItem(REFRESH_KEY);
         if (!refreshToken) {
           await clearTokens();
+          redirectToLogin();
           return Promise.reject(new Error('No refresh token'));
         }
 
@@ -80,17 +94,37 @@ api.interceptors.response.use(
 
         // Relancer la requête originale avec le nouveau token
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        return axios(originalRequest);
+        return api(originalRequest);
       } catch (refreshError) {
-        // Le refresh a échoué (token expiré), on déconnecte l'utilisateur
+        // Le refresh a échoué (token expiré) : déconnexion + retour au login
         await clearTokens();
-        // Optionnel : rediriger vers la page de login via un EventEmitter ou en forçant le state
+        redirectToLogin();
         return Promise.reject(refreshError);
       }
     }
+
+    // 2) Retry automatique sur erreurs réseau transitoires (avec backoff)
+    if (originalRequest && isRetriableError(error)) {
+      originalRequest._retryCount = originalRequest._retryCount ?? 0;
+      if (originalRequest._retryCount < MAX_NETWORK_RETRIES) {
+        originalRequest._retryCount += 1;
+        await delay(RETRY_BASE_DELAY * originalRequest._retryCount);
+        return api(originalRequest);
+      }
+    }
+
     return Promise.reject(error);
   }
 );
+
+/** Redirige vers l'écran de connexion (tolérant si le router n'est pas encore prêt). */
+const redirectToLogin = () => {
+  try {
+    router.replace('/(auth)/login');
+  } catch {
+    // Router pas encore monté — ignoré.
+  }
+};
 
 /**
  * Sauvegarde les tokens d'accès et de rafraîchissement dans le stockage sécurisé.
