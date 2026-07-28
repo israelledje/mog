@@ -79,6 +79,8 @@ agenthub/agents/youtube/db
 
 # Build caches
 .cache/
+frontend/.metro-cache/
+**/.metro-cache/
 
 memory/test_credentials.md
 
@@ -92,6 +94,10 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Large local docs / letterhead sources (use compressed assets in repo)
+*.docx
+M.O.G head paper ok.docx
 
 # BMAD folders
 .bmad/

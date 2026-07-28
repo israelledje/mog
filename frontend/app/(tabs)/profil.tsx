@@ -4,13 +4,14 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Im
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera } from 'lucide-react-native';
+import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera, Gift } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
 import LanguageSelector from '../../src/components/LanguageSelector';
 import { authApi } from '../../src/api/auth';
+import { paymentsApi } from '../../src/api/payments';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
 import { biometricService } from '../../src/api/biometrics';
@@ -28,9 +29,23 @@ export default function ProfileScreen() {
   const uploadAvatar = useAuthStore((s) => s.uploadAvatar);
   const kpi = useColisStore((s) => s.kpi);
   const [notif, setNotif] = useState({ received: true, quoted: true, departed: true, delivered: true });
+  const [loyalty, setLoyalty] = useState({
+    points: 0,
+    value_xaf: 0,
+    point_value_xaf: 20,
+    points_per_cbm: 100,
+  });
 
   useEffect(() => {
     authApi.me().then(setUser).catch(() => {});
+    paymentsApi.loyalty().then((d) => {
+      setLoyalty({
+        points: d.points || 0,
+        value_xaf: d.value_xaf || 0,
+        point_value_xaf: d.point_value_xaf || 20,
+        points_per_cbm: d.points_per_cbm || 100,
+      });
+    }).catch(() => {});
   }, [setUser]);
 
   useEffect(() => {
@@ -176,6 +191,32 @@ export default function ProfileScreen() {
             <View style={styles.kpiDivider} />
             <KpiItem icon={<CheckCircle size={20} color={colors.success} />} label={t('home.delivered')} value={kpi.delivered} />
           </View>
+        </View>
+
+        {/* FIDÉLITÉ */}
+        <View style={styles.loyaltyWrap}>
+          <LinearGradient
+            colors={['#312E81', '#4338CA']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.loyaltyCard}
+          >
+            <View style={styles.loyaltyIcon}>
+              <Gift size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.loyaltyEyebrow}>Programme fidélité M.O.G</Text>
+              <Text style={styles.loyaltyPoints}>
+                {(user.loyalty_points ?? loyalty.points).toLocaleString('fr-FR')} points
+              </Text>
+              <Text style={styles.loyaltyValue}>
+                ≈ {(loyalty.value_xaf || (user.loyalty_points ?? loyalty.points) * loyalty.point_value_xaf).toLocaleString('fr-FR')} FCFA
+              </Text>
+              <Text style={styles.loyaltyRule}>
+                {loyalty.points_per_cbm} pts / CBM · 1 pt = {loyalty.point_value_xaf} FCFA
+              </Text>
+            </View>
+          </LinearGradient>
         </View>
 
         <View style={styles.content}>
@@ -374,7 +415,50 @@ const styles = StyleSheet.create({
   kpiContainer: {
     paddingHorizontal: spacing.lg,
     marginTop: -30,
+    marginBottom: spacing.md,
+  },
+  loyaltyWrap: {
+    paddingHorizontal: spacing.lg,
     marginBottom: spacing.xl,
+  },
+  loyaltyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 18,
+    padding: 16,
+  },
+  loyaltyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loyaltyEyebrow: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  loyaltyPoints: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    fontFamily: fonts.heading,
+  },
+  loyaltyValue: {
+    color: '#C7D2FE',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  loyaltyRule: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    marginTop: 6,
   },
   kpiCard: {
     backgroundColor: '#fff',

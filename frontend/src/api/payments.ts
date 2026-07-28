@@ -8,6 +8,7 @@ export const paymentsApi = {
       value_xaf: number;
       points_per_cbm: number;
       point_value_xaf: number;
+      rule?: string;
     };
   },
   async bankInfo() {
