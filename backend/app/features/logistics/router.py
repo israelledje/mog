@@ -141,7 +141,11 @@ async def add_package_to_container(
             }
         }
     )
-    
+
+    package["status"] = "loaded"
+    package["container_id"] = container_id
+    await NotificationService.notify_status_change(package, "loaded")
+
     return {"message": "Colis ajouté avec succès au conteneur"}
 
 @router.get("/{container_id}/manifest")

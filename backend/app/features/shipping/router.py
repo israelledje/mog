@@ -149,8 +149,9 @@ async def create_colis(
     })
     
     await db.packages.insert_one(package_dict)
-    
+
     package_dict["id"] = package_dict["_id"]
+    await NotificationService.notify_colis_created(package_dict)
     return package_dict
 
 
@@ -188,7 +189,11 @@ async def group_client_packages(
     await db.packages.update_many(
         {"_id": {"$in": data.package_ids}},
         {
-            "$set": {"client_group_id": group_id, "updated_at": datetime.now()},
+            "$set": {
+                "client_group_id": group_id,
+                "status": "grouped",
+                "updated_at": datetime.now(),
+            },
             "$push": {
                 "timeline": {
                     "status": "grouped",
@@ -198,6 +203,13 @@ async def group_client_packages(
                 }
             },
         },
+    )
+    trackings = [p.get("tracking_number") for p in pkgs if p.get("tracking_number")]
+    await NotificationService.notify_groupage_created(
+        current_user["email"],
+        group["label"],
+        len(pkgs),
+        trackings,
     )
     group["id"] = group_id
     group.pop("_id", None)
@@ -370,7 +382,10 @@ async def update_package_status(
             "$push": {"timeline": new_timeline_entry}
         }
     )
-    
+
+    package["status"] = status_update.status
+    await NotificationService.notify_status_change(package, status_update.status)
+
     return {"message": "Statut mis à jour avec succès", "new_status": status_update.status}
 
 @router.post("/{package_id}/receive")
@@ -524,5 +539,7 @@ async def clear_customs(
             },
         },
     )
+    package["status"] = "arrived"
+    await NotificationService.notify_status_change(package, "arrived")
     return {"message": "Dédouanement validé", "new_status": "arrived", "location": location}
 

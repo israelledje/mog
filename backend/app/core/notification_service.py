@@ -57,41 +57,130 @@ class NotificationService:
         }
 
     @staticmethod
+    async def notify_phone(to_phone: Optional[str], message: str) -> dict:
+        """Envoie WhatsApp puis SMS Nexah si besoin. Ne lève jamais d'exception."""
+        if not to_phone:
+            return {"success": False, "error": "no_phone"}
+        try:
+            return await NotificationService.send_whatsapp(to_phone, message)
+        except Exception as e:
+            logger.exception(f"[NOTIFY PHONE] Échec pour {to_phone}: {e}")
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    async def _owner_user(package_data: dict):
+        db = await get_database()
+        owner_id = package_data.get("owner_id")
+        if not owner_id:
+            return None
+        return await db.users.find_one({"email": owner_id})
+
+    @staticmethod
+    async def notify_colis_created(package_data: dict):
+        """Notification à la création réussie d'un colis."""
+        user = await NotificationService._owner_user(package_data)
+        if not user:
+            return
+        tracking = package_data.get("tracking_number") or "N/A"
+        msg = (
+            f"MOG : Votre colis {tracking} a été créé avec succès. "
+            f"Il est en attente de réception à Foshan. "
+            f"Communiquez le marquage (shipping mark) à votre fournisseur."
+        )
+        await NotificationService.notify_phone(user.get("phone"), msg)
+        if user.get("push_token"):
+            await NotificationService.send_push(
+                user["push_token"],
+                "Colis créé — MOG",
+                msg,
+                data={
+                    "colis_id": str(package_data.get("id") or package_data.get("_id") or ""),
+                    "type": "colis_created",
+                    "tracking_number": tracking,
+                },
+                owner_email=user.get("email"),
+            )
+
+    @staticmethod
+    async def notify_groupage_created(owner_email: str, group_label: str, package_count: int, tracking_numbers: Optional[list] = None):
+        """Notification à la création d'un groupage client."""
+        db = await get_database()
+        user = await db.users.find_one({"email": owner_email})
+        if not user:
+            return
+        refs = ", ".join(tracking_numbers[:5]) if tracking_numbers else f"{package_count} colis"
+        if tracking_numbers and len(tracking_numbers) > 5:
+            refs += "…"
+        msg = (
+            f"MOG : Votre groupage « {group_label} » a été créé ({package_count} colis : {refs}). "
+            f"Vous serez informé à chaque étape de l'expédition."
+        )
+        await NotificationService.notify_phone(user.get("phone"), msg)
+        if user.get("push_token"):
+            await NotificationService.send_push(
+                user["push_token"],
+                "Groupage créé — MOG",
+                msg,
+                data={"type": "groupage_created", "label": group_label},
+                owner_email=user.get("email"),
+            )
+
+    @staticmethod
     async def notify_status_change(package_data: dict, new_status: str):
         """
         Déclenche les notifications automatiques basées sur le changement de statut.
         """
-        db = await get_database()
-        user = await db.users.find_one({"email": package_data["owner_id"]})
-        
-        if not user:
-            return
+        try:
+            user = await NotificationService._owner_user(package_data)
+            if not user:
+                return
 
-        to_phone = user.get("phone")
-        push_token = user.get("push_token")
-        tracking = package_data.get('tracking_number')
+            to_phone = user.get("phone")
+            push_token = user.get("push_token")
+            tracking = package_data.get("tracking_number") or "N/A"
 
-        messages = {
-            "pending_reception": f"Votre demande de groupage {tracking} est enregistrée. Fournissez le marquage à votre fournisseur.",
-            "received": f"CargoLine : Votre colis {tracking} a été reçu à l'entrepôt de Foshan.",
-            "grouped": f"Votre colis {tracking} est maintenant chargé dans un conteneur.",
-            "closed": f"Le conteneur contenant votre colis {tracking} est fermé. Départ imminent !",
-            "departed": f"Bonne nouvelle ! Votre colis {tracking} a quitté la Chine.",
-            "in_transit": f"Votre colis {tracking} est en cours de transport international.",
-            "arrived": f"Votre colis {tracking} est arrivé à destination. Prêt pour retrait !",
-            "delivered": f"Confirmation : Votre colis {tracking} a été retiré. Merci de votre confiance."
-        }
+            messages = {
+                "pending_reception": (
+                    f"MOG : Votre colis {tracking} est enregistré. "
+                    f"Fournissez le marquage à votre fournisseur."
+                ),
+                "received": f"MOG : Votre colis {tracking} a été reçu à l'entrepôt de Foshan.",
+                "grouped": f"MOG : Votre colis {tracking} a été groupé pour expédition.",
+                "loaded": (
+                    f"MOG : Votre colis {tracking} a été chargé dans un conteneur (groupage)."
+                ),
+                "closed": (
+                    f"MOG : Le conteneur de votre colis {tracking} est clôturé. Départ imminent."
+                ),
+                "departed": f"MOG : Votre colis {tracking} a quitté la Chine.",
+                "in_transit": (
+                    f"MOG : Votre colis {tracking} est en expédition vers le Cameroun."
+                ),
+                "customs": (
+                    f"MOG : Votre colis {tracking} est en douane au Cameroun."
+                ),
+                "arrived": (
+                    f"MOG : Votre colis {tracking} est arrivé à l'entrepôt à Douala. "
+                    f"Prêt pour retrait !"
+                ),
+                "distributed": f"MOG : Votre colis {tracking} est disponible pour retrait.",
+                "delivered": (
+                    f"MOG : Confirmation — votre colis {tracking} a été retiré. Merci de votre confiance."
+                ),
+            }
 
-        msg = messages.get(new_status)
-        if msg:
+            msg = messages.get(new_status)
+            if not msg:
+                return
+
             if to_phone:
-                await NotificationService.send_whatsapp(to_phone, msg)
+                await NotificationService.notify_phone(to_phone, msg)
 
             if push_token:
                 colis_id = package_data.get("id") or package_data.get("_id")
                 await NotificationService.send_push(
                     push_token,
-                    "Mise à jour MOG Group",
+                    "Mise à jour MOG",
                     msg,
                     data={
                         "colis_id": str(colis_id) if colis_id else None,
@@ -101,6 +190,8 @@ class NotificationService:
                     },
                     owner_email=user.get("email"),
                 )
+        except Exception as e:
+            logger.exception(f"[NOTIFY STATUS] Échec pour {package_data.get('tracking_number')}: {e}")
 
     @staticmethod
     async def send_push(

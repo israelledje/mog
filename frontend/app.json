@@ -2,7 +2,7 @@
   "expo": {
     "name": "MOG Group Multiservice",
     "slug": "mog",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/MOG.png",
     "scheme": "mog",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cargoline.app",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "infoPlist": {
         "CFBundleDisplayName": "MOG Group Multiservice",
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",

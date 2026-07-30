@@ -13,7 +13,9 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://mog.dis-network.net",
-        "EXPO_PUBLIC_ALLOW_SCREENSHOTS": "true"
+        "EXPO_PUBLIC_ALLOW_SCREENSHOTS": "true",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
       },
       "android": {
         "buildType": "apk"
