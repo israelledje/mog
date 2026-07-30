@@ -544,3 +544,68 @@ async def clear_customs(
     await NotificationService.notify_status_change(package, "arrived")
     return {"message": "Dédouanement validé", "new_status": "arrived", "location": location}
 
+
+@router.post("/{package_id}/checkout")
+async def checkout_package(
+    package_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    """
+    Guichet : valide le retrait d'un colis disponible (arrived / distributed).
+    - Si déjà payé (Mobile Money, etc.) : marque uniquement remis (delivered).
+    - Sinon : marque payé (encaissement guichet) + remis.
+    """
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    status_now = package.get("status")
+    if status_now not in ("arrived", "distributed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Colis non disponible au guichet (statut actuel : {status_now})",
+        )
+
+    already_paid = package.get("payment_status") == "paid"
+    now = datetime.now()
+    set_fields = {
+        "status": "delivered",
+        "updated_at": now,
+        "delivered_at": now.isoformat(),
+        "checkout_by": current_user.get("email"),
+    }
+    if not already_paid:
+        set_fields["payment_status"] = "paid"
+        set_fields["payment_method"] = "cash_guichet"
+
+    await db.packages.update_one(
+        {"_id": package_id},
+        {
+            "$set": set_fields,
+            "$push": {
+                "timeline": {
+                    "status": "delivered",
+                    "label": (
+                        "Retiré au guichet (déjà payé)"
+                        if already_paid
+                        else "Encaissé et retiré au guichet"
+                    ),
+                    "timestamp": now,
+                    "location": package.get("destination_city") or "Douala",
+                    "operator": current_user.get("email"),
+                }
+            },
+        },
+    )
+
+    package.update(set_fields)
+    await NotificationService.notify_status_change(package, "delivered")
+
+    return {
+        "message": "Retrait validé" if already_paid else "Encaissé et retiré",
+        "new_status": "delivered",
+        "payment_status": "paid",
+        "already_paid": already_paid,
+    }
+
