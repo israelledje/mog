@@ -68,6 +68,7 @@ async def search_users(
         users.append(u)
     return users
 
+@router.get("", response_model=List[PackageInDB], include_in_schema=False)
 @router.get("/", response_model=List[PackageInDB])
 async def list_packages(
     skip: int = 0,

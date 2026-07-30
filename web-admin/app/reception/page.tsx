@@ -55,7 +55,7 @@ export default function ReceptionPage() {
     const token = localStorage.getItem('admin_token');
     try {
       // Fetch packages
-      const resPkgs = await fetch(`${API_BASE_URL}/colis?limit=100`, {
+      const resPkgs = await fetch(`${API_BASE_URL}/colis/?limit=100`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (resPkgs.ok) {

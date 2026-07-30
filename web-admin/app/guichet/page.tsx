@@ -20,7 +20,7 @@ export default function GuichetPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem('admin_token');
-      const res = await fetch(`${API_BASE_URL}/colis?limit=1000`, {
+      const res = await fetch(`${API_BASE_URL}/colis/?limit=1000`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
