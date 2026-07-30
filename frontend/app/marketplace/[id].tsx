@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image, TextInput, TouchableOpacity,
   ActivityIndicator, Alert,
@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, ShoppingCart } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
-import { marketplaceApi, type MarketplaceProduct } from '../../src/api/marketplace';
+import { marketplaceApi, type MarketplaceProduct, type MarketplaceVariant } from '../../src/api/marketplace';
 import { growthApi } from '../../src/api/growth';
 import { formatErr } from '../../src/api/client';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
@@ -23,16 +23,35 @@ export default function MarketplaceProductScreen() {
   const [city, setCity] = useState('Douala');
   const [discount, setDiscount] = useState(0);
   const [buying, setBuying] = useState(false);
+  const [variantId, setVariantId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     marketplaceApi.getProduct(id)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        const variants = p.variants || [];
+        if (variants.length) {
+          const first = variants.find((v) => (v.stock ?? 0) > 0) || variants[0];
+          setVariantId(first?.id || null);
+        }
+      })
       .catch(() => setProduct(null))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const subtotal = (product?.price_xaf || 0) * Math.max(1, Number(qty) || 1);
+  const selectedVariant: MarketplaceVariant | null = useMemo(() => {
+    if (!product?.variants?.length || !variantId) return null;
+    return product.variants.find((v) => v.id === variantId) || null;
+  }, [product, variantId]);
+
+  const unitPrice = selectedVariant?.price_xaf != null
+    ? Number(selectedVariant.price_xaf)
+    : Number(product?.price_xaf || 0);
+  const availableStock = selectedVariant
+    ? Number(selectedVariant.stock || 0)
+    : Number(product?.stock || 0);
+  const subtotal = unitPrice * Math.max(1, Number(qty) || 1);
   const total = Math.max(0, subtotal - discount);
 
   const applyPromo = async () => {
@@ -49,10 +68,19 @@ export default function MarketplaceProductScreen() {
 
   const onBuy = async () => {
     if (!product) return;
+    if ((product.variants || []).length && !variantId) {
+      Toast.show({ type: 'error', text1: 'Choisissez une variante' });
+      return;
+    }
+    if (availableStock < Math.max(1, Number(qty) || 1)) {
+      Toast.show({ type: 'error', text1: 'Stock insuffisant' });
+      return;
+    }
     setBuying(true);
     try {
       const res = await marketplaceApi.purchase({
         product_id: product.id,
+        variant_id: variantId || undefined,
         quantity: Math.max(1, Number(qty) || 1),
         promo_code: promo.trim() || undefined,
         delivery_city: city || 'Douala',
@@ -63,7 +91,7 @@ export default function MarketplaceProductScreen() {
         `Colis ${res?.package?.tracking_number || ''} créé. Il sera groupé puis réceptionnable au Cameroun.`,
         [
           { text: 'Voir le colis', onPress: () => router.replace(`/colis/${res.package.id}` as any) },
-          { text: 'OK', onPress: () => router.replace('/marketplace' as any) },
+          { text: 'OK', onPress: () => router.replace('/(tabs)/marketplace' as any) },
         ],
       );
     } catch (e: any) {
@@ -90,6 +118,7 @@ export default function MarketplaceProductScreen() {
   }
 
   const img = product.images?.[0] ? resolveMediaUrl(product.images[0]) : null;
+  const variants = product.variants || [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -101,11 +130,36 @@ export default function MarketplaceProductScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {img ? <Image source={{ uri: img }} style={styles.hero} /> : <View style={[styles.hero, styles.heroEmpty]} />}
         <Text style={styles.name}>{product.title}</Text>
-        <Text style={styles.price}>{Number(product.price_xaf).toLocaleString('fr-FR')} XAF</Text>
+        <Text style={styles.price}>{unitPrice.toLocaleString('fr-FR')} XAF</Text>
         <Text style={styles.desc}>{product.description || 'Article marketplace — livraison via groupage MOG.'}</Text>
         <Text style={styles.meta}>
-          Origine {product.origin_city || 'Chine'} · {(product.transport_mode || 'sea') === 'sea' ? 'Maritime' : 'Aérien'} · Stock {product.stock ?? 0}
+          Origine {product.origin_city || 'Chine'} · {(product.transport_mode || 'sea') === 'sea' ? 'Maritime' : 'Aérien'} · Stock {availableStock}
         </Text>
+
+        {variants.length > 0 && (
+          <>
+            <Text style={styles.label}>Variante</Text>
+            <View style={styles.variantWrap}>
+              {variants.map((v) => {
+                const on = v.id === variantId;
+                const disabled = (v.stock ?? 0) <= 0;
+                return (
+                  <TouchableOpacity
+                    key={v.id}
+                    disabled={disabled}
+                    style={[styles.variantChip, on && styles.variantChipOn, disabled && styles.variantDisabled]}
+                    onPress={() => { setVariantId(v.id); setDiscount(0); }}
+                  >
+                    <Text style={[styles.variantText, on && styles.variantTextOn]}>{v.name}</Text>
+                    <Text style={[styles.variantStock, on && styles.variantTextOn]}>
+                      {disabled ? 'Rupture' : `Stock ${v.stock ?? 0}`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         <Text style={styles.label}>Quantité</Text>
         <TextInput style={styles.input} keyboardType="number-pad" value={qty} onChangeText={(v) => { setQty(v); setDiscount(0); }} />
@@ -163,6 +217,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderRadius: radii.input, paddingHorizontal: 14, paddingVertical: 12,
     color: colors.text, marginBottom: 8,
   },
+  variantWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  variantChip: {
+    backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1.5, borderColor: '#E5E7EB', minWidth: '46%',
+  },
+  variantChipOn: { borderColor: colors.primary, backgroundColor: '#EEF4FF' },
+  variantDisabled: { opacity: 0.45 },
+  variantText: { fontWeight: '800', color: colors.text, fontSize: 13 },
+  variantTextOn: { color: colors.primary },
+  variantStock: { marginTop: 2, fontSize: 11, color: colors.textSecondary },
   promoRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   promoBtn: { backgroundColor: colors.text, paddingHorizontal: 14, paddingVertical: 12, borderRadius: radii.button },
   promoBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },

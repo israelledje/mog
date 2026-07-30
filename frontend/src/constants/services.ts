@@ -206,7 +206,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Afrique centrale & CI',
     color: '#DC2626',
     Icon: Car,
-    href: '/marketplace',
+    href: '/(tabs)/marketplace',
     heroImage: require('../../assets/images/stylish-black-woman-car-salon.jpg'),
     intro: [
       'Achat en Chine et acheminement en conteneur vers l’Afrique centrale et la Côte d’Ivoire.',

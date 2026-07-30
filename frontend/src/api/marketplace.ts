@@ -1,5 +1,14 @@
 import { api } from './client';
 
+export type MarketplaceVariant = {
+  id: string;
+  name: string;
+  sku?: string;
+  price_xaf?: number | null;
+  stock?: number;
+  attributes?: Record<string, any>;
+};
+
 export type MarketplaceProduct = {
   id: string;
   title: string;
@@ -13,6 +22,7 @@ export type MarketplaceProduct = {
   origin_city?: string;
   status?: string;
   specs?: Record<string, any>;
+  variants?: MarketplaceVariant[];
 };
 
 export type MarketplaceOrder = {
@@ -44,12 +54,26 @@ export const marketplaceApi = {
   },
   purchase(payload: {
     product_id: string;
+    variant_id?: string;
     quantity?: number;
     promo_code?: string;
     delivery_city?: string;
     notes?: string;
   }) {
     return api.post('/marketplace/purchase', payload).then((r) => r.data);
+  },
+  adjustStock(id: string, payload: { stock?: number; delta?: number; variant_id?: string }) {
+    return api.patch(`/marketplace/products/${id}/stock`, payload).then((r) => r.data);
+  },
+  uploadImage(uri: string) {
+    const formData = new FormData();
+    const filename = uri.split('/').pop() || 'photo.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    formData.append('file', { uri, name: filename, type } as any);
+    return api.post('/marketplace/products/upload-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data as { url: string });
   },
   myOrders() {
     return api.get<MarketplaceOrder[]>('/marketplace/orders/mine').then((r) => r.data);

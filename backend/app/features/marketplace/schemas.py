@@ -3,6 +3,15 @@ from typing import Optional, List, Any
 from datetime import datetime
 
 
+class ProductVariant(BaseModel):
+    id: Optional[str] = None
+    name: str
+    sku: Optional[str] = None
+    price_xaf: Optional[float] = None  # override prix produit si défini
+    stock: int = 0
+    attributes: dict = Field(default_factory=dict)  # color, size, year…
+
+
 class MarketplaceProductCreate(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -14,6 +23,7 @@ class MarketplaceProductCreate(BaseModel):
     transport_mode: str = "sea"  # sea | air | air_express
     origin_city: str = "Guangzhou"
     specs: dict = Field(default_factory=dict)
+    variants: List[ProductVariant] = Field(default_factory=list)
     status: str = "published"  # draft | published | archived
 
 
@@ -27,15 +37,23 @@ class MarketplaceProductUpdate(BaseModel):
     transport_mode: Optional[str] = None
     origin_city: Optional[str] = None
     specs: Optional[dict] = None
+    variants: Optional[List[ProductVariant]] = None
     status: Optional[str] = None
 
 
 class MarketplacePurchase(BaseModel):
     product_id: str
+    variant_id: Optional[str] = None
     quantity: int = 1
     promo_code: Optional[str] = None
     delivery_city: Optional[str] = "Douala"
     notes: Optional[str] = None
+
+
+class StockAdjust(BaseModel):
+    stock: Optional[int] = None
+    delta: Optional[int] = None
+    variant_id: Optional[str] = None
 
 
 class PromoCodeCreate(BaseModel):

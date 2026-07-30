@@ -1,16 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from typing import Optional, List
 from datetime import datetime
+import os
 import uuid
 import random
 
 from app.core.database import get_database
 from app.core.deps import get_current_user, check_role
 from app.core.notification_service import NotificationService
+from app.core.paths import UPLOAD_DIR, public_upload_url
 from app.features.marketplace.schemas import (
     MarketplaceProductCreate,
     MarketplaceProductUpdate,
     MarketplacePurchase,
+    StockAdjust,
 )
 from app.features.marketplace.services import (
     validate_promo,
@@ -23,9 +26,35 @@ from app.features.marketplace.services import (
 router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
 
 
+def _normalize_variants(variants: Optional[list]) -> list:
+    out = []
+    for v in variants or []:
+        item = v.model_dump() if hasattr(v, "model_dump") else dict(v)
+        if not item.get("id"):
+            item["id"] = str(uuid.uuid4())
+        item["name"] = (item.get("name") or "").strip()
+        if not item["name"]:
+            continue
+        item["stock"] = int(item.get("stock") or 0)
+        if item.get("price_xaf") is not None:
+            item["price_xaf"] = float(item["price_xaf"])
+        out.append(item)
+    return out
+
+
+def _stock_from_doc(doc: dict) -> int:
+    variants = doc.get("variants") or []
+    if variants:
+        return sum(int(v.get("stock") or 0) for v in variants)
+    return int(doc.get("stock") or 0)
+
+
 def _prepare_product(doc: dict) -> dict:
     d = serialize_doc(doc)
     d.pop("hashed_password", None)
+    d["stock"] = _stock_from_doc(d)
+    d.setdefault("variants", [])
+    d.setdefault("images", [])
     return d
 
 
@@ -50,7 +79,6 @@ async def list_products(
     role = current_user.get("role")
     if role == "client":
         query["status"] = "published"
-        query["stock"] = {"$gt": 0}
     elif status:
         query["status"] = status
     if category:
@@ -62,7 +90,10 @@ async def list_products(
         ]
     items = []
     async for doc in db.marketplace_products.find(query).sort("created_at", -1).limit(limit):
-        items.append(_prepare_product(doc))
+        prepared = _prepare_product(doc)
+        if role == "client" and int(prepared.get("stock") or 0) <= 0:
+            continue
+        items.append(prepared)
     return items
 
 
@@ -76,6 +107,28 @@ async def get_product(product_id: str, db=Depends(get_database), current_user: d
     return _prepare_product(doc)
 
 
+@router.post("/products/upload-image")
+async def upload_product_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+):
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(400, "Fichier image requis")
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        ext = ".jpg"
+    os.makedirs(os.path.join(UPLOAD_DIR, "marketplace"), exist_ok=True)
+    filename = f"marketplace/{uuid.uuid4().hex}{ext}"
+    path = os.path.join(UPLOAD_DIR, filename)
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Image trop lourde (max 8 Mo)")
+    with open(path, "wb") as f:
+        f.write(data)
+    return {"url": public_upload_url(filename)}
+
+
 @router.post("/products")
 async def create_product(
     data: MarketplaceProductCreate,
@@ -83,6 +136,10 @@ async def create_product(
     db=Depends(get_database),
 ):
     doc = data.model_dump()
+    variants = _normalize_variants(doc.get("variants"))
+    doc["variants"] = variants
+    if variants:
+        doc["stock"] = sum(int(v.get("stock") or 0) for v in variants)
     doc.update({
         "_id": str(uuid.uuid4()),
         "created_at": datetime.utcnow().isoformat(),
@@ -102,12 +159,59 @@ async def update_product(
     db=Depends(get_database),
 ):
     updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "variants" in updates:
+        variants = _normalize_variants(updates["variants"])
+        updates["variants"] = variants
+        updates["stock"] = sum(int(v.get("stock") or 0) for v in variants)
     updates["updated_at"] = datetime.utcnow().isoformat()
     result = await db.marketplace_products.update_one({"_id": product_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(404, "Article introuvable")
     doc = await db.marketplace_products.find_one({"_id": product_id})
     return _prepare_product(doc)
+
+
+@router.patch("/products/{product_id}/stock")
+async def adjust_stock(
+    product_id: str,
+    data: StockAdjust,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    doc = await db.marketplace_products.find_one({"_id": product_id})
+    if not doc:
+        raise HTTPException(404, "Article introuvable")
+    variants = list(doc.get("variants") or [])
+    if data.variant_id:
+        found = False
+        for v in variants:
+            if v.get("id") == data.variant_id:
+                if data.stock is not None:
+                    v["stock"] = max(0, int(data.stock))
+                elif data.delta is not None:
+                    v["stock"] = max(0, int(v.get("stock") or 0) + int(data.delta))
+                found = True
+                break
+        if not found:
+            raise HTTPException(404, "Variante introuvable")
+        stock = sum(int(v.get("stock") or 0) for v in variants)
+        await db.marketplace_products.update_one(
+            {"_id": product_id},
+            {"$set": {"variants": variants, "stock": stock, "updated_at": datetime.utcnow().isoformat()}},
+        )
+    else:
+        current = int(doc.get("stock") or 0)
+        if data.stock is not None:
+            stock = max(0, int(data.stock))
+        elif data.delta is not None:
+            stock = max(0, current + int(data.delta))
+        else:
+            raise HTTPException(400, "stock ou delta requis")
+        await db.marketplace_products.update_one(
+            {"_id": product_id},
+            {"$set": {"stock": stock, "updated_at": datetime.utcnow().isoformat()}},
+        )
+    return _prepare_product(await db.marketplace_products.find_one({"_id": product_id}))
 
 
 @router.delete("/products/{product_id}")
@@ -146,11 +250,23 @@ async def purchase_product(
     if not product or product.get("status") != "published":
         raise HTTPException(404, "Article indisponible")
     qty = max(1, int(data.quantity or 1))
-    stock = int(product.get("stock") or 0)
-    if stock < qty:
-        raise HTTPException(400, "Stock insuffisant")
+    variants = list(product.get("variants") or [])
+    variant = None
+    if variants:
+        if not data.variant_id:
+            raise HTTPException(400, "Choisissez une variante")
+        variant = next((v for v in variants if v.get("id") == data.variant_id), None)
+        if not variant:
+            raise HTTPException(404, "Variante introuvable")
+        if int(variant.get("stock") or 0) < qty:
+            raise HTTPException(400, "Stock insuffisant pour cette variante")
+        unit = float(variant.get("price_xaf") if variant.get("price_xaf") is not None else product.get("price_xaf") or 0)
+    else:
+        stock = int(product.get("stock") or 0)
+        if stock < qty:
+            raise HTTPException(400, "Stock insuffisant")
+        unit = float(product.get("price_xaf") or 0)
 
-    unit = float(product.get("price_xaf") or 0)
     subtotal = unit * qty
     discount = 0.0
     promo_code = None
@@ -166,11 +282,16 @@ async def purchase_product(
     order_id = str(uuid.uuid4())
     package_id = str(uuid.uuid4())
     tracking = f"MK-{random.randint(100000, 999999)}"
+    title_label = product.get("title")
+    if variant:
+        title_label = f"{title_label} — {variant.get('name')}"
 
     order = {
         "_id": order_id,
         "product_id": data.product_id,
-        "product_title": product.get("title"),
+        "variant_id": variant.get("id") if variant else None,
+        "variant_name": variant.get("name") if variant else None,
+        "product_title": title_label,
         "quantity": qty,
         "unit_price_xaf": unit,
         "subtotal_xaf": subtotal,
@@ -182,7 +303,7 @@ async def purchase_product(
         "notes": data.notes,
         "package_id": package_id,
         "tracking_number": tracking,
-        "status": "ordered",  # ordered | in_groupage | in_transit | arrived | delivered
+        "status": "ordered",
         "payment_status": "pending",
         "created_at": datetime.utcnow().isoformat(),
     }
@@ -193,7 +314,7 @@ async def purchase_product(
         "tracking_number": tracking,
         "owner_id": current_user["email"],
         "status": "pending_reception",
-        "description": f"Marketplace — {product.get('title')} x{qty}",
+        "description": f"Marketplace — {title_label} x{qty}",
         "category": product.get("category") or "marketplace",
         "declared_value": total,
         "currency": "XAF",
@@ -201,6 +322,7 @@ async def purchase_product(
         "delivery_address": data.delivery_city,
         "marketplace_order_id": order_id,
         "marketplace_product_id": data.product_id,
+        "marketplace_variant_id": variant.get("id") if variant else None,
         "total_price": total,
         "payment_status": "pending",
         "promo_code": promo_code,
@@ -219,10 +341,27 @@ async def purchase_product(
     }
     await db.packages.insert_one(package)
 
-    await db.marketplace_products.update_one(
-        {"_id": data.product_id},
-        {"$inc": {"stock": -qty, "sold_count": qty}, "$set": {"updated_at": datetime.utcnow().isoformat()}},
-    )
+    if variant:
+        for v in variants:
+            if v.get("id") == variant.get("id"):
+                v["stock"] = max(0, int(v.get("stock") or 0) - qty)
+                break
+        await db.marketplace_products.update_one(
+            {"_id": data.product_id},
+            {
+                "$set": {
+                    "variants": variants,
+                    "stock": sum(int(v.get("stock") or 0) for v in variants),
+                    "updated_at": datetime.utcnow().isoformat(),
+                },
+                "$inc": {"sold_count": qty},
+            },
+        )
+    else:
+        await db.marketplace_products.update_one(
+            {"_id": data.product_id},
+            {"$inc": {"stock": -qty, "sold_count": qty}, "$set": {"updated_at": datetime.utcnow().isoformat()}},
+        )
 
     commission = await record_commission(
         db,

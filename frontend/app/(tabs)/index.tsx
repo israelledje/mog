@@ -146,7 +146,7 @@ export default function HomeScreen() {
             activeOpacity={0.9}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push('/marketplace' as any);
+              router.push('/(tabs)/marketplace');
             }}
           >
             <View style={styles.marketIcon}>
@@ -284,6 +284,20 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* FAB marketplace discret */}
+      <TouchableOpacity
+        style={styles.marketFab}
+        activeOpacity={0.88}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          router.push('/(tabs)/marketplace');
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Ouvrir la marketplace"
+      >
+        <ShoppingBag size={20} color={colors.primary} strokeWidth={2.2} />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -417,5 +431,20 @@ const styles = StyleSheet.create({
   },
   modernWhatsappBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   modernWhatsappBtnSub: { color: 'rgba(255,255,255,0.9)', fontWeight: '600', fontSize: 13, marginTop: 2 },
+
+  marketFab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 12,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(15, 23, 42, 0.08)',
+    ...shadow.floating,
+  },
 });
 

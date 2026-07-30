@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native
 import { Tabs, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, Package, Ship, User, Sparkles } from 'lucide-react-native';
+import { Home, Package, Ship, User, Sparkles, ShoppingBag } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { colors, shadow } from '../../src/constants/theme';
@@ -92,10 +92,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="expeditions"
+        name="marketplace"
         options={{
-          title: t('tabs.shipments'),
-          tabBarIcon: ({ color, size }) => <Ship size={size} color={color} strokeWidth={2.2} />,
+          title: t('tabs.marketplace', { defaultValue: 'Boutique' }),
+          tabBarIcon: ({ color, size }) => <ShoppingBag size={size} color={color} strokeWidth={2.2} />,
         }}
       />
       <Tabs.Screen
@@ -103,6 +103,14 @@ export default function TabsLayout() {
         options={{
           title: t('tabs.profile'),
           tabBarIcon: ({ color, size }) => <User size={size} color={color} strokeWidth={2.2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="expeditions"
+        options={{
+          href: null,
+          title: t('tabs.shipments'),
+          tabBarIcon: ({ color, size }) => <Ship size={size} color={color} strokeWidth={2.2} />,
         }}
       />
     </Tabs>
