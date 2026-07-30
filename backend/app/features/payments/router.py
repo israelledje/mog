@@ -311,6 +311,16 @@ async def confirm_payment(
     )
 
     pkg_id = payment.get("package_id")
+    checkout_id = payment.get("marketplace_checkout_id")
+    if checkout_id and not pkg_id:
+        checkout = await db.marketplace_checkouts.find_one({"_id": checkout_id})
+        if checkout:
+            if checkout.get("promo_code") and checkout.get("status") != "confirmed":
+                await db.promo_codes.update_one({"code": checkout["promo_code"]}, {"$inc": {"used_count": 1}})
+            from app.features.marketplace.router import _finalize_checkout
+            finalized = await _finalize_checkout(db, checkout, payment_status="paid")
+            return {"message": "Paiement validé — commande marketplace créée", "finalized": finalized}
+
     if pkg_id:
         pkg = await db.packages.find_one({"_id": pkg_id})
         await db.packages.update_one(

@@ -23,6 +23,11 @@ export type MarketplaceProduct = {
   status?: string;
   specs?: Record<string, any>;
   variants?: MarketplaceVariant[];
+  length_cm?: number | null;
+  width_cm?: number | null;
+  height_cm?: number | null;
+  cbm?: number | null;
+  dimensions_label?: string;
 };
 
 export type MarketplaceOrder = {
@@ -60,7 +65,29 @@ export const marketplaceApi = {
     delivery_city?: string;
     notes?: string;
   }) {
-    return api.post('/marketplace/purchase', payload).then((r) => r.data);
+    return api.post('/marketplace/checkout', payload).then((r) => r.data);
+  },
+  createCheckout(payload: {
+    product_id: string;
+    variant_id?: string;
+    quantity?: number;
+    promo_code?: string;
+    delivery_city?: string;
+    notes?: string;
+  }) {
+    return api.post('/marketplace/checkout', payload).then((r) => r.data);
+  },
+  getCheckout(id: string) {
+    return api.get(`/marketplace/checkout/${id}`).then((r) => r.data);
+  },
+  payCheckout(id: string, payload: { method: 'om' | 'momo' | 'bank'; phone?: string; reference?: string }) {
+    return api.post(`/marketplace/checkout/${id}/pay`, payload).then((r) => r.data);
+  },
+  pendingCheckouts() {
+    return api.get('/marketplace/checkouts/pending').then((r) => r.data);
+  },
+  confirmCheckout(id: string) {
+    return api.post(`/marketplace/checkout/${id}/confirm`).then((r) => r.data);
   },
   adjustStock(id: string, payload: { stock?: number; delta?: number; variant_id?: string }) {
     return api.patch(`/marketplace/products/${id}/stock`, payload).then((r) => r.data);

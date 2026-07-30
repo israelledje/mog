@@ -30,6 +30,10 @@ type FormState = {
   status: string;
   images: string[];
   variants: Variant[];
+  length_cm: string;
+  width_cm: string;
+  height_cm: string;
+  cbm: string;
 };
 
 const blankForm = (): FormState => ({
@@ -43,6 +47,10 @@ const blankForm = (): FormState => ({
   status: 'published',
   images: [],
   variants: [],
+  length_cm: '',
+  width_cm: '',
+  height_cm: '',
+  cbm: '',
 });
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -61,8 +69,9 @@ const STATUS_STYLES: Record<string, string> = {
 export default function MarketplaceAdminPage() {
   const [items, setItems] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [pending, setPending] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'products' | 'orders'>('products');
+  const [tab, setTab] = useState<'products' | 'orders' | 'pending'>('products');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -78,9 +87,10 @@ export default function MarketplaceAdminPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, o] = await Promise.all([
+      const [p, o, pend] = await Promise.all([
         fetch(`${API_BASE_URL}/marketplace/products`, { headers: authHeaders() }),
         fetch(`${API_BASE_URL}/marketplace/orders`, { headers: authHeaders() }),
+        fetch(`${API_BASE_URL}/marketplace/checkouts/pending`, { headers: authHeaders() }),
       ]);
       if (p.status === 401) { window.location.href = '/login'; return; }
       if (p.ok) {
@@ -88,6 +98,7 @@ export default function MarketplaceAdminPage() {
         setItems(Array.isArray(data) ? data : []);
       }
       if (o.ok) setOrders(await o.json());
+      if (pend.ok) setPending(await pend.json());
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
@@ -132,6 +143,10 @@ export default function MarketplaceAdminPage() {
       origin_city: it.origin_city || 'Guangzhou',
       status: it.status || 'published',
       images: Array.isArray(it.images) ? [...it.images] : [],
+      length_cm: it.length_cm != null ? String(it.length_cm) : '',
+      width_cm: it.width_cm != null ? String(it.width_cm) : '',
+      height_cm: it.height_cm != null ? String(it.height_cm) : '',
+      cbm: it.cbm != null ? String(it.cbm) : '',
       variants: (it.variants || []).map((v: any) => ({
         id: v.id,
         name: v.name || '',
@@ -195,6 +210,10 @@ export default function MarketplaceAdminPage() {
       status: form.status,
       images: form.images,
       variants,
+      length_cm: form.length_cm ? Number(form.length_cm) : null,
+      width_cm: form.width_cm ? Number(form.width_cm) : null,
+      height_cm: form.height_cm ? Number(form.height_cm) : null,
+      cbm: form.cbm ? Number(form.cbm) : null,
     };
     try {
       const res = await fetch(
@@ -232,6 +251,15 @@ export default function MarketplaceAdminPage() {
       await load();
     } catch { /* ignore */ }
     finally { setStockBusy(null); }
+  };
+
+  const confirmCheckout = async (checkoutId: string) => {
+    if (!confirm('Valider le paiement et créer la commande / colis ?')) return;
+    await fetch(`${API_BASE_URL}/marketplace/checkout/${checkoutId}/confirm`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    load();
   };
 
   const fieldClass =
@@ -282,6 +310,7 @@ export default function MarketplaceAdminPage() {
           <div className="flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
             {([
               ['products', `Articles (${filtered.length})`],
+              ['pending', `À valider (${pending.length})`],
               ['orders', `Commandes (${orders.length})`],
             ] as const).map(([k, label]) => (
               <button
@@ -363,6 +392,7 @@ export default function MarketplaceAdminPage() {
                               <div className="truncate font-semibold text-slate-900">{it.title}</div>
                               <div className="mt-0.5 truncate text-xs text-slate-500">
                                 {it.origin_city || '—'} · {it.transport_mode === 'sea' ? 'Maritime' : 'Aérien'}
+                                {it.dimensions_label ? ` · ${it.dimensions_label}` : ''}
                               </div>
                             </div>
                           </div>
@@ -423,6 +453,47 @@ export default function MarketplaceAdminPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        ) : tab === 'pending' ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3.5">Réf.</th>
+                  <th className="px-4 py-3.5">Article</th>
+                  <th className="px-4 py-3.5">Client</th>
+                  <th className="px-4 py-3.5">Montant</th>
+                  <th className="px-4 py-3.5">Paiement</th>
+                  <th className="px-5 py-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pending.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/70">
+                    <td className="px-5 py-3.5 font-mono text-sm font-semibold">{c.tracking_number}</td>
+                    <td className="px-4 py-3.5">{c.product_title} ×{c.quantity}</td>
+                    <td className="px-4 py-3.5 text-slate-500">{c.owner_id}</td>
+                    <td className="px-4 py-3.5 font-semibold">{Number(c.total_xaf || 0).toLocaleString('fr-FR')} XAF</td>
+                    <td className="px-4 py-3.5 text-xs">
+                      <div className="font-medium uppercase text-amber-700">{c.payment_status}</div>
+                      {c.payment_reference && <div className="text-slate-400">Réf. {c.payment_reference}</div>}
+                      {c.payment_method && <div className="text-slate-400">{c.payment_method}</div>}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button
+                        onClick={() => confirmCheckout(c.id)}
+                        className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Valider & créer
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!pending.length && (
+                  <tr><td colSpan={6} className="px-5 py-16 text-center text-slate-400">Aucun paiement en attente</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -497,6 +568,13 @@ export default function MarketplaceAdminPage() {
                     <input className={fieldClass} placeholder="Stock global" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
                   )}
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input className={fieldClass} placeholder="Longueur (cm)" value={form.length_cm} onChange={(e) => setForm({ ...form, length_cm: e.target.value })} />
+                  <input className={fieldClass} placeholder="Largeur (cm)" value={form.width_cm} onChange={(e) => setForm({ ...form, width_cm: e.target.value })} />
+                  <input className={fieldClass} placeholder="Hauteur (cm)" value={form.height_cm} onChange={(e) => setForm({ ...form, height_cm: e.target.value })} />
+                  <input className={fieldClass} placeholder="CBM (auto si L×l×H)" value={form.cbm} onChange={(e) => setForm({ ...form, cbm: e.target.value })} />
+                </div>
+                <p className="text-xs text-slate-400">Dimensions optionnelles — affichées sur la fiche article et le colis.</p>
               </section>
 
               <section className="space-y-3">

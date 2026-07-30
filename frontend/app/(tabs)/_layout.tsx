@@ -92,10 +92,10 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="marketplace"
+        name="expeditions"
         options={{
-          title: t('tabs.marketplace', { defaultValue: 'Boutique' }),
-          tabBarIcon: ({ color, size }) => <ShoppingBag size={size} color={color} strokeWidth={2.2} />,
+          title: t('tabs.shipments'),
+          tabBarIcon: ({ color, size }) => <Ship size={size} color={color} strokeWidth={2.2} />,
         }}
       />
       <Tabs.Screen
@@ -106,11 +106,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="expeditions"
+        name="marketplace"
         options={{
           href: null,
-          title: t('tabs.shipments'),
-          tabBarIcon: ({ color, size }) => <Ship size={size} color={color} strokeWidth={2.2} />,
+          title: t('tabs.marketplace', { defaultValue: 'Boutique' }),
+          tabBarIcon: ({ color, size }) => <ShoppingBag size={size} color={color} strokeWidth={2.2} />,
         }}
       />
     </Tabs>

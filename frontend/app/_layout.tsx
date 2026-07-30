@@ -162,6 +162,7 @@ export default function RootLayout() {
             <Stack.Screen name="marketplace/index" />
             <Stack.Screen name="marketplace/[id]" />
             <Stack.Screen name="marketplace/orders" />
+            <Stack.Screen name="marketplace/checkout" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
           <OfflineBanner />
         </ErrorBoundary>

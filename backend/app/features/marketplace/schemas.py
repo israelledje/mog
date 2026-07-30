@@ -25,6 +25,10 @@ class MarketplaceProductCreate(BaseModel):
     specs: dict = Field(default_factory=dict)
     variants: List[ProductVariant] = Field(default_factory=list)
     status: str = "published"  # draft | published | archived
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
+    cbm: Optional[float] = None
 
 
 class MarketplaceProductUpdate(BaseModel):
@@ -39,6 +43,10 @@ class MarketplaceProductUpdate(BaseModel):
     specs: Optional[dict] = None
     variants: Optional[List[ProductVariant]] = None
     status: Optional[str] = None
+    length_cm: Optional[float] = None
+    width_cm: Optional[float] = None
+    height_cm: Optional[float] = None
+    cbm: Optional[float] = None
 
 
 class MarketplacePurchase(BaseModel):
@@ -48,6 +56,12 @@ class MarketplacePurchase(BaseModel):
     promo_code: Optional[str] = None
     delivery_city: Optional[str] = "Douala"
     notes: Optional[str] = None
+
+
+class MarketplaceCheckoutPay(BaseModel):
+    method: str  # om | momo | bank
+    phone: Optional[str] = None
+    reference: Optional[str] = None
 
 
 class StockAdjust(BaseModel):
