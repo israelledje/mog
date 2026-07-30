@@ -327,6 +327,19 @@ async def confirm_payment(
                 cbm,
                 min_one_if_positive=(mode in ("air", "air_express")),
             )
+            # Commission commercial si client parrainé
+            try:
+                from app.features.marketplace.services import record_commission
+                await record_commission(
+                    db,
+                    client_email=payment["user_email"],
+                    source="package_paid",
+                    amount_xaf=float(pkg.get("total_price") or payment.get("amount") or 0),
+                    reference_id=str(pkg_id),
+                    label=f"Paiement colis {pkg.get('tracking_number')}",
+                )
+            except Exception:
+                pass
             return {
                 "message": "Paiement validé",
                 "loyalty_points_awarded": pts,

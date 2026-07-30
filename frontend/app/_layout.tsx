@@ -159,6 +159,9 @@ export default function RootLayout() {
             <Stack.Screen name="services/[slug]" />
             <Stack.Screen name="colis/paiement" />
             <Stack.Screen name="colis/grouper" />
+            <Stack.Screen name="marketplace/index" />
+            <Stack.Screen name="marketplace/[id]" />
+            <Stack.Screen name="marketplace/orders" />
           </Stack>
           <OfflineBanner />
         </ErrorBoundary>

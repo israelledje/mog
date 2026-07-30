@@ -10,11 +10,13 @@ import {
   Settings, 
   FileText, 
   CreditCard, 
-  ChevronRight,
   LogOut,
   Store,
   Warehouse,
-  Tag
+  Tag,
+  ShoppingBag,
+  Percent,
+  Handshake
 } from 'lucide-react';
 
 const menuItems = [
@@ -22,6 +24,9 @@ const menuItems = [
   { name: 'Colis & Logistique', href: '/logistics', icon: Package },
   { name: 'Entrepôts & Stocks', href: '/entrepot', icon: Warehouse },
   { name: 'Guichet & Retraits', href: '/guichet', icon: Store },
+  { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag },
+  { name: 'Codes promo', href: '/promos', icon: Percent },
+  { name: 'Commerciaux', href: '/commerciaux', icon: Handshake },
   { name: 'Paiements & Factures', href: '/payments', icon: CreditCard },
   { name: 'Grille Tarifaire', href: '/tarifs', icon: Tag },
   { name: 'Clients', href: '/customers', icon: Users },

@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, D
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Bell, Package, Plus, Plane, Ship, MoreHorizontal, ArrowRight, MessageCircle, Cpu } from 'lucide-react-native';
+import { Bell, Package, Plus, Plane, Ship, MoreHorizontal, ArrowRight, MessageCircle, Cpu, ShoppingBag } from 'lucide-react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -139,6 +139,24 @@ export default function HomeScreen() {
                 </View>
               </View>
             </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.marketBanner}
+            activeOpacity={0.9}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/marketplace' as any);
+            }}
+          >
+            <View style={styles.marketIcon}>
+              <ShoppingBag size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.marketTitle}>Marketplace MOG</Text>
+              <Text style={styles.marketSub}>Véhicules & articles · achat, groupage, réception Cameroun</Text>
+            </View>
+            <ArrowRight size={18} color={colors.primary} />
           </TouchableOpacity>
 
           {/* IN PROGRESS SECTION (HORIZONTAL SCROLL) */}
@@ -315,6 +333,24 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: 6, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent, borderWidth: 2, borderColor: '#F8F9FB' },
   
   heroCard: { marginHorizontal: spacing.lg, borderRadius: 28, padding: 24, marginBottom: spacing.xl, ...shadow.floating },
+  marketBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: -spacing.md,
+    marginBottom: spacing.xl,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    ...shadow.card,
+  },
+  marketIcon: {
+    width: 42, height: 42, borderRadius: 12, backgroundColor: '#E8F1FC',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  marketTitle: { fontWeight: '900', color: colors.text, fontSize: 15 },
+  marketSub: { marginTop: 2, fontSize: 12, color: colors.textSecondary, lineHeight: 16 },
   heroMoreBtn: { position: 'absolute', top: 20, right: 20, padding: 4 },
   heroContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   heroLeft: { flex: 1 },

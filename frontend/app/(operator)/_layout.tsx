@@ -44,6 +44,9 @@ export default function OperatorLayout() {
         <Stack.Screen name="groupage" />
         <Stack.Screen name="cloture" />
         <Stack.Screen name="service-requests" />
+        <Stack.Screen name="marketplace" />
+        <Stack.Screen name="promos" />
+        <Stack.Screen name="growth" />
       </Stack>
 
       {showFab && (

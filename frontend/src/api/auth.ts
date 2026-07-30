@@ -31,6 +31,7 @@ export const authApi = {
     password: string;
     city: string;
     preferred_language: SupportedLang;
+    referral_code?: string;
   }) {
     const { data } = await api.post('/auth/register', payload);
     // Note: ensure backend register returns access_token/refresh_token

@@ -29,6 +29,7 @@ export default function RegisterScreen() {
     nationalNumber: '',
     password: '',
     city: 'Douala',
+    referral_code: '',
   });
   const [showCity, setShowCity] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function RegisterScreen() {
         password: form.password,
         city: form.city,
         preferred_language: i18n.language,
+        referral_code: form.referral_code.trim() || undefined,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(tabs)');
@@ -125,6 +127,16 @@ export default function RegisterScreen() {
                 ))}
               </View>
             )}
+
+            <TextInput
+              style={styles.input}
+              placeholder={t('auth.referral_code', { defaultValue: 'Code parrainage (optionnel)' })}
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="characters"
+              value={form.referral_code}
+              onChangeText={(v) => onChange('referral_code', v)}
+              testID="register-referral"
+            />
 
             {error && <Text style={styles.error}>{error}</Text>}
 

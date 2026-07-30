@@ -15,6 +15,7 @@ export default function GroupPackagesScreen() {
   const fetchColis = useColisStore((s) => s.fetchColis);
   const [selected, setSelected] = useState<string[]>([]);
   const [label, setLabel] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -36,8 +37,17 @@ export default function GroupPackagesScreen() {
     }
     setLoading(true);
     try {
-      await api.post('/colis/group-client', { package_ids: selected, label: label || undefined });
-      Toast.show({ type: 'success', text1: 'Expédition groupée créée' });
+      const res = await api.post('/colis/group-client', {
+        package_ids: selected,
+        label: label || undefined,
+        promo_code: promoCode.trim() || undefined,
+      });
+      const discount = res?.data?.promo_discount_xaf;
+      Toast.show({
+        type: 'success',
+        text1: 'Expédition groupée créée',
+        text2: discount ? `Réduction promo : −${Number(discount).toLocaleString()} XAF` : undefined,
+      });
       await fetchColis();
       router.back();
     } catch (e: any) {
@@ -61,6 +71,14 @@ export default function GroupPackagesScreen() {
         placeholderTextColor={colors.textSecondary}
         value={label}
         onChangeText={setLabel}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Code promo (optionnel)"
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="characters"
+        value={promoCode}
+        onChangeText={setPromoCode}
       />
       <FlatList
         data={eligible}

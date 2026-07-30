@@ -39,14 +39,36 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     
     # Créer l'objet utilisateur pour la base
     user_dict = user_in.model_dump()
+    referral_code = user_dict.pop("referral_code", None)
     user_dict["role"] = "client"
     user_dict["hashed_password"] = get_password_hash(user_in.password)
     user_dict["badge_secret"] = secrets.token_urlsafe(16) # Secret unique pour le badge
     user_dict["client_code"] = await generate_client_code(db, "client")
     del user_dict["password"]
+
+    # Parrainage commercial / client
+    from app.features.marketplace.services import resolve_referrer, get_growth_settings
+    ref = await resolve_referrer(db, referral_code)
+    if ref.get("referral_invalid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Code de parrainage invalide",
+        )
+    user_dict.update({k: v for k, v in ref.items() if k != "referral_invalid"})
     
     # Insérer dans MongoDB
     await db.users.insert_one(user_dict)
+
+    # Bonus points si parrainé par un commercial
+    if ref.get("referred_by_agent_id"):
+        growth = await get_growth_settings(db)
+        bonus = int(growth.get("referral_signup_bonus_points") or 0)
+        if bonus > 0:
+            await db.users.update_one(
+                {"email": user_in.email},
+                {"$inc": {"loyalty_points": bonus}},
+            )
+            user_dict["loyalty_points"] = bonus
     user_response = user_dict.copy()
     user_response.pop("hashed_password", None)
     

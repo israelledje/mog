@@ -159,6 +159,7 @@ async def create_colis(
 class ClientGroupRequest(BaseModel):
     package_ids: List[str]
     label: Optional[str] = None
+    promo_code: Optional[str] = None
 
 
 @router.post("/group-client")
@@ -177,6 +178,18 @@ async def group_client_packages(
     if len(pkgs) != len(data.package_ids):
         raise HTTPException(status_code=404, detail="Un ou plusieurs colis sont introuvables")
 
+    subtotal = sum(float(p.get("total_price") or 0) for p in pkgs)
+    discount = 0.0
+    promo_code = None
+    if data.promo_code:
+        from app.features.marketplace.services import validate_promo, normalize_code, record_commission
+        check = await validate_promo(db, data.promo_code, max(subtotal, 1), "groupage")
+        if not check.get("ok"):
+            raise HTTPException(status_code=400, detail=check.get("error") or "Code promo invalide")
+        discount = float(check["discount"])
+        promo_code = normalize_code(data.promo_code)
+        await db.promo_codes.update_one({"code": promo_code}, {"$inc": {"used_count": 1}})
+
     group_id = str(uuid.uuid4())
     group = {
         "_id": group_id,
@@ -185,6 +198,10 @@ async def group_client_packages(
         "package_ids": data.package_ids,
         "created_at": datetime.now().isoformat(),
         "status": "open",
+        "subtotal_xaf": subtotal,
+        "promo_code": promo_code,
+        "promo_discount_xaf": discount,
+        "total_xaf": max(0.0, subtotal - discount),
     }
     await db.client_groups.insert_one(group)
     await db.packages.update_many(
@@ -194,17 +211,41 @@ async def group_client_packages(
                 "client_group_id": group_id,
                 "status": "grouped",
                 "updated_at": datetime.now(),
+                **({"promo_code": promo_code, "promo_discount_xaf": discount} if promo_code else {}),
             },
             "$push": {
                 "timeline": {
                     "status": "grouped",
-                    "label": "Groupé pour expédition client",
+                    "label": "Groupé pour expédition client"
+                    + (f" (promo {promo_code} −{discount:.0f} XAF)" if promo_code else ""),
                     "timestamp": datetime.now(),
                     "location": "",
                 }
             },
         },
     )
+    if discount > 0 and subtotal > 0:
+        # Répartir la réduction proportionnellement
+        for p in pkgs:
+            price = float(p.get("total_price") or 0)
+            share = (price / subtotal) * discount if subtotal else 0
+            new_price = max(0.0, price - share)
+            await db.packages.update_one(
+                {"_id": p["_id"]},
+                {"$set": {"total_price": new_price, "promo_discount_xaf": share}},
+            )
+
+    if promo_code or subtotal > 0:
+        from app.features.marketplace.services import record_commission
+        await record_commission(
+            db,
+            client_email=current_user["email"],
+            source="groupage",
+            amount_xaf=max(0.0, subtotal - discount),
+            reference_id=group_id,
+            label=f"Groupage client {group.get('label')}",
+        )
+
     trackings = [p.get("tracking_number") for p in pkgs if p.get("tracking_number")]
     await NotificationService.notify_groupage_created(
         current_user["email"],

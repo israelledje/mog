@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones } from 'lucide-react-native';
+import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -183,6 +183,25 @@ export default function OperatorDashboard() {
         >
           <Headphones size={24} color={colors.primary} />
           <Text style={styles.subActionTitle}>Demandes services clients</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.sectionTitle}>Commerce</Text>
+        <View style={styles.grid}>
+          <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/marketplace')}>
+            <ShoppingBag size={24} color={colors.primary} />
+            <Text style={styles.subActionTitle}>Marketplace</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/promos')}>
+            <Percent size={24} color={colors.secondary} />
+            <Text style={styles.subActionTitle}>Codes promo</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={[styles.subAction, { marginBottom: spacing.lg }]}
+          onPress={() => router.push('/(operator)/growth')}
+        >
+          <Handshake size={24} color={colors.primary} />
+          <Text style={styles.subActionTitle}>Commerciaux & commissions</Text>
         </TouchableOpacity>
 
         <View style={styles.statsCard}>
