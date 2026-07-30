@@ -28,7 +28,7 @@ class ContainerUpdate(BaseModel):
 
 class ContainerInDB(ContainerBase):
     id: str
-    status: str = "open" # open, closed, in_transit, arrived, distributed
+    status: str = "open"  # open, closed, in_transit, customs, arrived, distributed
     packages_ids: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)

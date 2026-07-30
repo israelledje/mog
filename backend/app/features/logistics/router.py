@@ -222,7 +222,7 @@ async def get_client_packing_list(
 async def update_container_status(
     container_id: str,
     status_update: ContainerUpdate,
-    current_user: dict = Depends(check_role(["admin"])),
+    current_user: dict = Depends(check_role(["admin", "operator"])),
     db = Depends(get_database)
 ):
     # Block direct close without OTP — use /close/confirm instead
@@ -232,38 +232,36 @@ async def update_container_status(
             detail="Utilisez POST /groupages/{id}/close/request-otp puis /close/confirm pour clôturer",
         )
 
-    # 1. Vérifier le conteneur
+    allowed = {"in_transit", "customs", "arrived", "distributed"}
+    if status_update.status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Statut invalide. Autorisés : {', '.join(sorted(allowed))}",
+        )
+
     container = await db.containers.find_one({"_id": container_id})
     if not container:
         raise HTTPException(status_code=404, detail="Conteneur non trouvé")
-        
-    # 2. Mettre à jour le conteneur
-    await db.containers.update_one(
-        {"_id": container_id},
-        {
-            "$set": {
-                "status": status_update.status,
-                "updated_at": datetime.now()
-            }
-        }
-    )
-    
-    new_status = status_update.status
-    label_map = {
-        "closed": "Groupage terminé, prêt pour expédition",
-        "in_transit": "Expédition en cours (Mer/Air)",
-        "arrived": "Arrivé — formalités douanières en cours",
-        "customs": "En douane",
-        "distributed": "Colis disponible pour retrait",
-    }
 
-    # À l'arrivée du conteneur : étape douane avant disponibilité entrepôt/bureau
-    package_status = "customs" if new_status == "arrived" else new_status
-    label = label_map.get(
-        "customs" if new_status == "arrived" else new_status,
-        f"Mise à jour logistique : {new_status}",
-    )
-    
+    new_status = status_update.status
+    # Aligné app mobile : transit → douane → entrepôt Douala → distribué
+    package_status = new_status
+    label_map = {
+        "in_transit": "Expédition en cours (Mer/Air)",
+        "customs": "En douane au Cameroun",
+        "arrived": "Arrivé à l'entrepôt — disponible pour retrait",
+        "distributed": "Colis remis / distribué",
+    }
+    label = label_map.get(new_status, f"Mise à jour logistique : {new_status}")
+
+    location_map = {
+        "in_transit": "En transit",
+        "customs": "Douane Cameroun",
+        "arrived": container.get("destination_city") or "Entrepôt Douala",
+        "distributed": container.get("destination_city") or "Douala",
+    }
+    location = location_map.get(new_status, container.get("destination_city", "Douala"))
+
     eta = None
     if new_status == "in_transit":
         settings_doc = await db.settings.find_one({"_id": "global"}) or {}
@@ -276,56 +274,56 @@ async def update_container_status(
             delay = settings_doc.get("sea_delay_days", 45)
         eta = datetime.now() + timedelta(days=delay)
 
-    # Prepare package update
     package_update = {"status": package_status, "updated_at": datetime.now()}
     if eta:
         package_update["estimated_arrival"] = eta.isoformat()
-        
+
     await db.containers.update_one(
         {"_id": container_id},
-        {"$set": {**package_update, "status": new_status}}
+        {"$set": {"status": new_status, "updated_at": datetime.now(), **({} if not eta else {"estimated_arrival": eta.isoformat()})}},
     )
 
-    # Mettre à jour tous les colis liés
-    await db.packages.update_many(
-        {"_id": {"$in": container["packages_ids"]}},
-        {
-            "$set": package_update,
-            "$push": {
-                "timeline": {
-                    "status": package_status,
-                    "label": label,
-                    "timestamp": datetime.now(),
-                    "location": container.get("origin_city", "Guangzhou") if new_status == "closed" else ("En transit" if new_status == "in_transit" else ("Douane Cameroun" if package_status == "customs" else container.get("destination_city", "Douala"))),
-                    "operator": current_user.get("email")
-                }
-            }
-        }
-    )
-    
-    # 4. NOTIFICATIONS AUTOMATIQUES
-    cursor = db.packages.find({"_id": {"$in": container["packages_ids"]}})
-    client_emails = set()
-    async for pkg in cursor:
-        client_emails.add(pkg.get("owner_id"))
-        await NotificationService.notify_status_change(pkg, package_status)
-        
-    # 5. NOTIFICATION SPECIALE PACKING LIST
-    if new_status == "closed":
-        for email in client_emails:
-            if not email:
-                continue
-            user = await db.users.find_one({"email": email})
-            if user:
-                msg = f"Votre Packing List pour le conteneur {container.get('container_number')} est désormais disponible dans l'application (section Mes Documents)."
-                
-                if user.get("phone"):
-                    await NotificationService.send_whatsapp(user["phone"], msg)
-                if user.get("push_token"):
-                    await NotificationService.send_push(user["push_token"], "Packing List Disponible", msg)
-    
-    return {"message": f"Conteneur et {len(container['packages_ids'])} colis mis à jour avec succès"}
+    # Colis liés : packages_ids OU container_id (legacy)
+    package_ids = list(container.get("packages_ids") or [])
+    async for p in db.packages.find({"container_id": container_id}):
+        pid = p.get("_id")
+        if pid and pid not in package_ids:
+            package_ids.append(pid)
 
+    if package_ids:
+        await db.packages.update_many(
+            {"_id": {"$in": package_ids}},
+            {
+                "$set": package_update,
+                "$push": {
+                    "timeline": {
+                        "status": package_status,
+                        "label": label,
+                        "timestamp": datetime.now(),
+                        "location": location,
+                        "operator": current_user.get("email"),
+                    }
+                },
+            },
+        )
+
+    packages = []
+    if package_ids:
+        async for pkg in db.packages.find({"_id": {"$in": package_ids}}):
+            packages.append(pkg)
+
+    notify_result = await NotificationService.notify_groupage_packages_status(
+        packages,
+        package_status,
+        container_number=container.get("container_number") or "",
+    )
+
+    return {
+        "message": f"Conteneur et {len(packages)} colis mis à jour avec succès",
+        "status": new_status,
+        "packages_updated": len(packages),
+        "notifications": notify_result,
+    }
 
 class CloseOtpConfirm(BaseModel):
     otp_code: str
@@ -346,41 +344,64 @@ async def _do_close_container(container_id: str, current_user: dict, db):
     label = "Groupage terminé, prêt pour expédition"
     package_update = {"status": new_status, "updated_at": datetime.now()}
 
-    await db.packages.update_many(
-        {"_id": {"$in": container.get("packages_ids", [])}},
-        {
-            "$set": package_update,
-            "$push": {
-                "timeline": {
-                    "status": new_status,
-                    "label": label,
-                    "timestamp": datetime.now(),
-                    "location": container.get("origin_city", "Guangzhou"),
-                    "operator": current_user.get("email"),
-                }
+    package_ids = list(container.get("packages_ids") or [])
+    async for p in db.packages.find({"container_id": container_id}):
+        pid = p.get("_id")
+        if pid and pid not in package_ids:
+            package_ids.append(pid)
+
+    if package_ids:
+        await db.packages.update_many(
+            {"_id": {"$in": package_ids}},
+            {
+                "$set": package_update,
+                "$push": {
+                    "timeline": {
+                        "status": new_status,
+                        "label": label,
+                        "timestamp": datetime.now(),
+                        "location": container.get("origin_city") or container.get("origin_port") or "Guangzhou",
+                        "operator": current_user.get("email"),
+                    }
+                },
             },
-        },
+        )
+
+    packages = []
+    if package_ids:
+        async for pkg in db.packages.find({"_id": {"$in": package_ids}}):
+            packages.append(pkg)
+
+    notify_result = await NotificationService.notify_groupage_packages_status(
+        packages,
+        new_status,
+        container_number=container.get("container_number") or "",
     )
 
-    cursor = db.packages.find({"_id": {"$in": container.get("packages_ids", [])}})
-    client_emails = set()
-    async for pkg in cursor:
-        client_emails.add(pkg.get("owner_id"))
-        await NotificationService.notify_status_change(pkg, new_status)
-
-    for email in client_emails:
-        if not email:
+    # Packing list disponible — 1 message par client
+    notified_emails = set()
+    for pkg in packages:
+        email = pkg.get("owner_id")
+        if not email or email in notified_emails:
             continue
+        notified_emails.add(email)
         user = await db.users.find_one({"email": email})
-        if user:
-            msg = f"Votre Packing List pour le conteneur {container.get('container_number')} est désormais disponible dans l'application (section Mes Documents)."
-            if user.get("phone"):
-                await NotificationService.send_whatsapp(user["phone"], msg)
+        if user and user.get("phone"):
+            msg = (
+                f"MOG : Votre Packing List pour le conteneur "
+                f"{container.get('container_number')} est disponible dans l'application "
+                f"(section Mes Documents)."
+            )
+            await NotificationService.notify_phone(user["phone"], msg)
             if user.get("push_token"):
-                await NotificationService.send_push(user["push_token"], "Packing List Disponible", msg)
+                await NotificationService.send_push(
+                    user["push_token"], "Packing List Disponible", msg, owner_email=email
+                )
 
-    return {"message": f"Conteneur clôturé — {len(container.get('packages_ids', []))} colis mis à jour"}
-
+    return {
+        "message": f"Conteneur clôturé — {len(packages)} colis mis à jour",
+        "notifications": notify_result,
+    }
 
 @router.post("/{container_id}/close/request-otp")
 async def request_close_otp(

@@ -53,8 +53,9 @@ describe('logistics.containerProgressIndex', () => {
   it('mappe les statuts de progression', () => {
     expect(containerProgressIndex('closed')).toBe(0);
     expect(containerProgressIndex('in_transit')).toBe(1);
-    expect(containerProgressIndex('arrived')).toBe(2);
-    expect(containerProgressIndex('distributed')).toBe(3);
+    expect(containerProgressIndex('customs')).toBe(2);
+    expect(containerProgressIndex('arrived')).toBe(3);
+    expect(containerProgressIndex('distributed')).toBe(4);
   });
 
   it('renvoie 0 pour open et -1 pour inconnu', () => {

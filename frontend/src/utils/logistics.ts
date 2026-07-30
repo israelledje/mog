@@ -1,7 +1,14 @@
 import type { Colis, Groupage } from '../types';
 
 /** Statuts conteneur considérés comme une expédition active */
-export const ACTIVE_CONTAINER_STATUSES = ['open', 'closed', 'in_transit', 'arrived', 'distributed'] as const;
+export const ACTIVE_CONTAINER_STATUSES = [
+  'open',
+  'closed',
+  'in_transit',
+  'customs',
+  'arrived',
+  'distributed',
+] as const;
 
 /** Statuts colis correspondant à un parcours d'expédition en cours */
 export const TRANSIT_COLIS_STATUSES = [
@@ -11,6 +18,7 @@ export const TRANSIT_COLIS_STATUSES = [
   'closed',
   'departed',
   'in_transit',
+  'customs',
   'arrived',
   'distributed',
 ] as const;
@@ -50,7 +58,13 @@ export function getActiveShipments(colis: Colis[], groupages: Groupage[]) {
 }
 
 /** Étapes de progression affichées pour un conteneur / groupage */
-export const CONTAINER_PROGRESS_STAGES = ['closed', 'in_transit', 'arrived', 'distributed'] as const;
+export const CONTAINER_PROGRESS_STAGES = [
+  'closed',
+  'in_transit',
+  'customs',
+  'arrived',
+  'distributed',
+] as const;
 
 export function containerProgressIndex(status?: string) {
   const idx = CONTAINER_PROGRESS_STAGES.indexOf((status || '') as (typeof CONTAINER_PROGRESS_STAGES)[number]);

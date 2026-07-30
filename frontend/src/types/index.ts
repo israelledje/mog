@@ -102,7 +102,7 @@ export interface Colis {
   updated_at: string;
 }
 
-export type GroupageStatus = 'open' | 'closed' | 'in_transit' | 'arrived' | 'distributed';
+export type GroupageStatus = 'open' | 'closed' | 'in_transit' | 'customs' | 'arrived' | 'distributed';
 
 export interface Groupage {
   id: string;

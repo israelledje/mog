@@ -14,11 +14,12 @@ const STATUS_CFG: Record<string, { label: string; dot: string; text: string; bg:
   open:        { label: 'Ouvert',      dot: 'bg-emerald-400', text: 'text-emerald-700', bg: 'bg-emerald-50' },
   closed:      { label: 'Clôturé',     dot: 'bg-violet-400',  text: 'text-violet-700',  bg: 'bg-violet-50'  },
   in_transit:  { label: 'En Transit',  dot: 'bg-blue-400',    text: 'text-blue-700',    bg: 'bg-blue-50'    },
-  arrived:     { label: 'Arrivé',      dot: 'bg-sky-400',     text: 'text-sky-700',     bg: 'bg-sky-50'     },
+  customs:     { label: 'En Douane',   dot: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50'   },
+  arrived:     { label: 'Entrepôt',    dot: 'bg-sky-400',     text: 'text-sky-700',     bg: 'bg-sky-50'     },
   distributed: { label: 'Distribué',   dot: 'bg-slate-400',   text: 'text-slate-600',   bg: 'bg-slate-100'  },
 };
 
-const STATUS_ORDER = ['open', 'closed', 'in_transit', 'arrived', 'distributed'];
+const STATUS_ORDER = ['open', 'closed', 'in_transit', 'customs', 'arrived', 'distributed'];
 
 const BLANK_CONTAINER = {
   container_number: '', destination_city: 'Douala',
@@ -75,12 +76,34 @@ export default function LogisticsPage() {
       setOtpSent(false);
       return;
     }
-    await fetch(`${API}/groupages/${id}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ status }),
-    });
-    fetchContainers();
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/groupages/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.detail || `Échec mise à jour (${res.status})`);
+        return;
+      }
+      const n = data.notifications;
+      if (n) {
+        const parts = [
+          `${data.packages_updated ?? 0} colis mis à jour`,
+          `${n.sent ?? 0} notif. envoyée(s)`,
+        ];
+        if (n.failed) parts.push(`${n.failed} échec(s)`);
+        if (n.skipped) parts.push(`${n.skipped} sans téléphone`);
+        alert(`Statut « ${STATUS_CFG[status]?.label || status} » : ${parts.join(' · ')}`);
+      }
+      await fetchContainers();
+    } catch {
+      alert('Erreur réseau lors du changement de statut');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const sendCloseOtp = async () => {

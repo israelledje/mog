@@ -23,12 +23,19 @@ class NexahProvider:
             logger.error("Nexah credentials missing")
             return {"success": False, "error": "Nexah credentials missing"}
 
+        # Normalise: +237 6XX... → 2376XX...
+        mobile = "".join(ch for ch in str(phone) if ch.isdigit())
+        if mobile.startswith("00"):
+            mobile = mobile[2:]
+        if len(mobile) == 9 and mobile.startswith(("6", "2")):
+            mobile = "237" + mobile
+
         payload = {
             "user": self.user,
             "password": self.password,
             "senderid": self.sender_id,
             "sms": content,
-            "mobiles": phone.replace("+", "").replace(" ", "")
+            "mobiles": mobile,
         }
 
         headers = {
