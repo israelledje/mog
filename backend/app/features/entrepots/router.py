@@ -101,6 +101,8 @@ async def receive_at_warehouse(
         raise HTTPException(status_code=404, detail="Entrepôt non trouvé")
 
     from app.core.warehouse_service import apply_entrepot_to_package
+    from app.core.notification_service import NotificationService
+
     warehouse_event = await apply_entrepot_to_package(
         db,
         package_id,
@@ -109,7 +111,24 @@ async def receive_at_warehouse(
         notes=data.notes,
     )
 
-    return {"message": f"Colis réceptionné à {warehouse_event['entrepot_name']}", "event": warehouse_event}
+    pkg = warehouse_event.get("package") or package
+    notify = await NotificationService.notify_warehouse_receive(
+        pkg,
+        entrepot_name=warehouse_event.get("entrepot_name") or entrepot.get("name", ""),
+        entrepot_city=warehouse_event.get("city") or entrepot.get("city", ""),
+        entrepot_type=entrepot.get("type") or "origin",
+        new_status=warehouse_event.get("new_status") or pkg.get("status") or "received",
+    )
+
+    return {
+        "message": f"Colis réceptionné à {warehouse_event['entrepot_name']}",
+        "event": {k: v for k, v in warehouse_event.items() if k != "package"},
+        "notification": {
+            "success": bool(notify.get("success")),
+            "channel": notify.get("channel"),
+            "error": notify.get("error") or notify.get("sms_error") or notify.get("whatsapp_error"),
+        },
+    }
 
 
 class TransferReceipt(BaseModel):
@@ -126,6 +145,7 @@ async def transfer_package(
 ):
     """Transfer a package to another warehouse (inter-warehouse move)."""
     from app.core.warehouse_service import apply_entrepot_to_package
+    from app.core.notification_service import NotificationService
 
     package = await db.packages.find_one({"_id": package_id})
     if not package:
@@ -137,9 +157,26 @@ async def transfer_package(
         data.to_entrepot_id,
         current_user.get("email", "unknown"),
         notes=data.notes or "Transfert inter-entrepôt",
+        is_transfer=True,
     )
 
-    return {"message": f"Colis transféré vers {warehouse_event['entrepot_name']}", "event": warehouse_event}
+    # Notifier si arrivée destination
+    notify = None
+    if (warehouse_event.get("type") or "") == "destination":
+        pkg = warehouse_event.get("package") or package
+        notify = await NotificationService.notify_warehouse_receive(
+            pkg,
+            entrepot_name=warehouse_event.get("entrepot_name") or "",
+            entrepot_city=warehouse_event.get("city") or "",
+            entrepot_type="destination",
+            new_status=warehouse_event.get("new_status") or "arrived",
+        )
+
+    return {
+        "message": f"Colis transféré vers {warehouse_event['entrepot_name']}",
+        "event": {k: v for k, v in warehouse_event.items() if k != "package"},
+        "notification": notify,
+    }
 
 
 @router.get("/package/{package_id}/history")

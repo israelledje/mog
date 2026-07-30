@@ -1,5 +1,5 @@
 const express = require('express');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
@@ -274,9 +274,9 @@ app.post('/send', async (req, res) => {
         return res.status(503).json({ success: false, error: 'WhatsApp is not connected', code: 'NOT_CONNECTED' });
     }
 
-    const { to, message } = req.body;
-    if (!to || !message) {
-        return res.status(400).json({ success: false, error: 'Missing "to" or "message"' });
+    const { to, message, mediaBase64, mimetype, filename, mediaUrl } = req.body;
+    if (!to || (!message && !mediaBase64 && !mediaUrl)) {
+        return res.status(400).json({ success: false, error: 'Missing "to" or message/media' });
     }
 
     const digits = normalizeWhatsAppDigits(to);
@@ -309,7 +309,20 @@ app.post('/send', async (req, res) => {
         }
 
         console.log(`Sending WhatsApp message to ${chatId}`);
-        const response = await client.sendMessage(chatId, message);
+        let response;
+        if (mediaBase64) {
+            const media = new MessageMedia(
+                mimetype || 'image/jpeg',
+                mediaBase64,
+                filename || 'colis.jpg'
+            );
+            response = await client.sendMessage(chatId, media, { caption: message || '' });
+        } else if (mediaUrl) {
+            const media = await MessageMedia.fromUrl(mediaUrl, { unsafeMime: true });
+            response = await client.sendMessage(chatId, media, { caption: message || '' });
+        } else {
+            response = await client.sendMessage(chatId, message);
+        }
         const messageId = response?.id?.id || response?.id?._serialized || null;
         console.log(`WhatsApp message queued: ${messageId || 'unknown id'}`);
         res.json({ success: true, messageId, to: chatId });

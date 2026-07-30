@@ -23,20 +23,27 @@ const PKG_STATUS: Record<string, { label: string; bg: string; text: string; icon
   draft:              { label: 'Brouillon',       bg: 'bg-slate-100',   text: 'text-slate-500',   icon: Clock },
   pending_reception:  { label: 'En Attente',      bg: 'bg-amber-50',    text: 'text-amber-700',   icon: AlertCircle },
   received:           { label: 'Réceptionné',     bg: 'bg-blue-50',     text: 'text-blue-700',    icon: Archive },
+  grouped:            { label: 'Groupé',          bg: 'bg-violet-50',   text: 'text-violet-700',  icon: Package },
   loaded:             { label: 'En Groupage',     bg: 'bg-violet-50',   text: 'text-violet-700',  icon: Package },
+  closed:             { label: 'Clôturé',         bg: 'bg-indigo-50',   text: 'text-indigo-700',  icon: Package },
+  departed:           { label: 'Parti',           bg: 'bg-sky-50',      text: 'text-sky-700',     icon: Truck },
   in_transit:         { label: 'En Transit',      bg: 'bg-sky-50',      text: 'text-sky-700',     icon: Truck },
+  customs:            { label: 'En Douane',       bg: 'bg-amber-50',    text: 'text-amber-800',   icon: AlertCircle },
   arrived:            { label: 'Arrivé',          bg: 'bg-emerald-50',  text: 'text-emerald-700', icon: CheckCircle2 },
+  distributed:        { label: 'Distribué',       bg: 'bg-emerald-100', text: 'text-emerald-800', icon: CheckCircle2 },
   delivered:          { label: 'Livré',           bg: 'bg-emerald-100', text: 'text-emerald-800', icon: CheckCircle2 },
 };
 
 const STATUS_TABS = [
-  { key: 'all',             label: 'Tous',          icon: Package },
-  { key: 'pending_reception', label: 'En Attente',  icon: AlertCircle },
-  { key: 'received',        label: 'Reçus',         icon: Archive },
-  { key: 'loaded',          label: 'En Groupage',   icon: Package },
-  { key: 'in_transit',      label: 'En Transit',    icon: Truck },
-  { key: 'arrived',         label: 'Arrivés',       icon: CheckCircle2 },
-  { key: 'delivered',       label: 'Livrés',        icon: CheckCircle2 },
+  { key: 'all', label: 'Tous', icon: Package },
+  { key: 'pending_reception', label: 'En Attente', icon: AlertCircle },
+  { key: 'received', label: 'Reçus', icon: Archive },
+  { key: 'loaded', label: 'Groupage', icon: Package },
+  { key: 'in_transit', label: 'Transit', icon: Truck },
+  { key: 'customs', label: 'Douane', icon: AlertCircle },
+  { key: 'arrived', label: 'Arrivés', icon: CheckCircle2 },
+  { key: 'distributed', label: 'Distribués', icon: CheckCircle2 },
+  { key: 'delivered', label: 'Livrés', icon: CheckCircle2 },
 ];
 
 const BLANK_ENTREPOT = {
@@ -49,6 +56,8 @@ export default function EntrepotPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [entrepotFilter, setEntrepotFilter] = useState('all');
   const [view, setView] = useState<'packages' | 'entrepots'>('packages');
 
   // Modals
@@ -168,14 +177,29 @@ export default function EntrepotPage() {
 
   const filtered = packages.filter(p => {
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
-    const matchSearch = !search ||
-      p.tracking_number?.toLowerCase().includes(search.toLowerCase()) ||
-      p.owner_id?.toLowerCase().includes(search.toLowerCase()) ||
-      p.current_entrepot_name?.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
+    const q = search.toLowerCase().trim();
+    const matchSearch = !q ||
+      p.tracking_number?.toLowerCase().includes(q) ||
+      p.owner_id?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q) ||
+      p.current_entrepot_name?.toLowerCase().includes(q) ||
+      p.warehouse_location?.toLowerCase().includes(q);
+    const matchClient = clientFilter === 'all' || p.owner_id === clientFilter;
+    const matchEntrepot =
+      entrepotFilter === 'all' ||
+      p.current_entrepot_id === entrepotFilter ||
+      (() => {
+        const e = entrepots.find((x) => entId(x) === entrepotFilter);
+        return e ? packageInEntrepot(p, e) : false;
+      })();
+    return matchStatus && matchSearch && matchClient && matchEntrepot;
   });
 
   const countByStatus = (s: string) => packages.filter(p => p.status === s).length;
+
+  const clientOptions = Array.from(
+    new Set(packages.map((p) => p.owner_id).filter(Boolean))
+  ).sort((a: string, b: string) => a.localeCompare(b));
 
   const originEntrepots = entrepots.filter(e => e.type === 'origin');
   const destEntrepots = entrepots.filter(e => e.type === 'destination');
@@ -218,7 +242,7 @@ export default function EntrepotPage() {
         // ── Packages View ──
         <div className="px-8 py-6 space-y-4">
           {/* Status KPI strip */}
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
             {STATUS_TABS.slice(1).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -234,18 +258,53 @@ export default function EntrepotPage() {
             ))}
           </div>
 
-          {/* Search */}
-          <div className="flex items-center gap-3">
+          {/* Search + filters */}
+          <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
-                placeholder="Rechercher un colis, client, entrepôt..."
-                className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-blue-400 w-80 transition-all shadow-sm"
+                placeholder="Rechercher colis, client, entrepôt..."
+                className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-blue-400 w-72 transition-all shadow-sm"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
-            <p className="text-sm text-slate-400 font-bold">{filtered.length} résultats</p>
+            <select
+              className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none focus:border-blue-400"
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+            >
+              <option value="all">Tous les clients</option>
+              {clientOptions.map((email) => (
+                <option key={email} value={email}>{email}</option>
+              ))}
+            </select>
+            <select
+              className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-700 outline-none focus:border-blue-400"
+              value={entrepotFilter}
+              onChange={(e) => setEntrepotFilter(e.target.value)}
+            >
+              <option value="all">Tous les entrepôts</option>
+              {entrepots.map((e) => (
+                <option key={entId(e)} value={entId(e)}>
+                  {e.name} ({e.city})
+                </option>
+              ))}
+            </select>
+            {(statusFilter !== 'all' || clientFilter !== 'all' || entrepotFilter !== 'all' || search) && (
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setClientFilter('all');
+                  setEntrepotFilter('all');
+                  setSearch('');
+                }}
+                className="text-xs font-black text-slate-500 hover:text-blue-600 uppercase tracking-wider"
+              >
+                Réinitialiser
+              </button>
+            )}
+            <p className="text-sm text-slate-400 font-bold ml-auto">{filtered.length} résultats</p>
           </div>
 
           {/* Table */}

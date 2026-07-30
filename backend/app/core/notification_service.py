@@ -10,22 +10,36 @@ logger = logging.getLogger(__name__)
 
 class NotificationService:
     @staticmethod
-    async def send_whatsapp(to_phone: str, message: str) -> dict:
+    async def send_whatsapp(
+        to_phone: str,
+        message: str,
+        *,
+        media_base64: Optional[str] = None,
+        mimetype: Optional[str] = None,
+        filename: Optional[str] = None,
+        media_url: Optional[str] = None,
+    ) -> dict:
         """
         Envoie un message via le microservice WhatsApp Web.
-        En cas d'échec ou de déconnexion, bascule sur Nexah SMS.
+        En cas d'échec ou de déconnexion, bascule sur Nexah SMS (texte seul).
         """
         whatsapp_url = f"{settings.WHATSAPP_SERVICE_URL}/send"
-        payload = {
+        payload: dict = {
             "to": to_phone,
-            "message": message
+            "message": message,
         }
+        if media_base64:
+            payload["mediaBase64"] = media_base64
+            payload["mimetype"] = mimetype or "image/jpeg"
+            payload["filename"] = filename or "colis.jpg"
+        elif media_url:
+            payload["mediaUrl"] = media_url
 
         whatsapp_error = None
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(whatsapp_url, json=payload, timeout=15.0)
+                response = await client.post(whatsapp_url, json=payload, timeout=45.0)
                 data = response.json() if response.content else {}
 
                 if response.status_code == 200 and data.get("success"):
@@ -57,12 +71,25 @@ class NotificationService:
         }
 
     @staticmethod
-    async def notify_phone(to_phone: Optional[str], message: str) -> dict:
-        """Envoie WhatsApp puis SMS Nexah si besoin. Ne lève jamais d'exception."""
+    async def notify_phone(
+        to_phone: Optional[str],
+        message: str,
+        *,
+        media_base64: Optional[str] = None,
+        mimetype: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> dict:
+        """Envoie WhatsApp (optionnellement avec image) puis SMS Nexah si besoin."""
         if not to_phone:
             return {"success": False, "error": "no_phone"}
         try:
-            return await NotificationService.send_whatsapp(to_phone, message)
+            return await NotificationService.send_whatsapp(
+                to_phone,
+                message,
+                media_base64=media_base64,
+                mimetype=mimetype,
+                filename=filename,
+            )
         except Exception as e:
             logger.exception(f"[NOTIFY PHONE] Échec pour {to_phone}: {e}")
             return {"success": False, "error": str(e)}
@@ -100,6 +127,97 @@ class NotificationService:
                 },
                 owner_email=user.get("email"),
             )
+
+    @staticmethod
+    def _first_package_photo_media(package_data: dict) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        """Retourne (base64, mimetype, filename) de la 1re photo du colis si dispo."""
+        import base64
+        import os
+        from app.core.paths import upload_file_path
+
+        photos = package_data.get("photos") or []
+        if not photos:
+            return None, None, None
+        raw = photos[0]
+        fname = os.path.basename(str(raw).replace("\\", "/").split("?")[0])
+        if not fname:
+            return None, None, None
+        path = upload_file_path(fname)
+        if not os.path.isfile(path):
+            return None, None, None
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            # Limite ~4 Mo pour WhatsApp Web
+            if len(data) > 4_500_000:
+                logger.warning(f"[NOTIFY] Photo trop lourde ignorée: {fname}")
+                return None, None, None
+            ext = fname.lower().rsplit(".", 1)[-1] if "." in fname else "jpg"
+            mime = {
+                "jpg": "image/jpeg",
+                "jpeg": "image/jpeg",
+                "png": "image/png",
+                "webp": "image/webp",
+            }.get(ext, "image/jpeg")
+            return base64.b64encode(data).decode("ascii"), mime, fname
+        except Exception as e:
+            logger.warning(f"[NOTIFY] Lecture photo échouée ({fname}): {e}")
+            return None, None, None
+
+    @staticmethod
+    async def notify_warehouse_receive(
+        package_data: dict,
+        *,
+        entrepot_name: str,
+        entrepot_city: str = "",
+        entrepot_type: str = "origin",
+        new_status: str = "received",
+    ) -> dict:
+        """Notifie le client après réception d'office en entrepôt (WhatsApp + photo si possible)."""
+        try:
+            user = await NotificationService._owner_user(package_data)
+            if not user:
+                return {"success": False, "error": "owner_not_found"}
+
+            tracking = package_data.get("tracking_number") or "N/A"
+            place = entrepot_name or entrepot_city or "entrepôt MOG"
+            if entrepot_type == "destination":
+                msg = (
+                    f"MOG : Votre colis {tracking} est arrivé à {place}. "
+                    f"Il est disponible pour retrait / formalités."
+                )
+            else:
+                msg = (
+                    f"MOG : Votre colis {tracking} a été réceptionné à {place}. "
+                    f"Il est désormais en stock chez MOG."
+                )
+
+            media_b64, mime, fname = NotificationService._first_package_photo_media(package_data)
+            result = await NotificationService.notify_phone(
+                user.get("phone"),
+                msg,
+                media_base64=media_b64,
+                mimetype=mime,
+                filename=fname,
+            )
+
+            if user.get("push_token"):
+                await NotificationService.send_push(
+                    user["push_token"],
+                    "Réception MOG",
+                    msg,
+                    data={
+                        "colis_id": str(package_data.get("id") or package_data.get("_id") or ""),
+                        "type": "warehouse_receive",
+                        "status": new_status,
+                        "tracking_number": tracking,
+                    },
+                    owner_email=user.get("email"),
+                )
+            return result
+        except Exception as e:
+            logger.exception(f"[NOTIFY WAREHOUSE] Échec: {e}")
+            return {"success": False, "error": str(e)}
 
     @staticmethod
     async def notify_groupage_created(owner_email: str, group_label: str, package_count: int, tracking_numbers: Optional[list] = None):
