@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Dimensions, Image, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Dimensions, Image, Linking, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -143,20 +143,33 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.marketBanner}
-            activeOpacity={0.9}
+            activeOpacity={0.92}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push('/(tabs)/marketplace');
             }}
           >
-            <View style={styles.marketIcon}>
-              <ShoppingBag size={20} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.marketTitle}>Marketplace MOG</Text>
-              <Text style={styles.marketSub}>Véhicules & articles · achat, groupage, réception Cameroun</Text>
-            </View>
-            <ArrowRight size={18} color={colors.primary} />
+            <ImageBackground
+              source={require('../../assets/images/stylish-black-woman-car-salon.jpg')}
+              style={styles.marketBannerBg}
+              imageStyle={styles.marketBannerImg}
+            >
+              <LinearGradient
+                colors={['rgba(15,23,42,0.35)', 'rgba(15,23,42,0.82)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.marketBannerOverlay}
+              >
+                <View style={styles.marketIcon}>
+                  <ShoppingBag size={20} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.marketTitle}>Marketplace MOG</Text>
+                  <Text style={styles.marketSub}>Véhicules & articles · achat, groupage, réception Cameroun</Text>
+                </View>
+                <ArrowRight size={18} color="#fff" />
+              </LinearGradient>
+            </ImageBackground>
           </TouchableOpacity>
 
           {/* IN PROGRESS SECTION (HORIZONTAL SCROLL) */}
@@ -351,20 +364,26 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginTop: -spacing.md,
     marginBottom: spacing.xl,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...shadow.card,
+  },
+  marketBannerBg: { minHeight: 92 },
+  marketBannerImg: { resizeMode: 'cover' },
+  marketBannerOverlay: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    ...shadow.card,
+    padding: 14,
+    minHeight: 92,
   },
   marketIcon: {
-    width: 42, height: 42, borderRadius: 12, backgroundColor: '#E8F1FC',
+    width: 42, height: 42, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
-  marketTitle: { fontWeight: '900', color: colors.text, fontSize: 15 },
-  marketSub: { marginTop: 2, fontSize: 12, color: colors.textSecondary, lineHeight: 16 },
+  marketTitle: { fontWeight: '900', color: '#fff', fontSize: 15 },
+  marketSub: { marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.82)', lineHeight: 16 },
   heroMoreBtn: { position: 'absolute', top: 20, right: 20, padding: 4 },
   heroContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   heroLeft: { flex: 1 },

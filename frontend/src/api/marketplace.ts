@@ -28,6 +28,8 @@ export type MarketplaceProduct = {
   height_cm?: number | null;
   cbm?: number | null;
   dimensions_label?: string;
+  rating_avg?: number;
+  rating_count?: number;
 };
 
 export type MarketplaceOrder = {
@@ -107,5 +109,11 @@ export const marketplaceApi = {
   },
   listOrders() {
     return api.get<MarketplaceOrder[]>('/marketplace/orders').then((r) => r.data);
+  },
+  listReviews(productId: string) {
+    return api.get(`/marketplace/products/${productId}/reviews`).then((r) => r.data);
+  },
+  createReview(productId: string, payload: { rating: number; comment?: string }) {
+    return api.post(`/marketplace/products/${productId}/reviews`, payload).then((r) => r.data);
   },
 };

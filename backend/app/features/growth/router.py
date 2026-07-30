@@ -182,6 +182,45 @@ async def my_referral_info(current_user: dict = Depends(get_current_user), db=De
         "referred_by_type": (user or {}).get("referred_by_type"),
         "referred_by_agent_code": (user or {}).get("referred_by_agent_code"),
         "referred_by_client_code": (user or {}).get("referred_by_client_code"),
+        "can_attach": not bool((user or {}).get("referred_by_agent_id")),
+        "agent": serialize_doc(agent) if agent else None,
+    }
+
+
+@router.post("/referral/attach")
+async def attach_referral_code(
+    payload: dict,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_database),
+):
+    """Permet à un client déjà inscrit d'ajouter un code commercial (une seule fois)."""
+    from app.features.marketplace.services import resolve_referrer, get_growth_settings
+
+    code = (payload or {}).get("referral_code") or ""
+    user = await db.users.find_one({"email": current_user["email"]})
+    if not user:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if user.get("referred_by_agent_id"):
+        raise HTTPException(400, "Un commercial est déjà lié à ce compte")
+
+    ref = await resolve_referrer(db, code)
+    if ref.get("referral_invalid") or not ref.get("referred_by_agent_id"):
+        raise HTTPException(400, "Code commercial invalide")
+
+    updates = {k: v for k, v in ref.items() if k != "referral_invalid"}
+    updates["referral_attached_at"] = datetime.utcnow().isoformat()
+    await db.users.update_one({"email": current_user["email"]}, {"$set": updates})
+
+    growth = await get_growth_settings(db)
+    bonus = int(growth.get("referral_signup_bonus_points") or 0)
+    if bonus > 0:
+        await db.users.update_one({"email": current_user["email"]}, {"$inc": {"loyalty_points": bonus}})
+
+    agent = await db.sales_agents.find_one({"_id": ref["referred_by_agent_id"]})
+    return {
+        "message": "Code commercial enregistré",
+        "referred_by_agent_code": ref.get("referred_by_agent_code"),
+        "loyalty_bonus": bonus,
         "agent": serialize_doc(agent) if agent else None,
     }
 

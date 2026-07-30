@@ -15,6 +15,7 @@ from app.features.marketplace.schemas import (
     MarketplacePurchase,
     MarketplaceCheckoutPay,
     StockAdjust,
+    ProductReviewCreate,
 )
 from app.features.marketplace.services import (
     validate_promo,
@@ -84,6 +85,8 @@ def _prepare_product(doc: dict) -> dict:
         if computed:
             d["cbm"] = computed
     d["dimensions_label"] = _dims_label(d)
+    d.setdefault("rating_avg", 0)
+    d.setdefault("rating_count", 0)
     return d
 
 
@@ -134,6 +137,62 @@ async def get_product(product_id: str, db=Depends(get_database), current_user: d
     if current_user.get("role") == "client" and doc.get("status") != "published":
         raise HTTPException(404, "Article introuvable")
     return _prepare_product(doc)
+
+
+@router.get("/products/{product_id}/reviews")
+async def list_reviews(product_id: str, db=Depends(get_database), current_user: dict = Depends(get_current_user)):
+    items = []
+    async for doc in db.marketplace_reviews.find({"product_id": product_id}).sort("created_at", -1).limit(50):
+        items.append(serialize_doc(doc))
+    return items
+
+
+@router.post("/products/{product_id}/reviews")
+async def create_review(
+    product_id: str,
+    data: ProductReviewCreate,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_database),
+):
+    product = await db.marketplace_products.find_one({"_id": product_id})
+    if not product or product.get("status") != "published":
+        raise HTTPException(404, "Article introuvable")
+    existing = await db.marketplace_reviews.find_one({
+        "product_id": product_id,
+        "user_email": current_user["email"],
+    })
+    now = datetime.utcnow().isoformat()
+    if existing:
+        await db.marketplace_reviews.update_one(
+            {"_id": existing["_id"]},
+            {"$set": {"rating": data.rating, "comment": (data.comment or "").strip(), "updated_at": now}},
+        )
+        review_id = existing["_id"]
+    else:
+        review_id = str(uuid.uuid4())
+        await db.marketplace_reviews.insert_one({
+            "_id": review_id,
+            "product_id": product_id,
+            "user_email": current_user["email"],
+            "user_name": current_user.get("full_name") or current_user["email"].split("@")[0],
+            "rating": data.rating,
+            "comment": (data.comment or "").strip(),
+            "created_at": now,
+        })
+
+    # Recalcule moyenne
+    total_rating = 0
+    count = 0
+    async for r in db.marketplace_reviews.find({"product_id": product_id}):
+        total_rating += int(r.get("rating") or 0)
+        count += 1
+    avg = round(total_rating / count, 1) if count else float(data.rating)
+    await db.marketplace_products.update_one(
+        {"_id": product_id},
+        {"$set": {"rating_avg": avg, "rating_count": count, "updated_at": now}},
+    )
+    doc = await db.marketplace_reviews.find_one({"_id": review_id})
+    return {"review": serialize_doc(doc), "rating_avg": avg, "rating_count": count}
 
 
 @router.post("/products/upload-image")

@@ -31,4 +31,7 @@ export const growthApi = {
   myReferral() {
     return api.get('/growth/referral/me').then((r) => r.data);
   },
+  attachReferral(referral_code: string) {
+    return api.post('/growth/referral/attach', { referral_code }).then((r) => r.data);
+  },
 };

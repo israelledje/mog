@@ -12,6 +12,7 @@ import { growthApi } from '../../src/api/growth';
 import { formatErr } from '../../src/api/client';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 import { getWishlistIds, toggleWishlist } from '../../src/utils/wishlist';
+import StarRating from '../../src/components/StarRating';
 import { colors, radii, spacing, fonts } from '../../src/constants/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -29,6 +30,10 @@ export default function MarketplaceProductScreen() {
   const [variantId, setVariantId] = useState<string | null>(null);
   const [wished, setWished] = useState(false);
   const [imgIndex, setImgIndex] = useState(0);
+  const [myRating, setMyRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [savingReview, setSavingReview] = useState(false);
   const galleryRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -44,6 +49,7 @@ export default function MarketplaceProductScreen() {
       })
       .catch(() => setProduct(null))
       .finally(() => setLoading(false));
+    marketplaceApi.listReviews(id).then((r) => setReviews(Array.isArray(r) ? r : [])).catch(() => {});
     getWishlistIds().then((ids) => setWished(ids.includes(id)));
   }, [id]);
 
@@ -71,6 +77,26 @@ export default function MarketplaceProductScreen() {
     if (!id) return;
     const next = await toggleWishlist(id);
     setWished(next.includes(id));
+  };
+
+  const submitReview = async () => {
+    if (!id || myRating < 1) {
+      Toast.show({ type: 'error', text1: 'Choisissez une note (1 à 5 étoiles)' });
+      return;
+    }
+    setSavingReview(true);
+    try {
+      const res = await marketplaceApi.createReview(id, { rating: myRating, comment: reviewComment.trim() || undefined });
+      setProduct((p) => p ? { ...p, rating_avg: res.rating_avg, rating_count: res.rating_count } : p);
+      const list = await marketplaceApi.listReviews(id);
+      setReviews(Array.isArray(list) ? list : []);
+      setReviewComment('');
+      Toast.show({ type: 'success', text1: 'Avis enregistré' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, 'Impossible d’envoyer l’avis') });
+    } finally {
+      setSavingReview(false);
+    }
   };
 
   const applyPromo = async () => {
@@ -169,6 +195,9 @@ export default function MarketplaceProductScreen() {
 
         <View style={styles.body}>
           <Text style={styles.name}>{product.title}</Text>
+          <View style={{ marginTop: 6 }}>
+            <StarRating rating={product.rating_avg || 0} count={product.rating_count || 0} size={16} />
+          </View>
           <Text style={styles.price}>{unitPrice.toLocaleString('fr-FR')} XAF</Text>
           <Text style={styles.desc}>{product.description || 'Article marketplace — livraison via groupage MOG.'}</Text>
 
@@ -242,6 +271,31 @@ export default function MarketplaceProductScreen() {
             {discount > 0 && <Text style={styles.discount}>Réduction · −{discount.toLocaleString('fr-FR')} XAF</Text>}
             <Text style={styles.total}>Total · {total.toLocaleString('fr-FR')} XAF</Text>
           </View>
+
+          <View style={styles.reviewBox}>
+            <Text style={styles.reviewTitle}>Donner votre avis</Text>
+            <StarRating rating={myRating} editable size={26} showValue={false} onChange={setMyRating} />
+            <TextInput
+              style={[styles.input, { marginTop: 12, minHeight: 70, textAlignVertical: 'top' }]}
+              multiline
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              placeholder="Commentaire (optionnel)"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <TouchableOpacity style={styles.reviewBtn} onPress={submitReview} disabled={savingReview}>
+              {savingReview ? <ActivityIndicator color="#fff" /> : <Text style={styles.reviewBtnText}>Publier l’avis</Text>}
+            </TouchableOpacity>
+            {reviews.slice(0, 5).map((r) => (
+              <View key={r.id} style={styles.reviewItem}>
+                <View style={styles.reviewItemHead}>
+                  <Text style={styles.reviewAuthor}>{r.user_name || 'Client'}</Text>
+                  <StarRating rating={r.rating || 0} size={11} showValue={false} />
+                </View>
+                {!!r.comment && <Text style={styles.reviewComment}>{r.comment}</Text>}
+              </View>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
@@ -301,6 +355,17 @@ const styles = StyleSheet.create({
   totalLine: { color: colors.textSecondary, fontWeight: '600' },
   discount: { marginTop: 4, color: '#059669', fontWeight: '700' },
   total: { marginTop: 8, fontSize: 18, fontWeight: '900', color: colors.text },
+  reviewBox: { marginTop: 20, backgroundColor: '#fff', borderRadius: 16, padding: 16 },
+  reviewTitle: { fontWeight: '800', color: colors.text, marginBottom: 10, fontSize: 15 },
+  reviewBtn: {
+    marginTop: 4, backgroundColor: '#0F172A', borderRadius: radii.button,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  reviewBtnText: { color: '#fff', fontWeight: '800' },
+  reviewItem: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E5E7EB' },
+  reviewItemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  reviewAuthor: { fontWeight: '700', color: colors.text, fontSize: 13 },
+  reviewComment: { marginTop: 4, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
   cta: {
     margin: spacing.lg, backgroundColor: colors.primary, borderRadius: radii.button,
     paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

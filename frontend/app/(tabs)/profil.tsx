@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Image, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera, Gift } from 'lucide-react-native';
+import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera, Gift, Handshake } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
@@ -12,10 +12,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import LanguageSelector from '../../src/components/LanguageSelector';
 import { authApi } from '../../src/api/auth';
 import { paymentsApi } from '../../src/api/payments';
+import { growthApi } from '../../src/api/growth';
+import { BASE, getRefreshToken, formatErr } from '../../src/api/client';
+import { biometricService } from '../../src/api/biometrics';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
-import { biometricService } from '../../src/api/biometrics';
-import { BASE, getRefreshToken } from '../../src/api/client';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 export default function ProfileScreen() {
@@ -35,6 +36,9 @@ export default function ProfileScreen() {
     point_value_xaf: 20,
     points_per_cbm: 100,
   });
+  const [referral, setReferral] = useState<any>(null);
+  const [referralCode, setReferralCode] = useState('');
+  const [savingReferral, setSavingReferral] = useState(false);
 
   useEffect(() => {
     authApi.me().then(setUser).catch(() => {});
@@ -46,6 +50,7 @@ export default function ProfileScreen() {
         points_per_cbm: d.points_per_cbm || 100,
       });
     }).catch(() => {});
+    growthApi.myReferral().then(setReferral).catch(() => {});
   }, [setUser]);
 
   useEffect(() => {
@@ -54,6 +59,42 @@ export default function ProfileScreen() {
       setNotif(prefs);
     }
   }, [user]);
+
+  const attachReferral = async () => {
+    if (!referralCode.trim()) {
+      Toast.show({ type: 'error', text1: 'Entrez un code commercial' });
+      return;
+    }
+    setSavingReferral(true);
+    try {
+      const res = await growthApi.attachReferral(referralCode.trim());
+      setReferral({
+        ...referral,
+        can_attach: false,
+        referred_by_agent_code: res.referred_by_agent_code,
+        referred_by_type: 'agent',
+        agent: res.agent,
+      });
+      setReferralCode('');
+      Toast.show({
+        type: 'success',
+        text1: 'Commercial lié',
+        text2: res.loyalty_bonus ? `+${res.loyalty_bonus} points fidélité` : undefined,
+      });
+      paymentsApi.loyalty().then((d) => {
+        setLoyalty({
+          points: d.points || 0,
+          value_xaf: d.value_xaf || 0,
+          point_value_xaf: d.point_value_xaf || 20,
+          points_per_cbm: d.points_per_cbm || 100,
+        });
+      }).catch(() => {});
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, 'Code invalide') });
+    } finally {
+      setSavingReferral(false);
+    }
+  };
 
   const updateNotif = async (key: string, val: boolean) => {
     const newNotif = { ...notif, [key]: val };
@@ -300,6 +341,37 @@ export default function ProfileScreen() {
             />
           </Section>
 
+          <Section title="Parrainage commercial">
+            {referral?.referred_by_agent_code ? (
+              <View style={styles.referralLinked}>
+                <Handshake size={18} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.referralLinkedTitle}>
+                    Lié à {referral?.agent?.full_name || referral.referred_by_agent_code}
+                  </Text>
+                  <Text style={styles.referralLinkedSub}>Code {referral.referred_by_agent_code}</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.referralBox}>
+                <Text style={styles.referralHint}>
+                  Ajoutez le code d’un commercial MOG pour lui rattacher vos commandes (une seule fois).
+                </Text>
+                <TextInput
+                  style={styles.referralInput}
+                  autoCapitalize="characters"
+                  placeholder="Code commercial"
+                  placeholderTextColor={colors.textSecondary}
+                  value={referralCode}
+                  onChangeText={setReferralCode}
+                />
+                <TouchableOpacity style={styles.referralBtn} onPress={attachReferral} disabled={savingReferral}>
+                  {savingReferral ? <ActivityIndicator color="#fff" /> : <Text style={styles.referralBtnText}>Enregistrer le code</Text>}
+                </TouchableOpacity>
+              </View>
+            )}
+          </Section>
+
           <TouchableOpacity style={styles.logout} onPress={onLogout} testID="profile-logout" activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('profile.logout')}>
             <LogOut size={20} color={colors.danger} />
             <Text style={styles.logoutText}>{t('profile.logout')}</Text>
@@ -506,4 +578,19 @@ const styles = StyleSheet.create({
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: spacing.lg, backgroundColor: '#fff', borderRadius: radii.card, marginTop: spacing.sm, ...shadow.card },
   logoutText: { color: colors.danger, fontWeight: '700', fontSize: 16 },
   versionText: { textAlign: 'center', color: colors.textSecondary, fontSize: 12, marginTop: spacing.md, marginBottom: spacing.lg },
+  referralBox: { padding: spacing.lg, gap: 10 },
+  referralHint: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  referralInput: {
+    backgroundColor: colors.background, borderRadius: radii.input, paddingHorizontal: 14, paddingVertical: 12,
+    color: colors.text, fontWeight: '700', letterSpacing: 1,
+  },
+  referralBtn: {
+    backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 12, alignItems: 'center',
+  },
+  referralBtnText: { color: '#fff', fontWeight: '800' },
+  referralLinked: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.lg,
+  },
+  referralLinkedTitle: { fontWeight: '700', color: colors.text, fontSize: 15 },
+  referralLinkedSub: { marginTop: 2, color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
 });

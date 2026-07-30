@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput,
-  RefreshControl, ActivityIndicator, Dimensions,
+  RefreshControl, ActivityIndicator, Dimensions, ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,10 +9,14 @@ import {
   ShoppingBag, Search, Package, ClipboardList, Heart, Store, ChevronRight,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { marketplaceApi, type MarketplaceProduct } from '../../src/api/marketplace';
 import { getWishlistIds } from '../../src/utils/wishlist';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
+import StarRating from '../../src/components/StarRating';
 import { colors, radii, spacing, fonts, shadow } from '../../src/constants/theme';
+
+const HEADER_BG = require('../../assets/images/logistics-transportation-container-cargo-ship-cargo-plane-with-working-crane-bridge-shipyard-sunrise-logistic-import-export-transport-industry-background-ai-generative.jpg');
 
 const CATEGORIES = [
   { id: '', label: 'Tous' },
@@ -104,6 +108,7 @@ export default function MarketplaceTabScreen() {
           )}
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <StarRating rating={item.rating_avg || 0} count={item.rating_count || 0} size={12} />
         <Text style={styles.price}>{formatPrice(item.price_xaf)}</Text>
         <Text style={styles.meta} numberOfLines={1}>
           {item.dimensions_label || ((item.transport_mode === 'air' || item.transport_mode === 'air_express') ? 'Aérien' : 'Maritime')}
@@ -116,7 +121,11 @@ export default function MarketplaceTabScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safe}>
-        <View style={styles.topBand}>
+        <ImageBackground source={HEADER_BG} style={styles.topBand} imageStyle={styles.topBandImg}>
+          <LinearGradient
+            colors={['rgba(15,23,42,0.55)', 'rgba(15,23,42,0.88)']}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.brandRow}>
             <View style={styles.brandIcon}>
               <Store size={20} color="#fff" strokeWidth={2.2} />
@@ -129,7 +138,7 @@ export default function MarketplaceTabScreen() {
               style={styles.iconBtn}
               onPress={() => { Haptics.selectionAsync(); setMarketTab('wishlist'); }}
             >
-              <Heart size={18} color={marketTab === 'wishlist' ? '#E11D48' : colors.text} />
+              <Heart size={18} color={marketTab === 'wishlist' ? '#FDA4AF' : '#fff'} />
               {wishlistIds.length > 0 && (
                 <View style={styles.countDot}>
                   <Text style={styles.countDotText}>{wishlistIds.length}</Text>
@@ -151,13 +160,13 @@ export default function MarketplaceTabScreen() {
                   style={[styles.menuChip, on && styles.menuChipOn]}
                   onPress={() => { Haptics.selectionAsync(); setMarketTab(m.id); }}
                 >
-                  <m.Icon size={14} color={on ? '#fff' : colors.textSecondary} />
+                  <m.Icon size={14} color={on ? '#fff' : 'rgba(255,255,255,0.75)'} />
                   <Text style={[styles.menuChipText, on && styles.menuChipTextOn]}>{m.label}</Text>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
-        </View>
+        </ImageBackground>
 
         <ScrollView
           contentContainerStyle={{ paddingBottom: 120 }}
@@ -244,20 +253,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6F9' },
   safe: { flex: 1 },
   topBand: {
-    backgroundColor: '#0F172A',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
+    overflow: 'hidden',
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  topBandImg: { resizeMode: 'cover' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, zIndex: 1 },
   brandIcon: {
     width: 42, height: 42, borderRadius: 14, backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
-  brandEyebrow: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.55)', letterSpacing: 1.4 },
+  brandEyebrow: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.7)', letterSpacing: 1.4 },
   brandTitle: { fontSize: 22, fontWeight: '800', color: '#fff', fontFamily: fonts.heading },
   iconBtn: {
-    width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center', justifyContent: 'center',
   },
   countDot: {
@@ -265,14 +275,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#E11D48', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
   },
   countDotText: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  menuRow: { gap: 8, paddingRight: 8 },
+  menuRow: { gap: 8, paddingRight: 8, zIndex: 1 },
   menuChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   menuChipOn: { backgroundColor: colors.primary },
-  menuChipText: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.65)' },
+  menuChipText: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   menuChipTextOn: { color: '#fff' },
   stickyFilters: { backgroundColor: '#F4F6F9', paddingBottom: 4 },
   searchWrap: {

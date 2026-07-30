@@ -70,6 +70,11 @@ class StockAdjust(BaseModel):
     variant_id: Optional[str] = None
 
 
+class ProductReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+
+
 class PromoCodeCreate(BaseModel):
     code: str
     label: Optional[str] = None
