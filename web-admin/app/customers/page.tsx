@@ -14,7 +14,10 @@ import {
   X, 
   AlertCircle,
   Building2,
-  CalendarDays
+  CalendarDays,
+  ShieldCheck,
+  Shield,
+  UserCog
 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api';
 
@@ -25,7 +28,9 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [promoting, setPromoting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -52,18 +57,21 @@ export default function CustomersPage() {
   };
 
   const handleEdit = (customer: any) => {
-    setSelectedCustomer({ ...customer });
+    setSelectedCustomer({ ...customer, role: customer.role || 'client' });
     setShowEditModal(true);
     setError(null);
+    setSuccess(null);
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    setSuccess(null);
 
     try {
       const token = localStorage.getItem('admin_token');
+      const newRole = selectedCustomer.role || 'client';
       const res = await fetch(`${API_BASE_URL}/admin/users/${selectedCustomer.id}`, {
         method: 'PATCH',
         headers: { 
@@ -74,12 +82,22 @@ export default function CustomersPage() {
           full_name: selectedCustomer.full_name,
           phone: selectedCustomer.phone,
           city: selectedCustomer.city,
-          email: selectedCustomer.email
+          email: selectedCustomer.email,
+          role: newRole,
         })
       });
 
       if (res.ok) {
         setShowEditModal(false);
+        if (newRole === 'admin' || newRole === 'operator') {
+          setSuccess(
+            `${selectedCustomer.full_name || selectedCustomer.email} est maintenant ${
+              newRole === 'admin' ? 'administrateur' : 'opérateur'
+            }. Visible dans Équipe.`
+          );
+        } else {
+          setSuccess('Profil mis à jour');
+        }
         fetchCustomers();
       } else {
         const errData = await res.json();
@@ -89,6 +107,43 @@ export default function CustomersPage() {
       setError("Impossible de contacter le serveur");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const promoteCustomer = async (customer: any, role: 'operator' | 'admin') => {
+    const label = role === 'admin' ? 'administrateur' : 'opérateur';
+    const ok = window.confirm(
+      `Promouvoir « ${customer.full_name || customer.email} » en ${label} ?\n\n` +
+      `Ce compte quittera la liste Clients et apparaîtra dans Équipe.`
+    );
+    if (!ok) return;
+
+    setPromoting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch(`${API_BASE_URL}/admin/users/${customer.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.detail || `Échec promotion (${res.status})`);
+        return;
+      }
+      setSuccess(
+        `${customer.full_name || customer.email} est maintenant ${label}. Visible dans Équipe.`
+      );
+      await fetchCustomers();
+    } catch {
+      setError('Impossible de contacter le serveur');
+    } finally {
+      setPromoting(false);
     }
   };
 
@@ -103,7 +158,6 @@ export default function CustomersPage() {
 
   return (
     <div className="p-8 space-y-10 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight flex items-center gap-4">
@@ -118,7 +172,25 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Stats Board */}
+      {success && (
+        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3 text-emerald-700 text-sm font-bold">
+          <ShieldCheck size={20} />
+          {success}
+          <button onClick={() => setSuccess(null)} className="ml-auto text-emerald-500 hover:text-emerald-800">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {error && !showEditModal && (
+        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
+          <AlertCircle size={20} />
+          {error}
+          <button onClick={() => setError(null)} className="ml-auto">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-blue-900 to-indigo-900 p-8 rounded-[32px] shadow-lg text-white relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
@@ -147,9 +219,7 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Main Board */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-        {/* Toolbar */}
         <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 bg-slate-50/50">
           <div className="relative w-full md:w-96">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -166,7 +236,6 @@ export default function CustomersPage() {
           </button>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -192,7 +261,7 @@ export default function CustomersPage() {
                       <Users size={32} className="text-slate-300" />
                     </div>
                     <p className="font-bold text-slate-500 text-lg">Aucun client trouvé</p>
-                    <p className="text-slate-400 font-medium mt-1">Essayez d'ajuster vos filtres de recherche.</p>
+                    <p className="text-slate-400 font-medium mt-1">Essayez d&apos;ajuster vos filtres de recherche.</p>
                   </td>
                 </tr>
               ) : (
@@ -234,6 +303,24 @@ export default function CustomersPage() {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          title="Promouvoir opérateur"
+                          disabled={promoting}
+                          onClick={() => promoteCustomer(customer, 'operator')}
+                          className="p-3 rounded-xl bg-white border border-slate-200 hover:border-violet-200 hover:bg-violet-50 text-slate-500 hover:text-violet-700 transition-all shadow-sm"
+                        >
+                          <UserCog size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Promouvoir administrateur"
+                          disabled={promoting}
+                          onClick={() => promoteCustomer(customer, 'admin')}
+                          className="p-3 rounded-xl bg-white border border-slate-200 hover:border-amber-200 hover:bg-amber-50 text-slate-500 hover:text-amber-700 transition-all shadow-sm"
+                        >
+                          <Shield size={16} />
+                        </button>
                         <button 
                           onClick={() => handleEdit(customer)}
                           className="p-3 rounded-xl bg-white border border-slate-200 hover:border-blue-200 hover:bg-blue-50 text-slate-500 hover:text-blue-600 transition-all shadow-sm"
@@ -253,7 +340,6 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Edit Modal */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -320,6 +406,29 @@ export default function CustomersPage() {
                     value={selectedCustomer.email || ''}
                     onChange={e => setSelectedCustomer({...selectedCustomer, email: e.target.value})}
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                    Rôle du compte
+                  </label>
+                  <select
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-slate-900 transition-all"
+                    value={selectedCustomer.role || 'client'}
+                    onChange={(e) =>
+                      setSelectedCustomer({ ...selectedCustomer, role: e.target.value })
+                    }
+                  >
+                    <option value="client">Client</option>
+                    <option value="operator">Opérateur</option>
+                    <option value="admin">Administrateur</option>
+                  </select>
+                  {(selectedCustomer.role === 'operator' || selectedCustomer.role === 'admin') && (
+                    <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-medium">
+                      Ce compte quittera Clients et apparaîtra dans <strong>Équipe</strong>.
+                      Un badge QR opérateur sera généré si besoin.
+                    </p>
+                  )}
                 </div>
               </div>
 

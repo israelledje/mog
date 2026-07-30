@@ -241,28 +241,56 @@ async def export_packages_excel(db = Depends(get_database)):
 @router.patch("/users/{user_id}", dependencies=[Depends(check_role(["admin"]))])
 async def update_user_as_admin(user_id: str, update_data: dict, db = Depends(get_database)):
     from bson import ObjectId
-    
+    import secrets
+
+    allowed_roles = {"client", "operator", "admin"}
+    if "role" in update_data and update_data["role"] is not None:
+        if update_data["role"] not in allowed_roles:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Rôle invalide. Autorisés : {', '.join(sorted(allowed_roles))}",
+            )
+
     # Supprimer les champs sensibles s'ils sont présents dans le body
     if "password" in update_data and update_data["password"]:
         update_data["hashed_password"] = get_password_hash(update_data["password"])
         del update_data["password"]
     elif "password" in update_data:
         del update_data["password"]
-    
+
     # Préparer l'ID (gérer string ou ObjectId)
     query_id = user_id
     try:
         if ObjectId.is_valid(user_id):
             query_id = ObjectId(user_id)
-    except:
+    except Exception:
         pass
 
-    result = await db.users.update_one(
-        {"_id": query_id},
-        {"$set": {k: v for k, v in update_data.items() if v is not None}}
-    )
-    
+    existing = await db.users.find_one({"_id": query_id})
+    if not existing:
+        # fallback string _id (UUID)
+        existing = await db.users.find_one({"_id": user_id})
+        if existing:
+            query_id = user_id
+    if not existing:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    set_data = {k: v for k, v in update_data.items() if v is not None}
+
+    # Promotion client → staff : générer un badge QR si absent
+    new_role = set_data.get("role")
+    if new_role in ("operator", "admin") and not existing.get("badge_secret"):
+        set_data["badge_secret"] = secrets.token_urlsafe(16)
+
+    if not set_data:
+        return {"message": "Aucune modification", "role": existing.get("role")}
+
+    result = await db.users.update_one({"_id": query_id}, {"$set": set_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-        
-    return {"message": "Utilisateur mis à jour"}
+
+    return {
+        "message": "Utilisateur mis à jour",
+        "role": set_data.get("role", existing.get("role")),
+        "promoted": new_role in ("operator", "admin") and existing.get("role") == "client",
+    }
