@@ -2,7 +2,7 @@ from fpdf import FPDF
 import qrcode
 from io import BytesIO
 from pathlib import Path
-from typing import List
+from typing import List, Any
 from datetime import datetime
 
 # Couleurs marque M.O.G (papier à en-tête)
@@ -18,6 +18,34 @@ TOP_MARGIN_MM = 42
 BOTTOM_MARGIN_MM = 38
 LEFT_MARGIN_MM = 16
 RIGHT_MARGIN_MM = 16
+
+# Caractères hors Helvetica/latin-1 fréquents dans les saisies (Word, mobile, ZH…)
+_UNICODE_REPLACEMENTS = str.maketrans({
+    "\u2014": "-",   # —
+    "\u2013": "-",   # –
+    "\u2012": "-",
+    "\u2010": "-",
+    "\u2212": "-",
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u00ab": '"',
+    "\u00bb": '"',
+    "\u2026": "...",
+    "\u00a0": " ",
+    "\u2022": "-",
+    "\u00b7": "-",
+    "\ufffd": "?",
+})
+
+
+def _pdf_text(value: Any) -> str:
+    """Texte compatible police core Helvetica (latin-1) — évite les 500 FPDF."""
+    if value is None:
+        return ""
+    text = str(value).translate(_UNICODE_REPLACEMENTS)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
 class MogDocumentPDF(FPDF):
@@ -40,6 +68,16 @@ class MogDocumentPDF(FPDF):
         self.set_text_color(*MOG_MUTED)
         self.cell(0, 8, f"Page {self.page_no()}/{{nb}}", align="C")
 
+    def cell(self, w, h=0, text="", *args, **kwargs):
+        # fpdf2 utilise parfois `txt=` ; normaliser vers text=
+        if "txt" in kwargs and not text:
+            text = kwargs.pop("txt")
+        return super().cell(w, h, _pdf_text(text), *args, **kwargs)
+
+    def multi_cell(self, w, h=0, text="", *args, **kwargs):
+        if "txt" in kwargs and not text:
+            text = kwargs.pop("txt")
+        return super().multi_cell(w, h, _pdf_text(text), *args, **kwargs)
 
 def _pdf_bytes(pdf: FPDF) -> BytesIO:
     output = BytesIO()

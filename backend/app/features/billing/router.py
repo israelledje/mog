@@ -165,8 +165,14 @@ async def get_invoice_pdf(
         
     # Get user
     customer = await db.users.find_one({"email": invoice["customer_id"]})
-    
-    pdf_buffer = generate_customer_invoice_pdf(invoice, packages, customer)
+
+    try:
+        pdf_buffer = generate_customer_invoice_pdf(invoice, packages, customer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Génération PDF impossible: {type(e).__name__}: {e}",
+        ) from e
 
     # Filename ASCII-safe : "N°" / "/" cassent Content-Disposition (latin-1) et certains clients HTTP
     raw_name = str(invoice.get("invoice_number") or invoice_id)
