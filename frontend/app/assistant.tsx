@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView,
   Platform, ActivityIndicator, Pressable,
@@ -12,35 +12,42 @@ import * as Haptics from 'expo-haptics';
 import { assistantApi, type AssistantMessage } from '../src/api/assistant';
 import { colors, fonts, spacing } from '../src/constants/theme';
 
-const SUGGESTIONS = [
-  'Quels sont vos tarifs aériens ?',
-  'Comment déclarer un colis ?',
-  'Quels services proposez-vous en Chine ?',
-  'Comment fonctionne le remplissage de conteneur ?',
-  'Quels sont les délais maritime vers Douala ?',
-];
-
 type UiMessage = AssistantMessage & { id: string };
 
 export default function AssistantScreen() {
   const router = useRouter();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const listRef = useRef<FlatList>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<UiMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content:
-        'Bonjour, je suis **MOG Assistant**. Posez-moi vos questions sur nos tarifs, délais, services (aéroport, hôtel, véhicules, conteneur…) ou le suivi de vos colis. Comment puis-je vous aider ?',
-    },
-  ]);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
+
+  const suggestions = useMemo(
+    () => [
+      t('ai.suggestion_1'),
+      t('ai.suggestion_2'),
+      t('ai.suggestion_3'),
+      t('ai.suggestion_4'),
+      t('ai.suggestion_5'),
+    ],
+    [t, i18n.language],
+  );
 
   useEffect(() => {
-    const t = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
-    return () => clearTimeout(t);
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: t('ai.welcome'),
+      },
+    ]);
+    setError(null);
+  }, [i18n.language, t]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    return () => clearTimeout(timer);
   }, [messages, loading]);
 
   const send = async (text?: string) => {
@@ -69,15 +76,14 @@ export default function AssistantScreen() {
         { id: `a-${Date.now()}`, role: 'assistant', content: res.reply },
       ]);
     } catch (e: any) {
-      const detail = e?.response?.data?.detail || e?.message || 'Impossible de joindre l’assistant.';
-      setError(typeof detail === 'string' ? detail : 'Erreur assistant');
+      const detail = e?.response?.data?.detail || e?.message || t('ai.error_unreachable');
+      setError(typeof detail === 'string' ? detail : t('ai.error_generic'));
       setMessages((prev) => [
         ...prev,
         {
           id: `e-${Date.now()}`,
           role: 'assistant',
-          content:
-            'Je rencontre un souci technique pour le moment. Réessayez dans un instant, ou contactez un opérateur M.O.G via WhatsApp.',
+          content: t('ai.error_fallback'),
         },
       ]);
     } finally {
@@ -91,8 +97,7 @@ export default function AssistantScreen() {
       {
         id: 'welcome',
         role: 'assistant',
-        content:
-          'Conversation réinitialisée. Que souhaitez-vous savoir sur M.O.G Group Multiservice ?',
+        content: t('ai.reset'),
       },
     ]);
     setError(null);
@@ -125,10 +130,10 @@ export default function AssistantScreen() {
         <View style={styles.headerCenter}>
           <View style={styles.headerBadge}>
             <Sparkles size={14} color="#A5B4FC" />
-            <Text style={styles.headerBadgeText}>IA M.O.G</Text>
+            <Text style={styles.headerBadgeText}>{t('ai.badge')}</Text>
           </View>
-          <Text style={styles.headerTitle}>MOG Assistant</Text>
-          <Text style={styles.headerSub}>Tarifs · Services · Conseils</Text>
+          <Text style={styles.headerTitle}>{t('ai.title')}</Text>
+          <Text style={styles.headerSub}>{t('ai.subtitle')}</Text>
         </View>
         <TouchableOpacity onPress={clearChat} style={styles.clearBtn}>
           <Trash2 size={18} color="rgba(255,255,255,0.8)" />
@@ -149,7 +154,7 @@ export default function AssistantScreen() {
           ListHeaderComponent={
             messages.length <= 1 ? (
               <View style={styles.suggestions}>
-                {SUGGESTIONS.map((s) => (
+                {suggestions.map((s) => (
                   <Pressable key={s} style={styles.chip} onPress={() => send(s)}>
                     <Text style={styles.chipText}>{s}</Text>
                   </Pressable>
@@ -173,7 +178,7 @@ export default function AssistantScreen() {
             loading ? (
               <View style={styles.typing}>
                 <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.typingText}>MOG Assistant réfléchit…</Text>
+                <Text style={styles.typingText}>{t('ai.typing')}</Text>
               </View>
             ) : null
           }
@@ -186,7 +191,7 @@ export default function AssistantScreen() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Posez votre question à M.O.G…"
+            placeholder={t('ai.placeholder')}
             placeholderTextColor={colors.textSecondary}
             multiline
             maxLength={2000}

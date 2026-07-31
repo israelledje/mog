@@ -28,11 +28,24 @@ async def get_growth_settings(db) -> dict:
         "commission_on_paid_packages": True,
         "referral_signup_bonus_points": 50,
         "marketplace_enabled": True,
+        # M.O.G CLUB
+        "point_value_xaf": 20,
+        "air_kg_per_cbm": 167.0,
+        "loyalty_tiers": [
+            {"id": "bronze", "name": "Bronze", "min_cbm": 0, "points_per_cbm": 10, "emoji": "🥉"},
+            {"id": "silver", "name": "Silver", "min_cbm": 20, "points_per_cbm": 15, "emoji": "🥈"},
+            {"id": "gold", "name": "Gold", "min_cbm": 50, "points_per_cbm": 20, "emoji": "🥇"},
+            {"id": "vip", "name": "VIP", "min_cbm": 100, "points_per_cbm": 25, "emoji": "🏆"},
+        ],
+        "vip_benefits": "Avantages personnalisés — contactez M.O.G PARTNERS",
+        "award_on_statuses": ["in_transit", "departed"],
     }
     if not doc:
         await db.growth_settings.insert_one(defaults)
         return defaults
     merged = {**defaults, **doc}
+    if not merged.get("loyalty_tiers"):
+        merged["loyalty_tiers"] = defaults["loyalty_tiers"]
     return merged
 
 

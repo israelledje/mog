@@ -25,9 +25,9 @@ const menuItems = [
   { name: 'Colis & Logistique', href: '/logistics', icon: Package },
   { name: 'Entrepôts & Stocks', href: '/entrepot', icon: Warehouse },
   { name: 'Guichet & Retraits', href: '/guichet', icon: Store },
-  { name: 'Marketplace', href: '/marketplace', icon: ShoppingBag },
+  { name: 'M.O.G MARKET', href: '/marketplace', icon: ShoppingBag },
+  { name: 'M.O.G PARTNERS', href: '/commerciaux', icon: Handshake },
   { name: 'Codes promo', href: '/promos', icon: Percent },
-  { name: 'Commerciaux', href: '/commerciaux', icon: Handshake },
   { name: 'Paiements & Factures', href: '/payments', icon: CreditCard },
   { name: 'Grille Tarifaire', href: '/tarifs', icon: Tag },
   { name: 'Clients', href: '/customers', icon: Users },
@@ -68,8 +68,8 @@ export default function Sidebar() {
           <Package className="text-white" size={22} />
         </div>
         <div className="min-w-0">
-          <span className="block truncate text-lg font-black leading-none tracking-tight text-white">MOG Admin</span>
-          <span className="mt-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Logistics Console</span>
+          <span className="block truncate text-lg font-black leading-none tracking-tight text-white">M.O.G CONNECT+</span>
+          <span className="mt-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Admin Console</span>
         </div>
       </div>
 

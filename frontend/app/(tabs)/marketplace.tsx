@@ -1,10 +1,11 @@
-﻿import React, { useCallback, useEffect, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput,
   RefreshControl, ActivityIndicator, Dimensions, ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import {
   ShoppingBag, Search, Package, ClipboardList, Heart, Store, ChevronRight,
 } from 'lucide-react-native';
@@ -18,18 +19,11 @@ import { colors, radii, spacing, fonts, shadow } from '../../src/constants/theme
 
 const HEADER_BG = require('../../assets/images/logistics-transportation-container-cargo-ship-cargo-plane-with-working-crane-bridge-shipyard-sunrise-logistic-import-export-transport-industry-background-ai-generative.jpg');
 
-const CATEGORIES = [
-  { id: '', label: 'Tous' },
-  { id: 'vehicle', label: 'Véhicules' },
-  { id: 'electronics', label: 'Électro' },
-  { id: 'fashion', label: 'Mode' },
-  { id: 'other', label: 'Autre' },
-];
-
 type MarketTab = 'shop' | 'orders' | 'wishlist';
 const COL = (Dimensions.get('window').width - spacing.lg * 2 - 12) / 2;
 
 export default function MarketplaceTabScreen() {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const [marketTab, setMarketTab] = useState<MarketTab>('shop');
   const [items, setItems] = useState<MarketplaceProduct[]>([]);
@@ -40,6 +34,14 @@ export default function MarketplaceTabScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [category, setCategory] = useState('');
   const [q, setQ] = useState('');
+
+  const categories = useMemo(() => ([
+    { id: '', label: t('marketplace.cat_all') },
+    { id: 'vehicle', label: t('marketplace.cat_vehicle') },
+    { id: 'electronics', label: t('marketplace.cat_electronics') },
+    { id: 'fashion', label: t('marketplace.cat_fashion') },
+    { id: 'other', label: t('marketplace.cat_other') },
+  ]), [t, i18n.language]);
 
   const load = useCallback(async () => {
     try {
@@ -80,12 +82,16 @@ export default function MarketplaceTabScreen() {
     }, []),
   );
 
-  const formatPrice = (n: number) => `${Number(n || 0).toLocaleString('fr-FR')} XAF`;
+  const formatPrice = (n: number) =>
+    `${Number(n || 0).toLocaleString(i18n.language)} ${t('common.currency_xaf')}`;
 
   const renderProductCard = (item: MarketplaceProduct) => {
     const img = item.images?.[0] ? resolveMediaUrl(item.images[0]) : null;
     const variants = item.variants || [];
     const wished = wishlistIds.includes(item.id);
+    const mode = (item.transport_mode === 'air' || item.transport_mode === 'air_express')
+      ? t('marketplace.transport_air')
+      : t('marketplace.transport_sea');
     return (
       <TouchableOpacity
         key={item.id}
@@ -111,12 +117,18 @@ export default function MarketplaceTabScreen() {
         <StarRating rating={item.rating_avg || 0} count={item.rating_count || 0} size={12} />
         <Text style={styles.price}>{formatPrice(item.price_xaf)}</Text>
         <Text style={styles.meta} numberOfLines={1}>
-          {item.dimensions_label || ((item.transport_mode === 'air' || item.transport_mode === 'air_express') ? 'Aérien' : 'Maritime')}
-          {variants.length ? ` · ${variants.length} opt.` : ''}
+          {item.dimensions_label || mode}
+          {variants.length ? ` · ${t('marketplace.variants_count', { count: variants.length })}` : ''}
         </Text>
       </TouchableOpacity>
     );
   };
+
+  const menus = [
+    { id: 'shop' as MarketTab, label: t('marketplace.tab_shop'), Icon: Package },
+    { id: 'orders' as MarketTab, label: t('marketplace.tab_orders'), Icon: ClipboardList },
+    { id: 'wishlist' as MarketTab, label: t('marketplace.tab_wishlist'), Icon: Heart },
+  ];
 
   return (
     <View style={styles.container}>
@@ -131,8 +143,8 @@ export default function MarketplaceTabScreen() {
               <Store size={20} color="#fff" strokeWidth={2.2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.brandEyebrow}>BOUTIQUE MOG</Text>
-              <Text style={styles.brandTitle}>Marketplace</Text>
+              <Text style={styles.brandEyebrow}>{t('marketplace.brand_eyebrow')}</Text>
+              <Text style={styles.brandTitle}>{t('marketplace.title')}</Text>
             </View>
             <TouchableOpacity
               style={styles.iconBtn}
@@ -148,11 +160,7 @@ export default function MarketplaceTabScreen() {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.menuRow}>
-            {([
-              { id: 'shop' as MarketTab, label: 'Boutique', Icon: Package },
-              { id: 'orders' as MarketTab, label: 'Commandes', Icon: ClipboardList },
-              { id: 'wishlist' as MarketTab, label: 'Wishlist', Icon: Heart },
-            ]).map((m) => {
+            {menus.map((m) => {
               const on = marketTab === m.id;
               return (
                 <TouchableOpacity
@@ -181,7 +189,7 @@ export default function MarketplaceTabScreen() {
                 <Search size={16} color={colors.textSecondary} />
                 <TextInput
                   style={styles.search}
-                  placeholder="Rechercher un article…"
+                  placeholder={t('marketplace.search_placeholder')}
                   placeholderTextColor={colors.textSecondary}
                   value={q}
                   onChangeText={setQ}
@@ -190,7 +198,7 @@ export default function MarketplaceTabScreen() {
                 />
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                {CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <TouchableOpacity
                     key={c.id || 'all'}
                     style={[styles.chip, category === c.id && styles.chipOn]}
@@ -208,7 +216,7 @@ export default function MarketplaceTabScreen() {
           ) : marketTab === 'shop' ? (
             <View style={styles.grid}>
               {items.length ? items.map(renderProductCard) : (
-                <Text style={styles.empty}>Aucun article disponible pour le moment</Text>
+                <Text style={styles.empty}>{t('marketplace.empty_shop')}</Text>
               )}
             </View>
           ) : marketTab === 'wishlist' ? (
@@ -216,7 +224,7 @@ export default function MarketplaceTabScreen() {
               {wishlistItems.length ? wishlistItems.map(renderProductCard) : (
                 <View style={styles.emptyBox}>
                   <Heart size={28} color={colors.textSecondary} />
-                  <Text style={styles.empty}>Aucun favori — ajoutez des articles depuis leur fiche</Text>
+                  <Text style={styles.empty}>{t('marketplace.empty_wishlist')}</Text>
                 </View>
               )}
             </View>
@@ -233,13 +241,13 @@ export default function MarketplaceTabScreen() {
                     <Text style={styles.tracking}>{item.tracking_number}</Text>
                     <Text style={styles.orderTitle}>{item.product_title} ×{item.quantity || 1}</Text>
                     <Text style={styles.meta}>
-                      {Number(item.total_xaf || 0).toLocaleString('fr-FR')} XAF · {item.payment_status || 'pending'}
+                      {Number(item.total_xaf || 0).toLocaleString(i18n.language)} {t('common.currency_xaf')} · {item.payment_status || 'pending'}
                     </Text>
                   </View>
                   <ChevronRight size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               )) : (
-                <Text style={styles.empty}>Aucune commande marketplace</Text>
+                <Text style={styles.empty}>{t('marketplace.empty_orders')}</Text>
               )}
             </View>
           )}

@@ -14,13 +14,15 @@ import os
 
 from app.core.database import get_database
 from app.core.deps import get_current_user, check_role
+from app.features.payments.loyalty import (
+    DEFAULT_LOYALTY,
+    build_loyalty_summary,
+)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
-POINTS_PER_CBM = 100
-POINT_VALUE_XAF = 20  # 1 point = 20 FCFA
-# Facteur IATA : 1 CBM ≈ 167 kg (règle 6000 cm³/kg) — convertit le fret aérien en CBM équivalent
-AIR_KG_PER_CBM = 167.0
+POINT_VALUE_XAF = DEFAULT_LOYALTY["point_value_xaf"]
+AIR_KG_PER_CBM = DEFAULT_LOYALTY["air_kg_per_cbm"]
 
 
 class MobilePayRequest(BaseModel):
@@ -49,41 +51,10 @@ def _discount_from_points(points: int) -> float:
     return max(0, points) * POINT_VALUE_XAF
 
 
-def _physical_cbm(pkg: dict) -> float:
-    """CBM physique depuis L×l×H (cm) ou volume_cbm stocké."""
-    dims = pkg.get("dimensions") or {}
-    l, w, h = float(dims.get("l") or 0), float(dims.get("w") or 0), float(dims.get("h") or 0)
-    if l > 0 and w > 0 and h > 0:
-        return (l * w * h) / 1_000_000
-    return float(pkg.get("volume_cbm") or 0)
-
-
-def _air_chargeable_kg(pkg: dict) -> float:
-    """Poids taxable aérien = max(poids réel, poids volumétrique)."""
-    real = float(pkg.get("weight_real") or 0)
-    volumetric = float(pkg.get("weight_volumetric") or 0)
-    # Si pas de poids volumétrique stocké, le dériver des dimensions (cm³ / 6000)
-    if volumetric <= 0:
-        dims = pkg.get("dimensions") or {}
-        l, w, h = float(dims.get("l") or 0), float(dims.get("w") or 0), float(dims.get("h") or 0)
-        if l > 0 and w > 0 and h > 0:
-            volumetric = (l * w * h) / 6000.0
-    return max(real, volumetric, 0.0)
-
-
-def _loyalty_cbm_for_package(pkg: dict) -> float:
-    """
-    CBM servant au calcul fidélité :
-    - Mer : CBM physique
-    - Air / air_express : CBM équivalent = poids_taxable_kg / 167
-    """
-    mode = (pkg.get("transport_mode") or "sea").lower()
-    if mode in ("air", "air_express"):
-        kg = _air_chargeable_kg(pkg)
-        if kg <= 0:
-            return 0.0
-        return kg / AIR_KG_PER_CBM
-    return _physical_cbm(pkg)
+async def _discount_from_points_async(db, points: int) -> float:
+    from app.features.payments.loyalty import get_loyalty_config
+    cfg = await get_loyalty_config(db)
+    return max(0, points) * int(cfg["point_value_xaf"])
 
 
 async def _deduct_loyalty(db, email: str, points: int):
@@ -99,38 +70,13 @@ async def _deduct_loyalty(db, email: str, points: int):
     )
 
 
-async def _award_loyalty_for_cbm(db, email: str, volume_cbm: float, *, min_one_if_positive: bool = False):
-    if volume_cbm <= 0:
-        return 0
-    pts = int(round(volume_cbm * POINTS_PER_CBM))
-    # Micro-colis aérien : au moins 1 point dès qu'il y a un volume/poids taxable
-    if pts <= 0 and min_one_if_positive and volume_cbm > 0:
-        pts = 1
-    if pts <= 0:
-        return 0
-    await db.users.update_one(
-        {"email": email},
-        {"$inc": {"loyalty_points": pts}},
-        upsert=False,
-    )
-    return pts
-
-
 @router.get("/loyalty")
 async def get_loyalty(
     current_user: dict = Depends(get_current_user),
     db=Depends(get_database),
 ):
     user = await db.users.find_one({"email": current_user["email"]})
-    points = int(user.get("loyalty_points", 0) or 0) if user else 0
-    return {
-        "points": points,
-        "value_xaf": points * POINT_VALUE_XAF,
-        "points_per_cbm": POINTS_PER_CBM,
-        "point_value_xaf": POINT_VALUE_XAF,
-        "air_kg_per_cbm": AIR_KG_PER_CBM,
-        "rule": "100 pts / CBM (mer) ou CBM équivalent aérien = poids taxable ÷ 167",
-    }
+    return await build_loyalty_summary(db, user or {})
 
 
 @router.get("/bank-info")
@@ -327,17 +273,8 @@ async def confirm_payment(
             {"_id": pkg_id},
             {"$set": {"payment_status": "paid", "updated_at": datetime.now()}},
         )
-        # Fidélité : 100 pts / CBM (mer) ou CBM équivalent air (kg taxable ÷ 167)
+        # Commission commercial si client parrainé (points M.O.G CLUB = à l'expédition)
         if pkg:
-            cbm = _loyalty_cbm_for_package(pkg)
-            mode = (pkg.get("transport_mode") or "sea").lower()
-            pts = await _award_loyalty_for_cbm(
-                db,
-                payment["user_email"],
-                cbm,
-                min_one_if_positive=(mode in ("air", "air_express")),
-            )
-            # Commission commercial si client parrainé
             try:
                 from app.features.marketplace.services import record_commission
                 await record_commission(
@@ -350,12 +287,7 @@ async def confirm_payment(
                 )
             except Exception:
                 pass
-            return {
-                "message": "Paiement validé",
-                "loyalty_points_awarded": pts,
-                "loyalty_cbm": round(cbm, 6),
-                "loyalty_mode": mode,
-            }
+            return {"message": "Paiement validé"}
 
     return {"message": "Paiement validé"}
 

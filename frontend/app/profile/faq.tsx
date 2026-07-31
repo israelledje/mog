@@ -41,13 +41,24 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
     { q: '追踪如何工作？', a: '每个包裹有唯一追踪号（例如 SEA-CM00124-00347-25）。每个阶段都会收到通知：到仓、报价、拼货、发出、运输、到达、送达。' },
     { q: '可以更改送货地址吗？', a: '可以，在"我的"→"默认送货地址"中修改。也可在创建包裹时指定不同地址。' },
   ],
+  es: [
+    { q: '¿Cómo funciona la consolidación China → Camerún?', a: 'Tus paquetes se reciben en nuestro almacén en China y se agrupan con los de otros clientes en un contenedor o palé aéreo para reducir costes. Pagas por kg o m³ según el modo elegido.' },
+    { q: '¿Cuáles son los plazos?', a: 'Marítimo: 30-45 días desde el puerto chino hasta Duala. Aéreo: 7-12 días. Incluyen aduanas y entrega en tu dirección en Camerún.' },
+    { q: '¿Cómo envío un paquete?', a: 'Compra en Alibaba/1688/Taobao y envíalo al nombre y dirección de nuestro almacén en China (visible en la app tras crear un paquete). Nosotros nos ocupamos del resto.' },
+    { q: '¿Qué artículos están prohibidos?', a: 'Productos inflamables, baterías de litio sin embalar, productos ilegales, medicamentos sin receta, armas, animales vivos. Contáctanos si tienes dudas.' },
+    { q: '¿Cómo pago?', a: 'Pago Mobile Money (MTN, Orange) o transferencia bancaria a la entrega. El presupuesto se genera automáticamente tras la recepción y pesaje en nuestro almacén.' },
+    { q: '¿Qué hago si mi paquete está dañado?', a: 'Contacta al soporte de inmediato con fotos. Si el seguro estaba activado (2% del valor declarado), tramitamos la indemnización en 7 días.' },
+    { q: '¿Cómo funciona el seguimiento?', a: 'Cada paquete tiene un número único (ej.: SEA-CM00124-00347-25). Recibes una notificación en cada etapa: recibido, presupuesto, consolidado, partido, en tránsito, llegado, entregado.' },
+    { q: '¿Puedo cambiar la dirección de entrega?', a: 'Sí, en Perfil → Dirección de entrega por defecto. También puedes indicar otra dirección al crear el paquete.' },
+  ],
 };
 
 export default function FaqScreen() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const { settings, fetchSettings } = useSettingsStore();
-  const items = FAQ_ITEMS_BY_LANG[i18n.language] || FAQ_ITEMS_BY_LANG.fr;
+  const lang = (i18n.language || 'fr').split('-')[0];
+  const items = FAQ_ITEMS_BY_LANG[lang] || FAQ_ITEMS_BY_LANG.fr;
   const [open, setOpen] = useState<number | null>(0);
 
   const supportPhoneDigits = getSupportPhoneDigits(settings);

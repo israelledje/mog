@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "MOG Group Multiservice",
+    "name": "M.O.G CONNECT+",
     "slug": "mog",
     "version": "1.0.3",
     "orientation": "portrait",
@@ -13,7 +13,7 @@
       "bundleIdentifier": "com.cargoline.app",
       "buildNumber": "4",
       "infoPlist": {
-        "CFBundleDisplayName": "MOG Group Multiservice",
+        "CFBundleDisplayName": "M.O.G CONNECT+",
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",
         "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à la galerie pour vous permettre d'uploader vos preuves de paiement.",
         "NSFaceIDUsageDescription": "L'application utilise Face ID pour vous permettre de vous connecter rapidement et en toute sécurité.",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.cargoline.app",
-      "label": "MOG Group Multiservice",
+      "label": "M.O.G CONNECT+",
       "adaptiveIcon": {
         "foregroundImage": "./assets/MOG.png",
         "backgroundColor": "#000000"

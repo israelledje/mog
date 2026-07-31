@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, Smartphone, Building2 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { marketplaceApi } from '../../src/api/marketplace';
@@ -15,6 +16,7 @@ import { colors, radii, spacing } from '../../src/constants/theme';
 type Method = 'om' | 'momo' | 'bank';
 
 export default function MarketplaceCheckoutScreen() {
+  const { t, i18n } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [checkout, setCheckout] = useState<any>(null);
@@ -36,7 +38,7 @@ export default function MarketplaceCheckoutScreen() {
         setCheckout(c);
         setBankInfo(bank);
       } catch (e: any) {
-        Toast.show({ type: 'error', text1: formatErr(e, 'Checkout introuvable') });
+        Toast.show({ type: 'error', text1: formatErr(e, t('marketplace.checkout_not_found')) });
       } finally {
         setLoading(false);
       }
@@ -46,11 +48,11 @@ export default function MarketplaceCheckoutScreen() {
   const onPay = async () => {
     if (!id || !checkout) return;
     if ((method === 'om' || method === 'momo') && phone.trim().length < 8) {
-      Toast.show({ type: 'error', text1: 'Numéro de téléphone requis' });
+      Toast.show({ type: 'error', text1: t('marketplace.phone_required') });
       return;
     }
     if (method === 'bank' && !reference.trim()) {
-      Toast.show({ type: 'error', text1: 'Référence de virement requise' });
+      Toast.show({ type: 'error', text1: t('marketplace.ref_required') });
       return;
     }
     setSubmitting(true);
@@ -61,18 +63,18 @@ export default function MarketplaceCheckoutScreen() {
         reference: reference.trim() || undefined,
       });
       if (res?.finalized?.package?.id) {
-        Toast.show({ type: 'success', text1: 'Commande confirmée', text2: res.finalized.package.tracking_number });
+        Toast.show({ type: 'success', text1: t('marketplace.order_confirmed'), text2: res.finalized.package.tracking_number });
         router.replace(`/colis/${res.finalized.package.id}` as any);
         return;
       }
       Toast.show({
         type: 'success',
-        text1: method === 'bank' ? 'Virement enregistré' : 'Paiement soumis',
-        text2: 'Validation opérateur avant création de la commande',
+        text1: method === 'bank' ? t('marketplace.bank_recorded') : t('marketplace.payment_submitted'),
+        text2: t('marketplace.awaiting_operator'),
       });
       router.replace('/(tabs)/marketplace' as any);
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Paiement impossible') });
+      Toast.show({ type: 'error', text1: formatErr(e, t('marketplace.payment_failed')) });
     } finally {
       setSubmitting(false);
     }
@@ -89,7 +91,7 @@ export default function MarketplaceCheckoutScreen() {
   if (!checkout) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.empty}>Checkout introuvable</Text>
+        <Text style={styles.empty}>{t('marketplace.checkout_not_found')}</Text>
       </SafeAreaView>
     );
   }
@@ -101,7 +103,7 @@ export default function MarketplaceCheckoutScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><ChevronLeft size={24} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.title}>Paiement</Text>
+        <Text style={styles.title}>{t('marketplace.payment')}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -110,21 +112,21 @@ export default function MarketplaceCheckoutScreen() {
           {img ? <Image source={{ uri: img }} style={styles.thumb} /> : <View style={[styles.thumb, styles.thumbEmpty]} />}
           <View style={{ flex: 1 }}>
             <Text style={styles.productTitle}>{checkout.product_title}</Text>
-            <Text style={styles.meta}>Qté {checkout.quantity} · {checkout.tracking_number}</Text>
-            <Text style={styles.amount}>{amount.toLocaleString('fr-FR')} XAF</Text>
+            <Text style={styles.meta}>{t('marketplace.qty_meta', { qty: checkout.quantity, tracking: checkout.tracking_number })}</Text>
+            <Text style={styles.amount}>{amount.toLocaleString(i18n.language)} {t('common.currency_xaf')}</Text>
           </View>
         </View>
 
         <Text style={styles.hint}>
-          La commande et le colis ne sont créés qu&apos;après validation du paiement (immédiat pour Mobile Money, ou validation opérateur pour virement).
+          {t('marketplace.payment_hint')}
         </Text>
 
-        <Text style={styles.label}>Méthode</Text>
+        <Text style={styles.label}>{t('marketplace.method')}</Text>
         <View style={styles.methods}>
           {([
-            { k: 'om' as Method, label: 'Orange Money', Icon: Smartphone },
-            { k: 'momo' as Method, label: 'MTN MoMo', Icon: Smartphone },
-            { k: 'bank' as Method, label: 'Virement', Icon: Building2 },
+            { k: 'om' as Method, label: t('marketplace.orange_money'), Icon: Smartphone },
+            { k: 'momo' as Method, label: t('marketplace.mtn_momo'), Icon: Smartphone },
+            { k: 'bank' as Method, label: t('marketplace.bank_transfer'), Icon: Building2 },
           ]).map((m) => (
             <TouchableOpacity
               key={m.k}
@@ -139,13 +141,13 @@ export default function MarketplaceCheckoutScreen() {
 
         {(method === 'om' || method === 'momo') && (
           <>
-            <Text style={styles.label}>Téléphone {method === 'om' ? 'Orange' : 'MTN'}</Text>
+            <Text style={styles.label}>{t('marketplace.phone_mm')}</Text>
             <TextInput
               style={styles.input}
               keyboardType="phone-pad"
               value={phone}
               onChangeText={setPhone}
-              placeholder="6XXXXXXXX"
+              placeholder={t('marketplace.phone_placeholder')}
               placeholderTextColor={colors.textSecondary}
             />
           </>
@@ -159,12 +161,12 @@ export default function MarketplaceCheckoutScreen() {
             <Text style={styles.bankNote}>
               {bankInfo?.note || 'Indiquez la référence du virement. Un opérateur validera avant création de la commande.'}
             </Text>
-            <Text style={styles.label}>Référence / N° de virement</Text>
+            <Text style={styles.label}>{t('marketplace.bank_ref')}</Text>
             <TextInput
               style={styles.input}
               value={reference}
               onChangeText={setReference}
-              placeholder="Ex. VIR-2026-…"
+              placeholder={t('marketplace.bank_ref_placeholder')}
               placeholderTextColor={colors.textSecondary}
             />
           </View>
@@ -173,7 +175,9 @@ export default function MarketplaceCheckoutScreen() {
         <TouchableOpacity style={styles.cta} onPress={onPay} disabled={submitting}>
           {submitting ? <ActivityIndicator color="#fff" /> : (
             <Text style={styles.ctaText}>
-              {method === 'bank' ? 'Soumettre le virement' : `Payer ${amount.toLocaleString('fr-FR')} XAF`}
+              {method === 'bank'
+                ? t('marketplace.submit_bank')
+                : t('marketplace.pay_amount', { amount: amount.toLocaleString(i18n.language) })}
             </Text>
           )}
         </TouchableOpacity>

@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake } from 'lucide-react-native';
+import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
 import { entrepotsApi, type Entrepot } from '../../src/api/entrepots';
 import { setAppLanguage, SUPPORTED_LANGS } from '../../src/i18n';
 import type { SupportedLang } from '../../src/i18n';
+import { setAdminUiMode } from '../../src/utils/adminMode';
 import { darkColors as colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 export default function OperatorDashboard() {
@@ -120,11 +121,20 @@ export default function OperatorDashboard() {
     setShowLangModal(false);
   };
 
+  const switchToClientApp = async () => {
+    if (!isAdmin) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await setAdminUiMode('client');
+    router.replace('/(tabs)');
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.badge}>{t('operator.mode')}</Text>
+          <Text style={[styles.badge, isAdmin && styles.badgeAdmin]}>
+            {isAdmin ? 'MODE ADMIN' : t('operator.mode')}
+          </Text>
           <Text style={styles.userName}>{user?.full_name || 'Agent'}</Text>
           <TouchableOpacity style={styles.warehouseChip} onPress={() => setShowEntrepotModal(true)}>
             <Building2 size={14} color={colors.primary} />
@@ -142,6 +152,16 @@ export default function OperatorDashboard() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        {isAdmin && (
+          <TouchableOpacity style={styles.switchClientBtn} onPress={switchToClientApp} activeOpacity={0.85}>
+            <Smartphone size={20} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchClientTitle}>Voir l’app client</Text>
+              <Text style={styles.switchClientSub}>Basculer vers M.O.G CONNECT+ (vue client)</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={[styles.shiftBtn, shiftActive ? styles.shiftActive : styles.shiftInactive]} onPress={toggleShift}>
           <Clock size={20} color={shiftActive ? '#fff' : colors.text} />
           <Text style={[styles.shiftText, shiftActive && { color: '#fff' }]}>
@@ -185,24 +205,47 @@ export default function OperatorDashboard() {
           <Text style={styles.subActionTitle}>Demandes services clients</Text>
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>Commerce</Text>
+        {isAdmin && (
+          <>
+            <Text style={styles.sectionTitle}>Administration</Text>
+            <View style={styles.adminHint}>
+              <Shield size={16} color={colors.primary} />
+              <Text style={styles.adminHintText}>
+                Fonctions essentielles aussi disponibles sur web-admin (PC).
+              </Text>
+            </View>
+          </>
+        )}
+
+        <Text style={styles.sectionTitle}>{isAdmin ? 'Commerce & croissance' : 'Commerce'}</Text>
         <View style={styles.grid}>
           <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/marketplace')}>
             <ShoppingBag size={24} color={colors.primary} />
-            <Text style={styles.subActionTitle}>Marketplace</Text>
+            <Text style={styles.subActionTitle}>{isAdmin ? 'M.O.G MARKET' : 'Marketplace'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/promos')}>
             <Percent size={24} color={colors.secondary} />
             <Text style={styles.subActionTitle}>Codes promo</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={[styles.subAction, { marginBottom: spacing.lg }]}
-          onPress={() => router.push('/(operator)/growth')}
-        >
-          <Handshake size={24} color={colors.primary} />
-          <Text style={styles.subActionTitle}>Commerciaux & commissions</Text>
-        </TouchableOpacity>
+        <View style={styles.grid}>
+          <TouchableOpacity
+            style={styles.subAction}
+            onPress={() => router.push('/(operator)/growth')}
+          >
+            <Handshake size={24} color={colors.primary} />
+            <Text style={styles.subActionTitle}>{isAdmin ? 'M.O.G PARTNERS' : 'Commerciaux'}</Text>
+          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.subAction}
+              onPress={() => router.push({ pathname: '/(operator)/growth', params: { tab: 'settings' } } as any)}
+            >
+              <Gift size={24} color="#F59E0B" />
+              <Text style={styles.subActionTitle}>M.O.G CLUB</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.statsCard}>
           <View style={styles.statsHeader}>
@@ -297,6 +340,29 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.card, ...shadow.card },
   badge: { fontSize: 10, fontWeight: '800', color: colors.primary, backgroundColor: `${colors.primary}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 },
+  badgeAdmin: { color: '#FBBF24', backgroundColor: 'rgba(251,191,36,0.15)' },
+  switchClientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1D4ED8',
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    ...shadow.card,
+  },
+  switchClientTitle: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  switchClientSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
+  adminHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: `${colors.primary}15`,
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: spacing.md,
+  },
+  adminHintText: { flex: 1, color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
   userName: { fontSize: 20, fontWeight: '800', color: colors.text, fontFamily: fonts.heading },
   warehouseChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: `${colors.primary}15`, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start' },
   warehouseText: { fontSize: 12, fontWeight: '700', color: colors.primary },

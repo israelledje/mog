@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react-native';
 import { marketplaceApi, type MarketplaceOrder } from '../../src/api/marketplace';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function MarketplaceOrdersScreen() {
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +32,7 @@ export default function MarketplaceOrdersScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><ChevronLeft size={24} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.title}>Mes commandes</Text>
+        <Text style={styles.title}>{t('marketplace.my_orders')}</Text>
         <View style={{ width: 24 }} />
       </View>
       {loading ? (
@@ -41,7 +43,7 @@ export default function MarketplaceOrdersScreen() {
           keyExtractor={(o) => o.id}
           contentContainerStyle={{ padding: spacing.lg }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-          ListEmptyComponent={<Text style={styles.empty}>Aucune commande marketplace</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>{t('marketplace.empty_orders')}</Text>}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
@@ -51,7 +53,7 @@ export default function MarketplaceOrdersScreen() {
               <Text style={styles.tracking}>{item.tracking_number}</Text>
               <Text style={styles.name}>{item.product_title} ×{item.quantity || 1}</Text>
               <Text style={styles.meta}>
-                {Number(item.total_xaf || 0).toLocaleString('fr-FR')} XAF · {item.payment_status || 'pending'} · {item.status}
+                {Number(item.total_xaf || 0).toLocaleString(i18n.language)} {t('common.currency_xaf')} · {item.payment_status || 'pending'} · {item.status}
               </Text>
             </TouchableOpacity>
           )}

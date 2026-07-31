@@ -43,8 +43,12 @@ export default function HomeServicesMenu() {
               <ChevronRight size={16} color={s.color} strokeWidth={2.2} />
             </View>
 
-            <Text style={styles.cardTitle} numberOfLines={1}>{s.shortTitle}</Text>
-            <Text style={styles.cardSub} numberOfLines={2}>{s.subtitle}</Text>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {t(`services.${s.slug}_short`, { defaultValue: s.shortTitle })}
+            </Text>
+            <Text style={styles.cardSub} numberOfLines={2}>
+              {t(`services.${s.slug}_sub`, { defaultValue: s.subtitle })}
+            </Text>
 
             <View style={[styles.accentBar, { backgroundColor: s.color }]} />
           </TouchableOpacity>

@@ -19,8 +19,14 @@ export const growthApi = {
   createAgent(payload: Record<string, any>) {
     return api.post('/growth/agents', payload).then((r) => r.data);
   },
+  updateAgent(id: string, payload: Record<string, any>) {
+    return api.patch(`/growth/agents/${id}`, payload).then((r) => r.data);
+  },
   listCommissions() {
     return api.get('/growth/commissions').then((r) => r.data);
+  },
+  payCommission(id: string) {
+    return api.post(`/growth/commissions/${id}/pay`).then((r) => r.data);
   },
   getSettings() {
     return api.get('/growth/settings').then((r) => r.data);

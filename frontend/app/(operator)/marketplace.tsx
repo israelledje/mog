@@ -86,7 +86,7 @@ export default function OperatorMarketplaceScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><ChevronLeft size={24} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.title}>Marketplace</Text>
+        <Text style={styles.title}>{isAdmin ? 'M.O.G MARKET' : 'Marketplace'}</Text>
         <TouchableOpacity onPress={() => setShow(true)}><Plus size={22} color={colors.primary} /></TouchableOpacity>
       </View>
 

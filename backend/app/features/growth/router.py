@@ -74,6 +74,15 @@ async def create_promo(
     doc["created_at"] = datetime.utcnow().isoformat()
     doc["created_by"] = current_user.get("email")
     await db.promo_codes.insert_one(doc)
+    await db.promo_code_history.insert_one({
+        "_id": str(uuid.uuid4()),
+        "promo_id": doc["_id"],
+        "code": code,
+        "action": "created",
+        "snapshot": {k: v for k, v in doc.items() if k != "_id"},
+        "by": current_user.get("email"),
+        "at": datetime.utcnow().isoformat(),
+    })
     return serialize_doc(doc)
 
 
@@ -86,11 +95,34 @@ async def update_promo(
 ):
     updates = {k: v for k, v in data.model_dump().items() if v is not None}
     updates["updated_at"] = datetime.utcnow().isoformat()
+    updates["updated_by"] = current_user.get("email")
     result = await db.promo_codes.update_one({"_id": promo_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(404, "Promo introuvable")
     doc = await db.promo_codes.find_one({"_id": promo_id})
+    await db.promo_code_history.insert_one({
+        "_id": str(uuid.uuid4()),
+        "promo_id": promo_id,
+        "code": doc.get("code"),
+        "action": "updated",
+        "changes": updates,
+        "snapshot": serialize_doc(doc),
+        "by": current_user.get("email"),
+        "at": datetime.utcnow().isoformat(),
+    })
     return serialize_doc(doc)
+
+
+@router.get("/promos/{promo_id}/history")
+async def promo_history(
+    promo_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    items = []
+    async for doc in db.promo_code_history.find({"promo_id": promo_id}).sort("at", -1):
+        items.append(serialize_doc(doc))
+    return items
 
 
 @router.post("/promos/validate")
@@ -119,9 +151,43 @@ async def list_agents(
     current_user: dict = Depends(check_role(["admin", "operator"])),
     db=Depends(get_database),
 ):
+    """Liste M.O.G PARTNERS avec stats clients / CBM / commandes / commissions."""
     items = []
     async for doc in db.sales_agents.find().sort("created_at", -1):
-        items.append(serialize_doc(doc))
+        agent = serialize_doc(doc)
+        agent_id = agent.get("id") or doc.get("_id")
+        clients = []
+        async for u in db.users.find({"referred_by_agent_id": agent_id}):
+            clients.append(u)
+        client_emails = [c.get("email") for c in clients if c.get("email")]
+        orders_count = 0
+        total_cbm = 0.0
+        if client_emails:
+            async for pkg in db.packages.find({"owner_id": {"$in": client_emails}}):
+                orders_count += 1
+                if pkg.get("loyalty_cbm"):
+                    total_cbm += float(pkg.get("loyalty_cbm") or 0)
+                elif pkg.get("loyalty_awarded"):
+                    from app.features.payments.loyalty import loyalty_cbm_for_package
+                    total_cbm += loyalty_cbm_for_package(pkg)
+
+        pending_comm = 0.0
+        paid_comm = 0.0
+        async for c in db.commissions.find({"agent_id": agent_id}):
+            amt = float(c.get("commission_xaf") or 0)
+            if c.get("status") == "paid":
+                paid_comm += amt
+            else:
+                pending_comm += amt
+
+        agent["stats"] = {
+            "clients_count": len(clients),
+            "orders_count": orders_count,
+            "total_cbm": round(total_cbm, 4),
+            "pending_commission_xaf": round(pending_comm, 0),
+            "paid_commission_xaf": round(paid_comm, 0),
+        }
+        items.append(agent)
     return items
 
 

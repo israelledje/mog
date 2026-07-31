@@ -31,7 +31,7 @@ export default function DocumentsScreen() {
           .filter((c) => c.invoice_status && c.invoice_status !== 'none' && c.status !== 'pending_reception')
           .map((c) => ({
             id: c.id,
-            title: `Facture ${c.tracking_number}`,
+            title: t('profile.doc_invoice', { tracking: c.tracking_number }),
             date: c.updated_at || c.created_at,
             type: 'invoice',
             downloadPath: `/colis/${c.id}/invoice`,
@@ -40,7 +40,7 @@ export default function DocumentsScreen() {
 
         const packingDocs = packingLists.map(pl => ({
           id: pl.id || pl._id,
-          title: `Packing List - ${pl.container_number || 'Groupage'}`,
+          title: t('profile.doc_packing_list', { ref: pl.container_number || t('profile.doc_groupage') }),
           date: pl.created_at,
           type: 'packing_list',
           downloadPath: `/groupages/${pl.id || pl._id}/packing-list`,
@@ -58,16 +58,16 @@ export default function DocumentsScreen() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [t]);
 
   const onDownload = async (doc: any) => {
     setDownloading(doc.id);
     Haptics.selectionAsync();
     try {
       await fileService.downloadAndShare(doc.downloadPath, doc.filename);
-      Toast.show({ type: 'success', text1: 'Document téléchargé' });
+      Toast.show({ type: 'success', text1: t('profile.doc_downloaded') });
     } catch (e) {
-      Toast.show({ type: 'error', text1: 'Erreur lors du téléchargement' });
+      Toast.show({ type: 'error', text1: t('profile.doc_download_error') });
     } finally {
       setDownloading(null);
     }

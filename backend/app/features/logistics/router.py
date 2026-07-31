@@ -312,6 +312,11 @@ async def update_container_status(
         async for pkg in db.packages.find({"_id": {"$in": package_ids}}):
             packages.append(pkg)
 
+    loyalty_awards = []
+    if new_status == "in_transit" and packages:
+        from app.features.payments.loyalty import award_loyalty_for_packages
+        loyalty_awards = await award_loyalty_for_packages(db, packages, force_status="in_transit")
+
     notify_result = await NotificationService.notify_groupage_packages_status(
         packages,
         package_status,
@@ -323,6 +328,7 @@ async def update_container_status(
         "status": new_status,
         "packages_updated": len(packages),
         "notifications": notify_result,
+        "loyalty_awards": loyalty_awards,
     }
 
 class CloseOtpConfirm(BaseModel):

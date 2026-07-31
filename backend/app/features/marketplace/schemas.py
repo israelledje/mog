@@ -130,3 +130,8 @@ class GrowthSettingsUpdate(BaseModel):
     commission_on_paid_packages: Optional[bool] = None
     referral_signup_bonus_points: Optional[int] = None
     marketplace_enabled: Optional[bool] = None
+    point_value_xaf: Optional[int] = None
+    air_kg_per_cbm: Optional[float] = None
+    loyalty_tiers: Optional[list] = None
+    vip_benefits: Optional[str] = None
+    award_on_statuses: Optional[list] = None

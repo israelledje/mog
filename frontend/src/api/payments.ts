@@ -1,15 +1,33 @@
 import { api } from './client';
 
+export type LoyaltyTier = {
+  id: string;
+  name: string;
+  emoji?: string;
+  min_cbm: number;
+  points_per_cbm: number;
+  cbm_remaining?: number;
+};
+
+export type LoyaltySummary = {
+  program?: string;
+  points: number;
+  value_xaf: number;
+  points_per_cbm: number;
+  point_value_xaf: number;
+  total_cbm?: number;
+  tier?: LoyaltyTier;
+  next_tier?: LoyaltyTier | null;
+  tiers?: LoyaltyTier[];
+  vip_benefits?: string;
+  rule?: string;
+  air_kg_per_cbm?: number;
+};
+
 export const paymentsApi = {
   async loyalty() {
     const { data } = await api.get('/payments/loyalty');
-    return data as {
-      points: number;
-      value_xaf: number;
-      points_per_cbm: number;
-      point_value_xaf: number;
-      rule?: string;
-    };
+    return data as LoyaltySummary;
   },
   async bankInfo() {
     const { data } = await api.get('/payments/bank-info');

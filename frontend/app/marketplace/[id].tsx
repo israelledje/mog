@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ShoppingCart, Heart, Ruler } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { marketplaceApi, type MarketplaceProduct, type MarketplaceVariant } from '../../src/api/marketplace';
@@ -18,6 +19,7 @@ import { colors, radii, spacing, fonts } from '../../src/constants/theme';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function MarketplaceProductScreen() {
+  const { t, i18n } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [product, setProduct] = useState<MarketplaceProduct | null>(null);
@@ -81,7 +83,7 @@ export default function MarketplaceProductScreen() {
 
   const submitReview = async () => {
     if (!id || myRating < 1) {
-      Toast.show({ type: 'error', text1: 'Choisissez une note (1 à 5 étoiles)' });
+      Toast.show({ type: 'error', text1: t('marketplace.choose_rating') });
       return;
     }
     setSavingReview(true);
@@ -91,9 +93,9 @@ export default function MarketplaceProductScreen() {
       const list = await marketplaceApi.listReviews(id);
       setReviews(Array.isArray(list) ? list : []);
       setReviewComment('');
-      Toast.show({ type: 'success', text1: 'Avis enregistré' });
+      Toast.show({ type: 'success', text1: t('marketplace.review_saved') });
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Impossible d’envoyer l’avis') });
+      Toast.show({ type: 'error', text1: formatErr(e, t('marketplace.review_error')) });
     } finally {
       setSavingReview(false);
     }
@@ -104,21 +106,21 @@ export default function MarketplaceProductScreen() {
     try {
       const res = await growthApi.validatePromo(promo.trim(), subtotal, 'marketplace');
       setDiscount(Number(res.discount_xaf || 0));
-      Toast.show({ type: 'success', text1: `Promo appliquée (−${Number(res.discount_xaf || 0).toLocaleString()} XAF)` });
+      Toast.show({ type: 'success', text1: t('marketplace.promo_applied', { amount: Number(res.discount_xaf || 0).toLocaleString(i18n.language) }) });
     } catch (e: any) {
       setDiscount(0);
-      Toast.show({ type: 'error', text1: formatErr(e, 'Code promo invalide') });
+      Toast.show({ type: 'error', text1: formatErr(e, t('marketplace.promo_invalid')) });
     }
   };
 
   const onCheckout = async () => {
     if (!product) return;
     if ((product.variants || []).length && !variantId) {
-      Toast.show({ type: 'error', text1: 'Choisissez une variante' });
+      Toast.show({ type: 'error', text1: t('marketplace.choose_variant') });
       return;
     }
     if (availableStock < Math.max(1, Number(qty) || 1)) {
-      Toast.show({ type: 'error', text1: 'Stock insuffisant' });
+      Toast.show({ type: 'error', text1: t('marketplace.insufficient_stock') });
       return;
     }
     setBuying(true);
@@ -128,11 +130,11 @@ export default function MarketplaceProductScreen() {
         variant_id: variantId || undefined,
         quantity: Math.max(1, Number(qty) || 1),
         promo_code: promo.trim() || undefined,
-        delivery_city: city || 'Douala',
+        delivery_city: city || t('marketplace.city_placeholder'),
       });
       router.push({ pathname: '/marketplace/checkout', params: { id: checkout.id } } as any);
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Checkout impossible') });
+      Toast.show({ type: 'error', text1: formatErr(e, t('marketplace.checkout_error')) });
     } finally {
       setBuying(false);
     }
@@ -149,7 +151,7 @@ export default function MarketplaceProductScreen() {
   if (!product) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.empty}>Article introuvable</Text>
+        <Text style={styles.empty}>{t('marketplace.product_not_found')}</Text>
       </SafeAreaView>
     );
   }
@@ -198,8 +200,8 @@ export default function MarketplaceProductScreen() {
           <View style={{ marginTop: 6 }}>
             <StarRating rating={product.rating_avg || 0} count={product.rating_count || 0} size={16} />
           </View>
-          <Text style={styles.price}>{unitPrice.toLocaleString('fr-FR')} XAF</Text>
-          <Text style={styles.desc}>{product.description || 'Article marketplace — livraison via groupage MOG.'}</Text>
+          <Text style={styles.price}>{unitPrice.toLocaleString(i18n.language)} {t('common.currency_xaf')}</Text>
+          <Text style={styles.desc}>{product.description || t('marketplace.default_desc')}</Text>
 
           {(product.dimensions_label || product.cbm || product.length_cm) && (
             <View style={styles.dimsBox}>
@@ -217,12 +219,12 @@ export default function MarketplaceProductScreen() {
           )}
 
           <Text style={styles.meta}>
-            Origine {product.origin_city || 'Chine'} · {(product.transport_mode || 'sea') === 'sea' ? 'Maritime' : 'Aérien'} · Stock {availableStock}
+            {t('marketplace.origin_meta', { origin: product.origin_city || t('marketplace.china'), mode: (product.transport_mode || 'sea') === 'sea' ? t('marketplace.transport_sea') : t('marketplace.transport_air'), stock: availableStock })}
           </Text>
 
           {variants.length > 0 && (
             <>
-              <Text style={styles.label}>Variante</Text>
+              <Text style={styles.label}>{t('marketplace.variant')}</Text>
               <View style={styles.variantWrap}>
                 {variants.map((v) => {
                   const on = v.id === variantId;
@@ -236,7 +238,7 @@ export default function MarketplaceProductScreen() {
                     >
                       <Text style={[styles.variantText, on && styles.variantTextOn]}>{v.name}</Text>
                       <Text style={[styles.variantStock, on && styles.variantTextOn]}>
-                        {disabled ? 'Rupture' : `Stock ${v.stock ?? 0}`}
+                        {disabled ? t('marketplace.out_of_stock') : t('marketplace.stock_n', { count: v.stock ?? 0 })}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -245,13 +247,13 @@ export default function MarketplaceProductScreen() {
             </>
           )}
 
-          <Text style={styles.label}>Quantité</Text>
+          <Text style={styles.label}>{t('marketplace.quantity')}</Text>
           <TextInput style={styles.input} keyboardType="number-pad" value={qty} onChangeText={(v) => { setQty(v); setDiscount(0); }} />
 
-          <Text style={styles.label}>Ville de livraison</Text>
-          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder="Douala" placeholderTextColor={colors.textSecondary} />
+          <Text style={styles.label}>{t('marketplace.delivery_city')}</Text>
+          <TextInput style={styles.input} value={city} onChangeText={setCity} placeholder={t('marketplace.city_placeholder')} placeholderTextColor={colors.textSecondary} />
 
-          <Text style={styles.label}>Code promo</Text>
+          <Text style={styles.label}>{t('marketplace.promo_code')}</Text>
           <View style={styles.promoRow}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -262,34 +264,34 @@ export default function MarketplaceProductScreen() {
               placeholderTextColor={colors.textSecondary}
             />
             <TouchableOpacity style={styles.promoBtn} onPress={applyPromo}>
-              <Text style={styles.promoBtnText}>Appliquer</Text>
+              <Text style={styles.promoBtnText}>{t('marketplace.apply')}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.totalBox}>
-            <Text style={styles.totalLine}>Sous-total · {subtotal.toLocaleString('fr-FR')} XAF</Text>
-            {discount > 0 && <Text style={styles.discount}>Réduction · −{discount.toLocaleString('fr-FR')} XAF</Text>}
-            <Text style={styles.total}>Total · {total.toLocaleString('fr-FR')} XAF</Text>
+            <Text style={styles.totalLine}>{t('marketplace.subtotal', { amount: subtotal.toLocaleString(i18n.language) })}</Text>
+            {discount > 0 && <Text style={styles.discount}>{t('marketplace.discount', { amount: discount.toLocaleString(i18n.language) })}</Text>}
+            <Text style={styles.total}>{t('marketplace.total', { amount: total.toLocaleString(i18n.language) })}</Text>
           </View>
 
           <View style={styles.reviewBox}>
-            <Text style={styles.reviewTitle}>Donner votre avis</Text>
+            <Text style={styles.reviewTitle}>{t('marketplace.leave_review')}</Text>
             <StarRating rating={myRating} editable size={26} showValue={false} onChange={setMyRating} />
             <TextInput
               style={[styles.input, { marginTop: 12, minHeight: 70, textAlignVertical: 'top' }]}
               multiline
               value={reviewComment}
               onChangeText={setReviewComment}
-              placeholder="Commentaire (optionnel)"
+              placeholder={t('marketplace.review_placeholder')}
               placeholderTextColor={colors.textSecondary}
             />
             <TouchableOpacity style={styles.reviewBtn} onPress={submitReview} disabled={savingReview}>
-              {savingReview ? <ActivityIndicator color="#fff" /> : <Text style={styles.reviewBtnText}>Publier l’avis</Text>}
+              {savingReview ? <ActivityIndicator color="#fff" /> : <Text style={styles.reviewBtnText}>{t('marketplace.publish_review')}</Text>}
             </TouchableOpacity>
             {reviews.slice(0, 5).map((r) => (
               <View key={r.id} style={styles.reviewItem}>
                 <View style={styles.reviewItemHead}>
-                  <Text style={styles.reviewAuthor}>{r.user_name || 'Client'}</Text>
+                  <Text style={styles.reviewAuthor}>{r.user_name || t('marketplace.client_fallback')}</Text>
                   <StarRating rating={r.rating || 0} size={11} showValue={false} />
                 </View>
                 {!!r.comment && <Text style={styles.reviewComment}>{r.comment}</Text>}
@@ -303,7 +305,7 @@ export default function MarketplaceProductScreen() {
         {buying ? <ActivityIndicator color="#fff" /> : (
           <>
             <ShoppingCart size={18} color="#fff" />
-            <Text style={styles.ctaText}>Passer au paiement</Text>
+            <Text style={styles.ctaText}>{t('marketplace.checkout_cta')}</Text>
           </>
         )}
       </TouchableOpacity>

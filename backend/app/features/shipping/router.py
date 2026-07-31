@@ -428,7 +428,16 @@ async def update_package_status(
     package["status"] = status_update.status
     await NotificationService.notify_status_change(package, status_update.status)
 
-    return {"message": "Statut mis à jour avec succès", "new_status": status_update.status}
+    loyalty = None
+    if status_update.status in ("in_transit", "departed"):
+        from app.features.payments.loyalty import award_loyalty_for_package
+        loyalty = await award_loyalty_for_package(db, {**package, "status": status_update.status})
+
+    return {
+        "message": "Statut mis à jour avec succès",
+        "new_status": status_update.status,
+        "loyalty": loyalty,
+    }
 
 @router.post("/{package_id}/receive")
 async def receive_package(

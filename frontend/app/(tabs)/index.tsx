@@ -164,8 +164,8 @@ export default function HomeScreen() {
                   <ShoppingBag size={20} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.marketTitle}>Marketplace MOG</Text>
-                  <Text style={styles.marketSub}>Véhicules & articles · achat, groupage, réception Cameroun</Text>
+                  <Text style={styles.marketTitle}>{t('home.marketplace_banner_title')}</Text>
+                  <Text style={styles.marketSub}>{t('home.marketplace_banner_sub')}</Text>
                 </View>
                 <ArrowRight size={18} color="#fff" />
               </LinearGradient>
@@ -307,7 +307,7 @@ export default function HomeScreen() {
           router.push('/(tabs)/marketplace');
         }}
         accessibilityRole="button"
-        accessibilityLabel="Ouvrir la marketplace"
+        accessibilityLabel={t('home.marketplace_fab_a11y')}
       >
         <ShoppingBag size={20} color={colors.primary} strokeWidth={2.2} />
       </TouchableOpacity>

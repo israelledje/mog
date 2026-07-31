@@ -92,7 +92,7 @@ export default function HomeTopPanels({ user, colis, kpi }: Props) {
         />
         {trackingQuery.length > 0 && (
           <TouchableOpacity onPress={onSearchTracking} style={styles.searchBtn}>
-            <Text style={styles.searchBtnText}>OK</Text>
+            <Text style={styles.searchBtnText}>{t('common.ok')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -148,7 +148,7 @@ export default function HomeTopPanels({ user, colis, kpi }: Props) {
         <View style={[styles.warehouseBlock, user?.client_code ? { marginTop: spacing.md } : null]}>
           <View style={styles.warehouseTitleRow}>
             <MapPin size={16} color={colors.secondary} />
-            <Text style={styles.warehouseTitle}>{t('package.warehouse_address')}</Text>
+            <Text style={styles.warehouseTitle}>{t('form.warehouse_address')}</Text>
           </View>
           <Text style={styles.warehousePreview} numberOfLines={3}>{CHINA_WAREHOUSE_ADDRESS}</Text>
           <TouchableOpacity style={styles.warehouseCopyBtn} onPress={copyWarehouse}>

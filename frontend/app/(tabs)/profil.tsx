@@ -4,23 +4,24 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch, Im
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera, Gift, Handshake } from 'lucide-react-native';
+import { ChevronRight, LogOut, MapPin, Globe, Bell, FileText, HelpCircle, Edit3, User as UserIcon, Box, Truck, CheckCircle, Camera, Gift, Handshake, Shield } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { LinearGradient } from 'expo-linear-gradient';
 import LanguageSelector from '../../src/components/LanguageSelector';
 import { authApi } from '../../src/api/auth';
-import { paymentsApi } from '../../src/api/payments';
+import { paymentsApi, type LoyaltySummary } from '../../src/api/payments';
 import { growthApi } from '../../src/api/growth';
 import { BASE, getRefreshToken, formatErr } from '../../src/api/client';
 import { biometricService } from '../../src/api/biometrics';
 import { useAuthStore } from '../../src/store/authStore';
 import { useColisStore } from '../../src/store/colisStore';
+import { setAdminUiMode } from '../../src/utils/adminMode';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 export default function ProfileScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const lastPassword = useAuthStore((s) => s.lastPassword);
@@ -30,26 +31,24 @@ export default function ProfileScreen() {
   const uploadAvatar = useAuthStore((s) => s.uploadAvatar);
   const kpi = useColisStore((s) => s.kpi);
   const [notif, setNotif] = useState({ received: true, quoted: true, departed: true, delivered: true });
-  const [loyalty, setLoyalty] = useState({
+  const [loyalty, setLoyalty] = useState<LoyaltySummary>({
     points: 0,
     value_xaf: 0,
     point_value_xaf: 20,
-    points_per_cbm: 100,
+    points_per_cbm: 10,
+    total_cbm: 0,
   });
   const [referral, setReferral] = useState<any>(null);
   const [referralCode, setReferralCode] = useState('');
   const [savingReferral, setSavingReferral] = useState(false);
 
+  const refreshLoyalty = () => {
+    paymentsApi.loyalty().then(setLoyalty).catch(() => {});
+  };
+
   useEffect(() => {
     authApi.me().then(setUser).catch(() => {});
-    paymentsApi.loyalty().then((d) => {
-      setLoyalty({
-        points: d.points || 0,
-        value_xaf: d.value_xaf || 0,
-        point_value_xaf: d.point_value_xaf || 20,
-        points_per_cbm: d.points_per_cbm || 100,
-      });
-    }).catch(() => {});
+    refreshLoyalty();
     growthApi.myReferral().then(setReferral).catch(() => {});
   }, [setUser]);
 
@@ -62,7 +61,7 @@ export default function ProfileScreen() {
 
   const attachReferral = async () => {
     if (!referralCode.trim()) {
-      Toast.show({ type: 'error', text1: 'Entrez un code commercial' });
+      Toast.show({ type: 'error', text1: t('profile.referral_enter_code') });
       return;
     }
     setSavingReferral(true);
@@ -78,19 +77,12 @@ export default function ProfileScreen() {
       setReferralCode('');
       Toast.show({
         type: 'success',
-        text1: 'Commercial lié',
-        text2: res.loyalty_bonus ? `+${res.loyalty_bonus} points fidélité` : undefined,
+        text1: t('profile.referral_linked_toast'),
+        text2: res.loyalty_bonus ? t('profile.referral_bonus', { count: res.loyalty_bonus }) : undefined,
       });
-      paymentsApi.loyalty().then((d) => {
-        setLoyalty({
-          points: d.points || 0,
-          value_xaf: d.value_xaf || 0,
-          point_value_xaf: d.point_value_xaf || 20,
-          points_per_cbm: d.points_per_cbm || 100,
-        });
-      }).catch(() => {});
+      paymentsApi.loyalty().then(setLoyalty).catch(() => {});
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Code invalide') });
+      Toast.show({ type: 'error', text1: formatErr(e, t('profile.referral_invalid')) });
     } finally {
       setSavingReferral(false);
     }
@@ -159,6 +151,13 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  const switchToAdmin = async () => {
+    if ((user as any)?.role !== 'admin') return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await setAdminUiMode('admin');
+    router.replace('/(operator)');
   };
 
   const toggleBiometrics = async (val: boolean) => {
@@ -234,41 +233,74 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* FIDÉLITÉ */}
+        {/* M.O.G CLUB */}
         <View style={styles.loyaltyWrap}>
           <LinearGradient
-            colors={['#312E81', '#4338CA']}
+            colors={['#0F172A', '#1E3A8A']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.loyaltyCard}
           >
-            <View style={styles.loyaltyIcon}>
-              <Gift size={22} color="#fff" />
+            <View style={styles.loyaltyTop}>
+              <View style={styles.loyaltyIcon}>
+                <Gift size={22} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.loyaltyEyebrow}>{t('profile.loyalty_title')}</Text>
+                <Text style={styles.loyaltyTier}>
+                  {loyalty.tier?.emoji ? `${loyalty.tier.emoji} ` : ''}
+                  {loyalty.tier?.name || 'Bronze'}
+                </Text>
+              </View>
+              <View style={styles.loyaltyPtsBox}>
+                <Text style={styles.loyaltyPtsValue}>
+                  {(user.loyalty_points ?? loyalty.points).toLocaleString(i18n.language)}
+                </Text>
+                <Text style={styles.loyaltyPtsLabel}>{t('profile.loyalty_pts_label')}</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.loyaltyEyebrow}>Programme fidélité M.O.G</Text>
-              <Text style={styles.loyaltyPoints}>
-                {(user.loyalty_points ?? loyalty.points).toLocaleString('fr-FR')} points
-              </Text>
-              <Text style={styles.loyaltyValue}>
-                ≈ {(loyalty.value_xaf || (user.loyalty_points ?? loyalty.points) * loyalty.point_value_xaf).toLocaleString('fr-FR')} FCFA
-              </Text>
-              <Text style={styles.loyaltyRule}>
-                {loyalty.points_per_cbm} pts / CBM · 1 pt = {loyalty.point_value_xaf} FCFA
-              </Text>
+
+            <View style={styles.loyaltyGrid}>
+              <View style={styles.loyaltyStat}>
+                <Text style={styles.loyaltyStatVal}>
+                  {(loyalty.total_cbm || 0).toLocaleString(i18n.language, { maximumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.loyaltyStatLbl}>{t('profile.loyalty_cbm_total')}</Text>
+              </View>
+              <View style={styles.loyaltyStat}>
+                <Text style={styles.loyaltyStatVal}>
+                  {(loyalty.value_xaf || (user.loyalty_points ?? loyalty.points) * loyalty.point_value_xaf).toLocaleString(i18n.language)}
+                </Text>
+                <Text style={styles.loyaltyStatLbl}>{t('profile.loyalty_value_label')}</Text>
+              </View>
+              <View style={styles.loyaltyStat}>
+                <Text style={styles.loyaltyStatVal}>{loyalty.points_per_cbm}</Text>
+                <Text style={styles.loyaltyStatLbl}>{t('profile.loyalty_rate')}</Text>
+              </View>
             </View>
+
+            {loyalty.next_tier ? (
+              <Text style={styles.loyaltyNext}>
+                {t('profile.loyalty_next', {
+                  tier: `${loyalty.next_tier.emoji || ''} ${loyalty.next_tier.name}`.trim(),
+                  cbm: loyalty.next_tier.cbm_remaining ?? 0,
+                })}
+              </Text>
+            ) : (
+              <Text style={styles.loyaltyNext}>{t('profile.loyalty_max_tier')}</Text>
+            )}
           </LinearGradient>
         </View>
 
         <View style={styles.content}>
           {/* PRÉFÉRENCES */}
           <Section title={t('profile.section_preferences')}>
-            <View style={styles.row}>
-              <View style={styles.rowLeft}>
+            <View style={styles.langBlock}>
+              <View style={styles.langHeader}>
                 <Globe size={20} color={colors.primary} />
                 <Text style={styles.rowText}>{t('profile.language')}</Text>
               </View>
-              <LanguageSelector />
+              <LanguageSelector compact />
             </View>
             <View style={styles.divider} />
             <ItemRow
@@ -319,6 +351,25 @@ export default function ProfileScreen() {
 
           {/* MON COMPTE & SUPPORT */}
           <Section title={t('profile.section_account')}>
+            {user?.role === 'admin' && (
+              <>
+                <TouchableOpacity
+                  style={styles.adminSwitchRow}
+                  onPress={switchToAdmin}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.adminSwitchIcon}>
+                    <Shield size={18} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.adminSwitchTitle}>Espace administration</Text>
+                    <Text style={styles.adminSwitchSub}>Basculer vers le mode admin mobile</Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.primary} />
+                </TouchableOpacity>
+                <View style={styles.divider} />
+              </>
+            )}
             <ItemRow
               testID="profile-edit"
               icon={<Edit3 size={20} color={colors.textSecondary} />}
@@ -341,32 +392,36 @@ export default function ProfileScreen() {
             />
           </Section>
 
-          <Section title="Parrainage commercial">
+          <Section title={t('profile.referral_section')}>
             {referral?.referred_by_agent_code ? (
               <View style={styles.referralLinked}>
                 <Handshake size={18} color={colors.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.referralLinkedTitle}>
-                    Lié à {referral?.agent?.full_name || referral.referred_by_agent_code}
+                    {t('profile.referral_linked', {
+                      name: referral?.agent?.full_name || referral.referred_by_agent_code,
+                    })}
                   </Text>
-                  <Text style={styles.referralLinkedSub}>Code {referral.referred_by_agent_code}</Text>
+                  <Text style={styles.referralLinkedSub}>
+                    {t('profile.referral_code_label', { code: referral.referred_by_agent_code })}
+                  </Text>
                 </View>
               </View>
             ) : (
               <View style={styles.referralBox}>
                 <Text style={styles.referralHint}>
-                  Ajoutez le code d’un commercial MOG pour lui rattacher vos commandes (une seule fois).
+                  {t('profile.referral_hint')}
                 </Text>
                 <TextInput
                   style={styles.referralInput}
                   autoCapitalize="characters"
-                  placeholder="Code commercial"
+                  placeholder={t('profile.referral_placeholder')}
                   placeholderTextColor={colors.textSecondary}
                   value={referralCode}
                   onChangeText={setReferralCode}
                 />
                 <TouchableOpacity style={styles.referralBtn} onPress={attachReferral} disabled={savingReferral}>
-                  {savingReferral ? <ActivityIndicator color="#fff" /> : <Text style={styles.referralBtnText}>Enregistrer le code</Text>}
+                  {savingReferral ? <ActivityIndicator color="#fff" /> : <Text style={styles.referralBtnText}>{t('profile.referral_save')}</Text>}
                 </TouchableOpacity>
               </View>
             )}
@@ -494,27 +549,47 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   loyaltyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
+    gap: 14,
   },
+  loyaltyTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   loyaltyIcon: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   loyaltyEyebrow: {
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.3,
-    marginBottom: 2,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
+  loyaltyTier: {
+    marginTop: 2,
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+    fontFamily: fonts.heading,
+  },
+  loyaltyPtsBox: { alignItems: 'flex-end' },
+  loyaltyPtsValue: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  loyaltyPtsLabel: { color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: '600' },
+  loyaltyGrid: { flexDirection: 'row', gap: 8 },
+  loyaltyStat: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  loyaltyStatVal: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  loyaltyStatLbl: { marginTop: 2, color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600' },
+  loyaltyNext: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', lineHeight: 17 },
   loyaltyPoints: {
     color: '#fff',
     fontSize: 22,
@@ -574,6 +649,24 @@ const styles = StyleSheet.create({
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowText: { color: colors.text, fontSize: 15, fontWeight: '500', flex: 1 },
   rowValue: { color: colors.textSecondary, fontSize: 14, maxWidth: 120 },
+  langBlock: { padding: spacing.lg, gap: 12 },
+  langHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  adminSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: spacing.lg,
+  },
+  adminSwitchIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminSwitchTitle: { fontWeight: '800', color: colors.text, fontSize: 15 },
+  adminSwitchSub: { marginTop: 2, color: colors.textSecondary, fontSize: 12 },
   divider: { height: 1, backgroundColor: colors.borderLight, marginLeft: 50 },
   logout: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: spacing.lg, backgroundColor: '#fff', borderRadius: radii.card, marginTop: spacing.sm, ...shadow.card },
   logoutText: { color: colors.danger, fontWeight: '700', fontSize: 16 },

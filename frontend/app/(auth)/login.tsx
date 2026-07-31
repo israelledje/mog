@@ -82,8 +82,12 @@ export default function LoginScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const user = await login(email.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (user.role === 'operator' || user.role === 'admin') {
+      if (user.role === 'operator') {
         router.replace('/(operator)');
+      } else if (user.role === 'admin') {
+        const { getAdminUiMode } = await import('../../src/utils/adminMode');
+        const mode = await getAdminUiMode();
+        router.replace(mode === 'client' ? '/(tabs)' : '/(operator)');
       } else {
         router.replace('/(tabs)');
       }
@@ -106,8 +110,9 @@ export default function LoginScreen() {
               <View style={styles.logo}>
                 <Image source={require('../../assets/images/logo_MOG.jpeg')} style={{ width: 60, height: 60 }} resizeMode="contain" />
               </View>
-              <Text style={styles.brandTitle}>MOG Group Multiservice</Text>
+              <Text style={styles.brandTitle}>{t('auth.brand_name')}</Text>
               <Text style={styles.brandSubtitle}>{t('auth.welcome_subtitle')}</Text>
+              <Text style={styles.brandSlogan}>{t('auth.brand_slogan')}</Text>
             </View>
             <View style={styles.card}>
               <Text style={styles.welcome}>{t('auth.welcome_back')}</Text>
@@ -215,7 +220,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', ...shadow.card,
   },
   brandTitle: { fontSize: 28, fontWeight: '800', color: colors.primary, marginTop: spacing.md, fontFamily: fonts.heading },
-  brandSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
+  brandSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4, textAlign: 'center', paddingHorizontal: 12, lineHeight: 20 },
+  brandSlogan: { fontSize: 12, color: colors.primary, marginTop: 8, fontWeight: '700', textAlign: 'center', fontStyle: 'italic' },
   card: {
     backgroundColor: '#fff', borderRadius: radii.card, padding: spacing.lg, ...shadow.card,
     marginTop: spacing.lg,

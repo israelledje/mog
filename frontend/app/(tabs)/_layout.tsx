@@ -10,6 +10,7 @@ import { colors, shadow } from '../../src/constants/theme';
 
 function AICenterButton() {
   const router = useRouter();
+  const { t } = useTranslation();
   return (
     <TouchableOpacity
       style={styles.aiWrap}
@@ -19,7 +20,7 @@ function AICenterButton() {
         router.push('/assistant');
       }}
       accessibilityRole="button"
-      accessibilityLabel="Assistant IA M.O.G"
+      accessibilityLabel={t('ai.a11y')}
     >
       <LinearGradient
         colors={[colors.primary, '#1E3A8A']}
@@ -29,7 +30,7 @@ function AICenterButton() {
       >
         <Sparkles size={26} color="#fff" strokeWidth={2.2} />
       </LinearGradient>
-      <Text style={styles.aiLabel}>IA</Text>
+      <Text style={styles.aiLabel}>{t('ai.tab_label')}</Text>
     </TouchableOpacity>
   );
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text, StyleSheet, Animated, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
+import { useTranslation } from 'react-i18next';
 import { WifiOff, RefreshCw } from 'lucide-react-native';
 import { useSyncStore } from '../store/syncStore';
 import { colors } from '../constants/theme';
@@ -11,6 +12,7 @@ import { colors } from '../constants/theme';
  * ou lorsqu'une file de synchro hors-ligne est en attente d'envoi.
  */
 export default function OfflineBanner() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [offline, setOffline] = useState(false);
   const pending = useSyncStore((s) => s.queue.length);
@@ -57,8 +59,8 @@ export default function OfflineBanner() {
       )}
       <Text style={styles.text}>
         {showSyncing
-          ? `Synchronisation en cours (${pending})…`
-          : 'Hors ligne — vos actions seront synchronisées au retour du réseau'}
+          ? t('common.syncing', { pending })
+          : t('common.offline_banner')}
       </Text>
     </Animated.View>
   );
