@@ -167,11 +167,15 @@ async def get_invoice_pdf(
     customer = await db.users.find_one({"email": invoice["customer_id"]})
     
     pdf_buffer = generate_customer_invoice_pdf(invoice, packages, customer)
+
+    # Filename ASCII-safe : "N°" / "/" cassent Content-Disposition (latin-1) et certains clients HTTP
+    raw_name = str(invoice.get("invoice_number") or invoice_id)
+    safe_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw_name).strip("_") or "facture"
     
     return Response(
         content=pdf_buffer.getvalue(),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f"attachment; filename={invoice['invoice_number']}.pdf"
+            "Content-Disposition": f'attachment; filename="{safe_name}.pdf"'
         }
     )

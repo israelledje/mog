@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Image, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Image, ActivityIndicator, FlatList, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -13,6 +13,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useSyncStore } from '../../src/store/syncStore';
 import QRScanner from '../../src/components/QRScanner';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
+import { OPERATOR_OPEN_SCAN } from '../../src/utils/operatorEvents';
 
 type Step = 'search' | 'scan' | 'form' | 'photos' | 'create' | 'success';
 
@@ -49,6 +50,16 @@ export default function ReceptionScreen() {
 
   useEffect(() => {
     fetchPending();
+  }, []);
+
+  // FAB layout → ouvrir le scan sans remonter / empiler reception
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(OPERATOR_OPEN_SCAN, () => {
+      setScanned(false);
+      isScanningRef.current = false;
+      setStep('scan');
+    });
+    return () => sub.remove();
   }, []);
 
   const fetchPending = async () => {

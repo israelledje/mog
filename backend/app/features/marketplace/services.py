@@ -39,6 +39,12 @@ async def get_growth_settings(db) -> dict:
         ],
         "vip_benefits": "Avantages personnalisés — contactez M.O.G PARTNERS",
         "award_on_statuses": ["in_transit", "departed"],
+        "marketplace_categories": [
+            {"id": "vehicle", "label": "Véhicule"},
+            {"id": "electronics", "label": "Électronique"},
+            {"id": "fashion", "label": "Mode"},
+            {"id": "other", "label": "Autre"},
+        ],
     }
     if not doc:
         await db.growth_settings.insert_one(defaults)
@@ -46,6 +52,8 @@ async def get_growth_settings(db) -> dict:
     merged = {**defaults, **doc}
     if not merged.get("loyalty_tiers"):
         merged["loyalty_tiers"] = defaults["loyalty_tiers"]
+    if not merged.get("marketplace_categories"):
+        merged["marketplace_categories"] = defaults["marketplace_categories"]
     return merged
 
 

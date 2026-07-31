@@ -16,6 +16,25 @@ export const entrepotsApi = {
     const { data } = await api.get('/entrepots/');
     return data;
   },
+  async create(payload: {
+    name: string;
+    city: string;
+    country: string;
+    type?: 'origin' | 'destination';
+    address?: string;
+    contact?: string;
+  }) {
+    const { data } = await api.post('/entrepots/', payload);
+    return data as Entrepot;
+  },
+  async update(id: string, payload: { name?: string; address?: string; contact?: string }) {
+    const { data } = await api.patch(`/entrepots/${id}`, payload);
+    return data;
+  },
+  async remove(id: string) {
+    const { data } = await api.delete(`/entrepots/${id}`);
+    return data;
+  },
   async receivePackage(packageId: string, entrepotId: string, notes?: string) {
     const { data } = await api.post(`/entrepots/receive-package/${packageId}`, {
       entrepot_id: entrepotId,

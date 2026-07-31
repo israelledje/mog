@@ -17,7 +17,13 @@ function normalizeColis(data: any): Colis {
 }
 
 export const colisApi = {
-  async list(params?: { tracking_number?: string; status?: string; skip?: number; limit?: number }): Promise<Colis[]> {
+  async list(params?: {
+    tracking_number?: string;
+    status?: string;
+    owner_id?: string;
+    skip?: number;
+    limit?: number;
+  }): Promise<Colis[]> {
     const { data } = await api.get('/colis/', { params });
     return data.map(normalizeColis);
   },
@@ -112,6 +118,18 @@ export const groupagesApi = {
     const { data } = await api.get(`/groupages/${id}/manifest`);
     return data; // Note: In reality, we would handle PDF blob
   },
+  async create(payload: {
+    container_number: string;
+    destination_city: string;
+    mode?: string;
+    vessel_name?: string;
+    origin_port?: string;
+    departure_date?: string | null;
+    estimated_arrival?: string | null;
+  }): Promise<Groupage> {
+    const { data } = await api.post('/groupages/', payload);
+    return normalizeGroupage(data);
+  },
 };
 
 export const notifsApi = {
@@ -128,8 +146,35 @@ export const notifsApi = {
 };
 
 export const invoicesApi = {
-  async list(): Promise<any[]> {
-    const { data } = await api.get('/invoices/');
+  async list(customerId?: string): Promise<any[]> {
+    const { data } = await api.get('/invoices/', {
+      params: customerId ? { customer_id: customerId } : undefined,
+    });
+    return data;
+  },
+  async create(payload: {
+    customer_id: string;
+    packages: Array<{
+      package_id: string;
+      transport_mode?: string;
+      calculated_unit_price?: number;
+      manual_unit_price?: number | null;
+      weight_or_volume: number;
+      unit?: string;
+    }>;
+    total_price: number;
+    include_vat?: boolean;
+    discount?: number;
+  }) {
+    const { data } = await api.post('/invoices/', payload);
+    return data;
+  },
+  async finalize(id: string) {
+    const { data } = await api.post(`/invoices/${id}/finalize`);
+    return data;
+  },
+  async remove(id: string) {
+    const { data } = await api.delete(`/invoices/${id}`);
     return data;
   },
 };

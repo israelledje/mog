@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
 import { useTranslation } from 'react-i18next';
 import { Scan, WifiOff } from 'lucide-react-native';
 import { darkColors as colors, shadow, radii, spacing } from '../../src/constants/theme';
+import { OPERATOR_OPEN_SCAN } from '../../src/utils/operatorEvents';
 
 export default function OperatorLayout() {
   const [isConnected, setIsConnected] = useState(true);
@@ -22,6 +23,15 @@ export default function OperatorLayout() {
     });
     return () => unsubscribe();
   }, []);
+
+  const onFabPress = () => {
+    if (lastSegment === 'reception') {
+      // Ouvre le scanner sur l’écran déjà monté (évite d’empiler reception)
+      DeviceEventEmitter.emit(OPERATOR_OPEN_SCAN);
+      return;
+    }
+    router.push('/(operator)/reception');
+  };
 
   return (
     <View style={styles.container}>
@@ -47,12 +57,18 @@ export default function OperatorLayout() {
         <Stack.Screen name="marketplace" />
         <Stack.Screen name="promos" />
         <Stack.Screen name="growth" />
+        <Stack.Screen name="customers" />
+        <Stack.Screen name="team" />
+        <Stack.Screen name="tarifs" />
+        <Stack.Screen name="warehouses" />
+        <Stack.Screen name="invoices" />
+        <Stack.Screen name="reports" />
       </Stack>
 
       {showFab && (
       <TouchableOpacity 
         style={[styles.fab, { bottom: insets.bottom + 24 }]} 
-        onPress={() => router.push('/(operator)/reception')}
+        onPress={onFabPress}
         activeOpacity={0.8}
       >
         <Scan size={28} color="#fff" />

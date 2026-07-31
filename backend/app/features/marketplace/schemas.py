@@ -135,3 +135,4 @@ class GrowthSettingsUpdate(BaseModel):
     loyalty_tiers: Optional[list] = None
     vip_benefits: Optional[str] = None
     award_on_statuses: Optional[list] = None
+    marketplace_categories: Optional[list] = None

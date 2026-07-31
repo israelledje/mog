@@ -25,6 +25,34 @@ export const tarifsApi = {
     return data;
   },
 
+  async create(payload: {
+    mode: string;
+    label: string;
+    description: string;
+    unit: string;
+    price: number;
+    category_key: string;
+    price_bulk?: number;
+    bulk_from?: number;
+    eta_days?: string;
+  }) {
+    const { data } = await api.post('/tarifs/', payload);
+    return data as Tarif;
+  },
+
+  async update(id: string, payload: Partial<{
+    price: number;
+    label: string;
+    description: string;
+    price_bulk: number;
+    bulk_from: number;
+    price_max: number;
+    eta_days: string;
+  }>) {
+    const { data } = await api.patch(`/tarifs/${id}`, payload);
+    return data;
+  },
+
   async calculate(params: {
     transport_mode: 'air' | 'sea';
     weight_kg?: number;

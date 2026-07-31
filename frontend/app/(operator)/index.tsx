@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Package, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield } from 'lucide-react-native';
+import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -211,8 +211,38 @@ export default function OperatorDashboard() {
             <View style={styles.adminHint}>
               <Shield size={16} color={colors.primary} />
               <Text style={styles.adminHintText}>
-                Fonctions essentielles aussi disponibles sur web-admin (PC).
+                Pilotage mobile aligné sur web-admin — sans casser les flux opérateur.
               </Text>
+            </View>
+            <View style={styles.grid}>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/reports')}>
+                <BarChart3 size={24} color={colors.primary} />
+                <Text style={styles.subActionTitle}>Rapports</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/customers')}>
+                <Users size={24} color={colors.secondary} />
+                <Text style={styles.subActionTitle}>Clients</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.grid}>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/team')}>
+                <UserCog size={24} color={colors.primary} />
+                <Text style={styles.subActionTitle}>Équipe</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/warehouses')}>
+                <Building2 size={24} color={colors.accent} />
+                <Text style={styles.subActionTitle}>Entrepôts</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.grid}>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/tarifs')}>
+                <Layers size={24} color={colors.secondary} />
+                <Text style={styles.subActionTitle}>Tarifs</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/invoices')}>
+                <FileText size={24} color="#F59E0B" />
+                <Text style={styles.subActionTitle}>Factures</Text>
+              </TouchableOpacity>
             </View>
           </>
         )}

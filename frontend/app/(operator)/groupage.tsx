@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList,
-  Alert, ActivityIndicator, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  Alert, ActivityIndicator, ScrollView, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight,
+  ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 import { colisApi, groupagesApi } from '../../src/api/colis';
 import type { Groupage, Colis } from '../../src/types';
+import { useAuthStore } from '../../src/store/authStore';
+import { formatErr } from '../../src/api/client';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
 
 const containerId = (c: Groupage) => c.id || (c as any)._id;
@@ -20,6 +23,8 @@ const colisIdOf = (c: Colis) => c.id || (c as any)._id;
 export default function GroupageScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const canCreate = user?.role === 'admin' || user?.role === 'operator';
   const [search, setSearch] = useState('');
   const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
   const [recentColis, setRecentColis] = useState<Colis[]>([]);
@@ -27,6 +32,15 @@ export default function GroupageScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({
+    container_number: '',
+    destination_city: 'Douala',
+    mode: 'sea',
+    origin_port: 'Guangzhou',
+    vessel_name: '',
+  });
 
   const loadData = useCallback(async () => {
     setLoadingRecent(true);
@@ -36,16 +50,16 @@ export default function GroupageScreen() {
         groupagesApi.list(),
       ]);
       const assignable = allPackages.filter(
-        c => ['received', 'damaged'].includes(c.status) && !c.container_id,
+        (c) => ['received', 'damaged'].includes(c.status) && !c.container_id,
       );
       setRecentColis(assignable);
-      setContainers(allContainers.filter(c => c.status === 'open'));
+      setContainers(allContainers.filter((c) => c.status === 'open'));
     } catch {
       Alert.alert(t('errors.server'), t('operator.load_error'));
     } finally {
       setLoadingRecent(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -60,7 +74,7 @@ export default function GroupageScreen() {
     setLoading(true);
     try {
       const res = await colisApi.list({ tracking_number: search.trim() });
-      const match = res.find(c => !c.container_id) || res[0];
+      const match = res.find((c) => !c.container_id) || res[0];
       if (match) {
         if (match.container_id) {
           Alert.alert(t('operator.already_grouped'), t('operator.already_grouped_msg'));
@@ -114,6 +128,37 @@ export default function GroupageScreen() {
     );
   };
 
+  const createGroupage = async () => {
+    if (!form.container_number.trim()) {
+      Toast.show({ type: 'error', text1: 'N° conteneur requis' });
+      return;
+    }
+    setCreating(true);
+    try {
+      await groupagesApi.create({
+        container_number: form.container_number.trim(),
+        destination_city: form.destination_city.trim() || 'Douala',
+        mode: form.mode,
+        origin_port: form.origin_port.trim() || 'Guangzhou',
+        vessel_name: form.vessel_name.trim() || undefined,
+      });
+      setShowCreate(false);
+      setForm({
+        container_number: '',
+        destination_city: 'Douala',
+        mode: 'sea',
+        origin_port: 'Guangzhou',
+        vessel_name: '',
+      });
+      loadData();
+      Toast.show({ type: 'success', text1: 'Groupage créé' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, 'Création impossible') });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -121,13 +166,18 @@ export default function GroupageScreen() {
           <ChevronLeft size={26} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('operator.groupage_title')}</Text>
-        <TouchableOpacity onPress={loadData} style={styles.back}>
-          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>{t('operator.refresh')}</Text>
-        </TouchableOpacity>
+        {canCreate ? (
+          <TouchableOpacity onPress={() => setShowCreate(true)} style={styles.back}>
+            <Plus size={22} color={colors.primary} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={loadData} style={styles.back}>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>{t('operator.refresh')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        {/* ── Étape 1 : choisir le colis ── */}
         <View style={styles.section}>
           <Text style={styles.stepLabel}>1. {t('operator.groupage_scan')}</Text>
           <View style={styles.searchRow}>
@@ -167,7 +217,7 @@ export default function GroupageScreen() {
               ) : recentColis.length === 0 ? (
                 <Text style={styles.emptyHint}>Aucun colis reçu en attente de groupage.</Text>
               ) : (
-                recentColis.slice(0, 10).map(c => (
+                recentColis.slice(0, 10).map((c) => (
                   <TouchableOpacity key={colisIdOf(c)} style={styles.colisRow} onPress={() => selectColis(c)}>
                     <Box size={18} color={colors.primary} />
                     <View style={{ flex: 1 }}>
@@ -182,7 +232,6 @@ export default function GroupageScreen() {
           )}
         </View>
 
-        {/* ── Étape 2 : choisir le conteneur ── */}
         <View style={styles.section}>
           <Text style={styles.stepLabel}>2. {t('operator.groupage_select')}</Text>
           {!selectedColis && (
@@ -192,9 +241,9 @@ export default function GroupageScreen() {
           )}
 
           {containers.length === 0 ? (
-            <Text style={styles.emptyHint}>Aucun conteneur ouvert.</Text>
+            <Text style={styles.emptyHint}>Aucun conteneur ouvert. Créez-en un avec +</Text>
           ) : (
-            containers.map(item => {
+            containers.map((item) => {
               const cid = containerId(item);
               const isAssigning = assigning === cid;
               const canTap = !!selectedColis && !isAssigning;
@@ -230,6 +279,31 @@ export default function GroupageScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={showCreate} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Nouveau groupage</Text>
+            <TextInput style={styles.input} placeholder="N° conteneur / référence" placeholderTextColor={colors.textSecondary} value={form.container_number} onChangeText={(v) => setForm({ ...form, container_number: v })} />
+            <TextInput style={styles.input} placeholder="Ville destination" placeholderTextColor={colors.textSecondary} value={form.destination_city} onChangeText={(v) => setForm({ ...form, destination_city: v })} />
+            <TextInput style={styles.input} placeholder="Port d’origine" placeholderTextColor={colors.textSecondary} value={form.origin_port} onChangeText={(v) => setForm({ ...form, origin_port: v })} />
+            <TextInput style={styles.input} placeholder="Navire / vol (optionnel)" placeholderTextColor={colors.textSecondary} value={form.vessel_name} onChangeText={(v) => setForm({ ...form, vessel_name: v })} />
+            <View style={styles.modeRow}>
+              {(['sea', 'air'] as const).map((m) => (
+                <TouchableOpacity key={m} style={[styles.modeChip, form.mode === m && styles.modeOn]} onPress={() => setForm({ ...form, mode: m })}>
+                  <Text style={[styles.modeText, form.mode === m && { color: '#fff' }]}>{m === 'sea' ? 'Maritime' : 'Aérien'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.createBtn} onPress={createGroupage} disabled={creating}>
+              {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.createBtnText}>Créer le groupage</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowCreate(false)}>
+              <Text style={{ color: colors.textSecondary, textAlign: 'center', fontWeight: '700', marginTop: 12 }}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -262,4 +336,14 @@ const styles = StyleSheet.create({
   route: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 12, fontWeight: '800', color: colors.primary },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalBox: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 },
+  input: { backgroundColor: colors.background, borderRadius: radii.input, padding: 12, color: colors.text, marginBottom: 10 },
+  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  modeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.background },
+  modeOn: { backgroundColor: colors.primary },
+  modeText: { fontWeight: '700', color: colors.textSecondary, fontSize: 12 },
+  createBtn: { backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 14, alignItems: 'center' },
+  createBtnText: { color: '#fff', fontWeight: '800' },
 });
