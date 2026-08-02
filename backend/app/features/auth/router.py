@@ -102,6 +102,17 @@ async def login(login_data: LoginRequest, response: Response, db = Depends(get_d
             detail="Email ou mot de passe incorrect",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Fiche client métier sans compte app : bloquer la connexion
+    email_l = (user.get("email") or "").lower()
+    app_enabled = user.get("app_enabled")
+    if app_enabled is None:
+        app_enabled = not email_l.endswith("@mog.local")
+    if user.get("role") == "client" and not app_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte app non activé. Contactez M.O.G pour générer votre accès.",
+        )
     
     access_token = create_access_token({"sub": user["email"], "role": user["role"]})
     refresh_token = create_refresh_token({"sub": user["email"]})

@@ -171,7 +171,9 @@
     "select_platform": "Select",
     "client_code": "Client code",
     "recap": "Summary",
-    "transport_mode": "Transport mode"
+    "transport_mode": "Transport mode",
+    "freight_category": "Freight rate category",
+    "freight_category_hint": "Same grid as the freight simulator (Express, Normal, Bales…)"
   },
   "shipment": {
     "title": "Shipments",

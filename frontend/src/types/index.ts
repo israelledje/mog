@@ -68,6 +68,8 @@ export interface Colis {
   supplier_tracking?: string | null;
   description: string;
   category: string;
+  /** Grille tarifaire (express, standard, bales…) — même clé que le simulateur */
+  category_key?: string;
   declared_value: number;
   currency: string;
   transport_mode: TransportMode;

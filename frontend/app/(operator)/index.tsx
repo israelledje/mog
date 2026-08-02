@@ -186,16 +186,22 @@ export default function OperatorDashboard() {
             <List size={24} color={colors.primary} />
             <Text style={styles.subActionTitle}>{t('operator.my_receptions')}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.subAction} onPress={() => router.push({ pathname: '/(operator)/warehouses', params: { tab: 'saisie' } } as any)}>
+            <Box size={24} color={colors.accent} />
+            <Text style={styles.subActionTitle}>Saisie colis</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.grid}>
           <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/groupage')}>
             <Box size={24} color={colors.secondary} />
             <Text style={styles.subActionTitle}>{t('operator.groupage')}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.subAction} onPress={goCloture}>
+            <Lock size={24} color={isAdmin ? colors.danger : colors.textSecondary} />
+            <Text style={styles.subActionTitle}>{t('operator.close_pl')}</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity style={[styles.subAction, { marginBottom: spacing.lg }]} onPress={goCloture}>
-          <Lock size={24} color={isAdmin ? colors.danger : colors.textSecondary} />
-          <Text style={styles.subActionTitle}>{t('operator.close_pl')}</Text>
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.subAction, { marginBottom: spacing.lg, borderColor: colors.primary }]}
@@ -204,6 +210,17 @@ export default function OperatorDashboard() {
           <Headphones size={24} color={colors.primary} />
           <Text style={styles.subActionTitle}>Demandes services clients</Text>
         </TouchableOpacity>
+
+        <View style={[styles.grid, { marginBottom: spacing.lg }]}>
+          <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/customers')}>
+            <Users size={24} color={colors.secondary} />
+            <Text style={styles.subActionTitle}>Clients</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/warehouses')}>
+            <Building2 size={24} color={colors.accent} />
+            <Text style={styles.subActionTitle}>Stock / Entrepôts</Text>
+          </TouchableOpacity>
+        </View>
 
         {isAdmin && (
           <>
@@ -219,19 +236,9 @@ export default function OperatorDashboard() {
                 <BarChart3 size={24} color={colors.primary} />
                 <Text style={styles.subActionTitle}>Rapports</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/customers')}>
-                <Users size={24} color={colors.secondary} />
-                <Text style={styles.subActionTitle}>Clients</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.grid}>
               <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/team')}>
                 <UserCog size={24} color={colors.primary} />
                 <Text style={styles.subActionTitle}>Équipe</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/warehouses')}>
-                <Building2 size={24} color={colors.accent} />
-                <Text style={styles.subActionTitle}>Entrepôts</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.grid}>

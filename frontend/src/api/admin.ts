@@ -25,7 +25,10 @@ export type AdminUser = {
   loyalty_points?: number;
   loyalty_total_cbm?: number;
   assigned_entrepot_id?: string;
+  app_enabled?: boolean;
+  notes?: string;
   created_at?: string;
+  reused?: boolean;
   [key: string]: any;
 };
 
@@ -38,6 +41,28 @@ export const adminApi = {
   },
   customers() {
     return api.get<AdminUser[]>('/admin/customers').then((r) => r.data);
+  },
+  createOperationalCustomer(payload: {
+    full_name: string;
+    phone: string;
+    city?: string;
+    email?: string;
+    notes?: string;
+  }) {
+    return api.post<AdminUser>('/admin/customers/operational', payload).then((r) => r.data);
+  },
+  enableCustomerApp(userId: string, payload?: { email?: string; password?: string }) {
+    return api
+      .post<{
+        message: string;
+        email: string;
+        temporary_password: string;
+        app_enabled: boolean;
+      }>(`/admin/customers/${userId}/enable-app`, payload || {})
+      .then((r) => r.data);
+  },
+  customerPackages(userId: string) {
+    return api.get<any[]>(`/admin/customers/${userId}/packages`).then((r) => r.data);
   },
   createUser(payload: Record<string, any>) {
     return api.post('/admin/users', payload).then((r) => r.data);

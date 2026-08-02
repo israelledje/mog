@@ -44,7 +44,9 @@ def assert_can_receive_at_entrepot(package: dict, entrepot: dict):
     Règles métier :
     - Origine : réception d'office possible (pending / draft / already received).
     - Destination : uniquement si le colis a été (ou est) en transit / douane.
+    - Mode transport : colis aérien → entrepôt aérien, maritime → maritime.
     """
+    assert_entrepot_transport_match(package, entrepot)
     etype = entrepot.get("type") or "origin"
     status = package.get("status") or ""
 
@@ -75,6 +77,24 @@ def assert_can_receive_at_entrepot(package: dict, entrepot: dict):
                 f"Réception destination impossible pour le statut « {status} ». "
                 f"Attendus : transit, douane, arrivé ou distribué."
             ),
+        )
+
+
+def assert_entrepot_transport_match(package: dict, entrepot: dict):
+    """Un colis aérien va à l'entrepôt aérien ; maritime → entrepôt maritime."""
+    pkg_mode = (package.get("transport_mode") or "sea").lower()
+    wh_mode = (entrepot.get("transport_mode") or "sea").lower()
+    pkg_air = pkg_mode in ("air", "air_express")
+    wh_air = wh_mode in ("air", "air_express")
+    if pkg_air and not wh_air:
+        raise HTTPException(
+            status_code=400,
+            detail="Colis aérien : réceptionnez-le à l'entrepôt aérien (pas maritime).",
+        )
+    if not pkg_air and wh_air:
+        raise HTTPException(
+            status_code=400,
+            detail="Colis maritime : réceptionnez-le à l'entrepôt maritime (pas aérien).",
         )
 
 

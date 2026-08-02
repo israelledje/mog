@@ -61,22 +61,23 @@ def next_tier(cumulative_cbm: float, tiers: list[dict]) -> Optional[dict]:
 
 
 def physical_cbm(pkg: dict) -> float:
-    dims = pkg.get("dimensions") or {}
-    l, w, h = float(dims.get("l") or 0), float(dims.get("w") or 0), float(dims.get("h") or 0)
-    if l > 0 and w > 0 and h > 0:
-        return (l * w * h) / 1_000_000
-    return float(pkg.get("volume_cbm") or 0)
+    from app.core.freight_billing import physical_cbm as _cbm
+    return _cbm(pkg)
 
 
 def air_chargeable_kg(pkg: dict) -> float:
-    real = float(pkg.get("weight_real") or 0)
-    volumetric = float(pkg.get("weight_volumetric") or 0)
-    if volumetric <= 0:
-        dims = pkg.get("dimensions") or {}
-        l, w, h = float(dims.get("l") or 0), float(dims.get("w") or 0), float(dims.get("h") or 0)
-        if l > 0 and w > 0 and h > 0:
-            volumetric = (l * w * h) / 6000.0
-    return max(real, volumetric, 0.0)
+    from app.core.freight_billing import air_chargeable_kg as _kg
+    return _kg(pkg)
+
+
+def air_billed_kg(pkg: dict) -> float:
+    from app.core.freight_billing import air_billed_kg as _billed
+    return _billed(pkg)
+
+
+def sea_billed_cbm(pkg: dict) -> float:
+    from app.core.freight_billing import sea_billed_cbm as _cbm
+    return _cbm(pkg)
 
 
 def loyalty_cbm_for_package(pkg: dict, air_kg_per_cbm: float = AIR_KG_PER_CBM) -> float:

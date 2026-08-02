@@ -2,7 +2,7 @@
   "expo": {
     "name": "M.O.G CONNECT+",
     "slug": "mog",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/MOG.png",
     "scheme": "mog",
@@ -11,11 +11,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.cargoline.app",
-      "buildNumber": "4",
+      "buildNumber": "6",
       "infoPlist": {
         "CFBundleDisplayName": "M.O.G CONNECT+",
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",
-        "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à la galerie pour vous permettre d'uploader vos preuves de paiement.",
+        "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à la galerie pour joindre des photos de colis (réception, saisie stock) et des preuves de paiement.",
         "NSFaceIDUsageDescription": "L'application utilise Face ID pour vous permettre de vous connecter rapidement et en toute sécurité.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -32,7 +32,8 @@
         "CAMERA",
         "INTERNET",
         "ACCESS_NETWORK_STATE"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",

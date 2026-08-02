@@ -171,7 +171,9 @@
     "select_platform": "选择",
     "client_code": "客户编号",
     "recap": "摘要",
-    "transport_mode": "运输方式"
+    "transport_mode": "运输方式",
+    "freight_category": "运费类别",
+    "freight_category_hint": "与运费模拟器相同（Express、普通、打包等）"
   },
   "shipment": {
     "title": "运单",

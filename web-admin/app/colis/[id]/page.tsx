@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ChevronLeft, Package, Building2, Clock, Loader2,
   ArrowRightLeft, Container, MapPin, History, AlertCircle,
-  Truck, Image as ImageIcon, User, Scale, Box, CheckCircle2
+  Truck, Image as ImageIcon, User, Scale, Box, CheckCircle2, Upload
 } from 'lucide-react';
 import { API } from '@/lib/api';
 
@@ -48,12 +48,40 @@ export default function ColisDetailPage() {
   const [transferTo, setTransferTo] = useState('');
   const [transferNotes, setTransferNotes] = useState('');
   const [selectedContainer, setSelectedContainer] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const auth = { Authorization: `Bearer ${getToken()}` };
   const jsonHeaders = { ...auth, 'Content-Type': 'application/json' };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/colis/${id}/photos`, {
+        method: 'POST',
+        headers: auth,
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage('Photo ajoutée avec succès !');
+        load();
+      } else {
+        setError(data.detail || 'Erreur lors de l\'envoi de la photo');
+      }
+    } catch {
+      setError('Erreur réseau lors de l\'envoi de la photo');
+    }
+    setUploadingPhoto(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -232,9 +260,16 @@ export default function ColisDetailPage() {
             </section>
 
             <section className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm">
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <ImageIcon size={14} /> Photos ({photos.length})
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <ImageIcon size={14} /> Photos ({photos.length})
+                </h2>
+                <label className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-xs font-bold cursor-pointer transition-all">
+                  {uploadingPhoto ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span>{uploadingPhoto ? 'Envoi...' : 'Ajouter une photo'}</span>
+                  <input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={uploadingPhoto} className="hidden" />
+                </label>
+              </div>
               {photos.length === 0 ? (
                 <p className="text-slate-400 text-sm font-medium">Aucune photo associée.</p>
               ) : (

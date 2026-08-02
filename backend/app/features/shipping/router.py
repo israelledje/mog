@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query, Response
 from fastapi.responses import FileResponse
 from app.core.paths import UPLOAD_DIR, upload_file_path, public_upload_url
-from app.features.shipping.schemas import PackageCreate, PackageInDB, PackageUpdate, PackageReceive, InvoiceUpdate
+from app.features.shipping.schemas import PackageCreate, PackageInDB, PackageUpdate, PackageReceive, PackageAuditUpdate, InvoiceUpdate
 from app.core.database import get_database
 from app.core.utils import apply_watermark
 from app.core.pdf_service import generate_invoice_pdf
@@ -56,7 +56,9 @@ async def search_users(
     query = {
         "$or": [
             {"full_name": {"$regex": q, "$options": "i"}},
-            {"email": {"$regex": q, "$options": "i"}}
+            {"email": {"$regex": q, "$options": "i"}},
+            {"phone": {"$regex": q, "$options": "i"}},
+            {"client_code": {"$regex": q, "$options": "i"}},
         ],
         "role": "client"
     }
@@ -121,6 +123,12 @@ async def create_colis(
     owner_id = current_user["email"]
     if current_user.get("role") in ["admin", "operator"] and package_in.owner_id:
         owner_id = package_in.owner_id
+    elif current_user.get("role") == "client":
+        # Déclaration client : tracking fournisseur + photo obligatoires
+        if not package_in.supplier_tracking:
+            raise HTTPException(status_code=400, detail="Le tracking number fournisseur est obligatoire")
+        if not package_in.photos or len(package_in.photos) < 1:
+            raise HTTPException(status_code=400, detail="Au moins 1 photo du colis est obligatoire")
         
     # Récupérer les infos du client pour le format de la Shipping Mark
     user = await db.users.find_one({"email": owner_id})
@@ -168,7 +176,17 @@ async def group_client_packages(
     current_user: dict = Depends(get_current_user),
     db=Depends(get_database),
 ):
-    """Regroupe plusieurs colis du client en une expédition logique."""
+    """Regroupe plusieurs colis du client en une expédition logique.
+
+    Facturation aérienne groupée : ceil(somme des kg), pas ceil de chaque colis.
+    Ex. 1,3 kg + 0,7 kg → 2 kg facturés (pas 3).
+    """
+    from app.core.freight_billing import (
+        air_billed_kg_for_packages,
+        distribute_billed_kg,
+        physical_cbm,
+    )
+
     if not data.package_ids or len(data.package_ids) < 2:
         raise HTTPException(status_code=400, detail="Sélectionnez au moins 2 colis")
 
@@ -177,6 +195,84 @@ async def group_client_packages(
         pkgs.append(p)
     if len(pkgs) != len(data.package_ids):
         raise HTTPException(status_code=404, detail="Un ou plusieurs colis sont introuvables")
+
+    # ── Recalcul prix au prorata du groupement (bénéfice kilos aériens) ──
+    air_pkgs = [p for p in pkgs if (p.get("transport_mode") or "sea") in ("air", "air_express")]
+    sea_pkgs = [p for p in pkgs if (p.get("transport_mode") or "sea") not in ("air", "air_express")]
+
+    billing_meta = {
+        "air_raw_kg": 0.0,
+        "air_billed_kg": 0.0,
+        "sea_cbm": 0.0,
+        "billing_note": None,
+    }
+    price_by_id = {}
+
+    # Grouper les colis aériens par category_key (grille tarifaire)
+    air_by_cat: dict = {}
+    for p in air_pkgs:
+        key = p.get("category_key") or "standard"
+        air_by_cat.setdefault(key, []).append(p)
+
+    for cat_key, cat_pkgs in air_by_cat.items():
+        tarif = await db.tarifs.find_one({"mode": "air", "category_key": cat_key})
+        if not tarif:
+            tarif = await db.tarifs.find_one({"mode": "air", "category_key": "standard"})
+        unit = (tarif or {}).get("unit", "kg")
+        unit_price = float((tarif or {}).get("price") or 0)
+
+        if unit == "kg" and unit_price > 0:
+            raw_sum, billed = air_billed_kg_for_packages(cat_pkgs)
+            billing_meta["air_raw_kg"] += raw_sum
+            billing_meta["air_billed_kg"] += billed
+            shares = distribute_billed_kg(cat_pkgs, billed)
+            group_total = unit_price * billed
+            for p, share_kg in zip(cat_pkgs, shares):
+                # Prix ligne = part du total groupé
+                line = (share_kg / billed) * group_total if billed > 0 else 0
+                price_by_id[str(p["_id"])] = round(line, 2)
+            if raw_sum > 0 and billed != raw_sum:
+                billing_meta["billing_note"] = (
+                    f"Aérien {cat_key}: {raw_sum:g} kg → {billed:g} kg facturés "
+                    f"(arrondi groupé, pas colis par colis)"
+                )
+            elif raw_sum > 0:
+                billing_meta["billing_note"] = (
+                    f"Aérien {cat_key}: {billed:g} kg facturés (somme groupée)"
+                )
+        else:
+            # Unités / forfaits : pas de regroupement kg
+            for p in cat_pkgs:
+                if p.get("total_price"):
+                    price_by_id[str(p["_id"])] = float(p.get("total_price") or 0)
+
+    for p in sea_pkgs:
+        cbm = physical_cbm(p)
+        billing_meta["sea_cbm"] += cbm
+        tarif = await db.tarifs.find_one({
+            "mode": "sea",
+            "category_key": p.get("category_key") or "standard",
+        })
+        if not tarif:
+            tarif = await db.tarifs.find_one({"mode": "sea", "category_key": "standard"})
+        unit_price = float((tarif or {}).get("price") or 0)
+        if unit_price > 0 and cbm > 0:
+            price_by_id[str(p["_id"])] = round(unit_price * cbm, 2)
+        elif p.get("total_price"):
+            price_by_id[str(p["_id"])] = float(p.get("total_price") or 0)
+
+    # Appliquer les prix recalculés sur les docs en mémoire
+    for p in pkgs:
+        pid = str(p["_id"])
+        if pid in price_by_id:
+            p["total_price"] = price_by_id[pid]
+            await db.packages.update_one(
+                {"_id": p["_id"]},
+                {"$set": {"total_price": price_by_id[pid], "billed_in_group": True}},
+            )
+
+    if sea_pkgs and billing_meta["sea_cbm"] > 0 and not billing_meta["billing_note"]:
+        billing_meta["billing_note"] = f"Maritime: {billing_meta['sea_cbm']:.3f} CBM (somme)"
 
     subtotal = sum(float(p.get("total_price") or 0) for p in pkgs)
     discount = 0.0
@@ -202,6 +298,10 @@ async def group_client_packages(
         "promo_code": promo_code,
         "promo_discount_xaf": discount,
         "total_xaf": max(0.0, subtotal - discount),
+        "air_raw_kg": billing_meta["air_raw_kg"],
+        "air_billed_kg": billing_meta["air_billed_kg"],
+        "sea_cbm": billing_meta["sea_cbm"],
+        "billing_note": billing_meta["billing_note"],
     }
     await db.client_groups.insert_one(group)
     await db.packages.update_many(
@@ -217,7 +317,8 @@ async def group_client_packages(
                 "timeline": {
                     "status": "grouped",
                     "label": "Groupé pour expédition client"
-                    + (f" (promo {promo_code} −{discount:.0f} XAF)" if promo_code else ""),
+                    + (f" (promo {promo_code} −{discount:.0f} XAF)" if promo_code else "")
+                    + (f" — {billing_meta['billing_note']}" if billing_meta.get("billing_note") else ""),
                     "timestamp": datetime.now(),
                     "location": "",
                 }
@@ -470,23 +571,34 @@ async def receive_package(
         "location": "Entrepôt Foshan (MOG)"
     }
     
+    set_fields = {
+        "status": final_status,
+        "weight_real": receive_data.weight_real,
+        "weight_volumetric": weight_volumetric,
+        "dimensions": dims,
+        "nature": receive_data.nature or package.get("nature"),
+        "warehouse_location": receive_data.warehouse_location,
+        "updated_at": datetime.now(),
+    }
+    if receive_data.transport_mode:
+        set_fields["transport_mode"] = receive_data.transport_mode
+    if receive_data.category_key:
+        set_fields["category_key"] = receive_data.category_key
+
     await db.packages.update_one(
         {"_id": package_id},
         {
-            "$set": {
-                "status": final_status,
-                "weight_real": receive_data.weight_real,
-                "weight_volumetric": weight_volumetric,
-                "dimensions": dims,
-                "nature": receive_data.nature or package.get("nature"),
-                "warehouse_location": receive_data.warehouse_location,
-                "updated_at": datetime.now()
-            },
+            "$set": set_fields,
             "$push": {"timeline": new_timeline_entry}
         }
     )
 
     if receive_data.entrepot_id:
+        entrepot = await db.entrepots.find_one({"_id": receive_data.entrepot_id})
+        if not entrepot:
+            raise HTTPException(status_code=404, detail="Entrepôt non trouvé")
+        from app.core.warehouse_service import assert_entrepot_transport_match
+        assert_entrepot_transport_match({**package, **set_fields}, entrepot)
         from app.core.warehouse_service import apply_entrepot_to_package
         await apply_entrepot_to_package(
             db,
@@ -497,6 +609,59 @@ async def receive_package(
         )
     
     return {"message": "Colis audité avec succès", "status": final_status}
+
+
+@router.patch("/{package_id}/audit")
+async def update_package_audit(
+    package_id: str,
+    data: PackageAuditUpdate,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db=Depends(get_database),
+):
+    """Met à jour poids / dimensions / nature d'un colis déjà réceptionné (+ photos via POST /photos)."""
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    set_data: dict = {"updated_at": datetime.now()}
+    if data.weight_real is not None:
+        set_data["weight_real"] = data.weight_real
+    if data.dimensions is not None:
+        dims = data.dimensions
+        set_data["dimensions"] = dims
+        set_data["weight_volumetric"] = (
+            (dims.get("l", 0) * dims.get("w", 0) * dims.get("h", 0)) / 6000
+        )
+    if data.nature is not None:
+        set_data["nature"] = data.nature
+    if data.category_key is not None:
+        set_data["category_key"] = data.category_key
+    if data.transport_mode is not None:
+        set_data["transport_mode"] = data.transport_mode
+
+    merged = {**package, **set_data}
+
+    if data.entrepot_id:
+        entrepot = await db.entrepots.find_one({"_id": data.entrepot_id})
+        if not entrepot:
+            raise HTTPException(status_code=404, detail="Entrepôt non trouvé")
+        from app.core.warehouse_service import assert_entrepot_transport_match, apply_entrepot_to_package
+        assert_entrepot_transport_match(merged, entrepot)
+        await apply_entrepot_to_package(
+            db,
+            package_id,
+            data.entrepot_id,
+            current_user.get("email", "unknown"),
+            notes="Mise à jour audit opérateur",
+            is_transfer=bool(package.get("current_entrepot_id")),
+        )
+
+    if len(set_data) > 1:
+        await db.packages.update_one({"_id": package_id}, {"$set": set_data})
+
+    updated = await db.packages.find_one({"_id": package_id})
+    updated = _prepare_package(updated)
+    return updated
 
 @router.post("/{package_id}/payment-proof")
 async def upload_payment_proof(

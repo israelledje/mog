@@ -28,6 +28,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useSettingsStore } from '../../src/store/settingsStore';
 import { fileService } from '../../src/api/files';
 import { formatDeclaredValue } from '../../src/utils/format';
+import { freightCategoryLabel } from '../../src/constants/freightCategories';
 
 export default function ColisDetailScreen() {
   const { t } = useTranslation();
@@ -144,6 +145,12 @@ export default function ColisDetailScreen() {
           <Info label={t('package.weight_vol')} value={`${colis.weight_volumetric} kg`} Icon={Box} color="#0ea5e9" />
           <Info label={t('package.dimensions')} value={`${colis.dimensions?.l ?? 0}×${colis.dimensions?.w ?? 0}×${colis.dimensions?.h ?? 0}`} Icon={Ruler} color="#8b5cf6" />
           <Info label={t('package.category')} value={t(`categories.${colis.category}`)} Icon={Tag} color="#10b981" />
+          <Info
+            label={t('form.freight_category', { defaultValue: 'Tarif fret' })}
+            value={freightCategoryLabel(colis.transport_mode, colis.category_key)}
+            Icon={Tag}
+            color="#0ea5e9"
+          />
           <Info label={t('package.supplier')} value={colis.supplier_name || '-'} Icon={Store} color="#f59e0b" />
           <Info label={t('package.platform')} value={colis.platform || '-'} Icon={Globe} color="#6366f1" />
           <Info label={t('package.declared_value')} value={formatDeclaredValue(colis.declared_value, colis.currency)} Icon={DollarSign} color="#f43f5e" />

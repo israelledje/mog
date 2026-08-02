@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Alert, ActivityIndicator, ScrollView, Modal,
@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus,
+  ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus, Users,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -20,13 +20,17 @@ import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/c
 const containerId = (c: Groupage) => c.id || (c as any)._id;
 const colisIdOf = (c: Colis) => c.id || (c as any)._id;
 
+type PickMode = 'tracking' | 'client';
+
 export default function GroupageScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const canCreate = user?.role === 'admin' || user?.role === 'operator';
+  const [pickMode, setPickMode] = useState<PickMode>('tracking');
   const [search, setSearch] = useState('');
   const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [recentColis, setRecentColis] = useState<Colis[]>([]);
   const [containers, setContainers] = useState<Groupage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +45,12 @@ export default function GroupageScreen() {
     origin_port: 'Guangzhou',
     vessel_name: '',
   });
+
+  // Mode client
+  const [clientQ, setClientQ] = useState('');
+  const [clientResults, setClientResults] = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const [clientPackages, setClientPackages] = useState<Colis[]>([]);
 
   const loadData = useCallback(async () => {
     setLoadingRecent(true);
@@ -62,6 +72,16 @@ export default function GroupageScreen() {
   }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const selectionCount = pickMode === 'client' ? selectedIds.size : (selectedColis ? 1 : 0);
+  const hasSelection = selectionCount > 0;
+
+  const packagesToAssign = useMemo(() => {
+    if (pickMode === 'tracking') {
+      return selectedColis ? [selectedColis] : [];
+    }
+    return clientPackages.filter((c) => selectedIds.has(String(colisIdOf(c))));
+  }, [pickMode, selectedColis, clientPackages, selectedIds]);
 
   const selectColis = (c: Colis) => {
     setSelectedColis(c);
@@ -91,21 +111,70 @@ export default function GroupageScreen() {
     }
   };
 
+  const searchClients = async (q: string) => {
+    setClientQ(q);
+    setSelectedClient(null);
+    setClientPackages([]);
+    setSelectedIds(new Set());
+    if (q.trim().length < 2) {
+      setClientResults([]);
+      return;
+    }
+    try {
+      const res = await colisApi.searchUsers(q.trim());
+      setClientResults(Array.isArray(res) ? res : []);
+    } catch {
+      setClientResults([]);
+    }
+  };
+
+  const pickClient = async (c: any) => {
+    setSelectedClient(c);
+    setClientResults([]);
+    setClientQ(c.full_name || c.email || '');
+    setLoading(true);
+    try {
+      const pkgs = await colisApi.list({ owner_id: c.email, limit: 100 });
+      const assignable = (Array.isArray(pkgs) ? pkgs : []).filter(
+        (p) => ['received', 'damaged'].includes(p.status) && !p.container_id,
+      );
+      setClientPackages(assignable);
+      setSelectedIds(new Set(assignable.map((p) => String(colisIdOf(p)))));
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, 'Colis client') });
+      setClientPackages([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePkg = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const onAssign = (container: Groupage) => {
-    if (!selectedColis) {
-      Alert.alert('', t('operator.groupage_scan'));
+    if (!packagesToAssign.length) {
+      Alert.alert('', pickMode === 'client' ? 'Sélectionnez au moins un colis du client' : t('operator.groupage_scan'));
       return;
     }
     const cid = containerId(container);
-    const pkgId = colisIdOf(selectedColis);
-    if (!cid || !pkgId) {
+    if (!cid) {
       Alert.alert(t('errors.server'), t('operator.missing_id'));
       return;
     }
 
+    const label = packagesToAssign.length === 1
+      ? packagesToAssign[0].tracking_number
+      : `${packagesToAssign.length} colis`;
+
     Alert.alert(
       t('operator.groupage_assign'),
-      `${selectedColis.tracking_number} → ${container.container_number || cid.slice(0, 8)} ?`,
+      `${label} → ${container.container_number || cid.slice(0, 8)} ?`,
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -113,9 +182,33 @@ export default function GroupageScreen() {
           onPress: async () => {
             setAssigning(cid);
             try {
-              await groupagesApi.addPackage(cid, pkgId);
+              let ok = 0;
+              const errors: string[] = [];
+              for (const pkg of packagesToAssign) {
+                const pkgId = colisIdOf(pkg);
+                if (!pkgId) continue;
+                try {
+                  await groupagesApi.addPackage(cid, pkgId);
+                  ok += 1;
+                } catch (e: any) {
+                  errors.push(pkg.tracking_number || pkgId);
+                }
+              }
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              Alert.alert('OK', t('operator.groupage_success'), [{ text: 'OK', onPress: () => router.back() }]);
+              if (errors.length) {
+                Alert.alert('Partiel', `${ok} ajouté(s), échec : ${errors.join(', ')}`);
+              } else {
+                Alert.alert('OK', `${ok} colis ajouté(s) au groupage`, [
+                  { text: 'OK', onPress: () => {
+                    setSelectedColis(null);
+                    setSelectedIds(new Set());
+                    setSelectedClient(null);
+                    setClientPackages([]);
+                    setSearch('');
+                    loadData();
+                  } },
+                ]);
+              }
             } catch (e: any) {
               const msg = e?.response?.data?.detail || e?.message || t('operator.save_failed');
               Alert.alert(t('errors.server'), String(msg));
@@ -159,6 +252,17 @@ export default function GroupageScreen() {
     }
   };
 
+  const switchMode = (m: PickMode) => {
+    setPickMode(m);
+    setSelectedColis(null);
+    setSelectedIds(new Set());
+    setSearch('');
+    setSelectedClient(null);
+    setClientPackages([]);
+    setClientQ('');
+    setClientResults([]);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -178,55 +282,161 @@ export default function GroupageScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <View style={styles.modeTabs}>
+          <TouchableOpacity
+            style={[styles.modeTab, pickMode === 'tracking' && styles.modeTabOn]}
+            onPress={() => switchMode('tracking')}
+          >
+            <Package size={16} color={pickMode === 'tracking' ? '#fff' : colors.textSecondary} />
+            <Text style={[styles.modeTabText, pickMode === 'tracking' && { color: '#fff' }]}>Par tracking</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeTab, pickMode === 'client' && styles.modeTabOn]}
+            onPress={() => switchMode('client')}
+          >
+            <Users size={16} color={pickMode === 'client' ? '#fff' : colors.textSecondary} />
+            <Text style={[styles.modeTabText, pickMode === 'client' && { color: '#fff' }]}>Par client</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.section}>
-          <Text style={styles.stepLabel}>1. {t('operator.groupage_scan')}</Text>
-          <View style={styles.searchRow}>
-            <Search size={18} color={colors.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Tracking / Shipping Mark"
-              placeholderTextColor={colors.textSecondary}
-              onSubmitEditing={onSearch}
-              returnKeyType="search"
-            />
-            <TouchableOpacity style={styles.searchBtn} onPress={onSearch} disabled={loading}>
-              {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.searchBtnText}>OK</Text>}
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.stepLabel}>
+            1. {pickMode === 'client' ? 'Choisir un client et ses colis' : t('operator.groupage_scan')}
+          </Text>
 
-          {selectedColis && (
-            <View style={styles.selectedColis}>
-              <CheckCircle2 size={18} color={colors.success} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.selectedText}>{selectedColis.tracking_number}</Text>
-                <Text style={styles.selectedSub}>{selectedColis.description || selectedColis.nature || '—'}</Text>
-              </View>
-              <TouchableOpacity onPress={() => { setSelectedColis(null); setSearch(''); }}>
-                <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {!selectedColis && (
+          {pickMode === 'tracking' ? (
             <>
-              <Text style={styles.hint}>Colis réceptionnés disponibles :</Text>
-              {loadingRecent ? (
-                <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
-              ) : recentColis.length === 0 ? (
-                <Text style={styles.emptyHint}>Aucun colis reçu en attente de groupage.</Text>
-              ) : (
-                recentColis.slice(0, 10).map((c) => (
-                  <TouchableOpacity key={colisIdOf(c)} style={styles.colisRow} onPress={() => selectColis(c)}>
-                    <Box size={18} color={colors.primary} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.colisTracking}>{c.tracking_number}</Text>
-                      <Text style={styles.colisDesc} numberOfLines={1}>{c.description || c.nature}</Text>
-                    </View>
-                    <ChevronRight size={18} color={colors.textSecondary} />
+              <View style={styles.searchRow}>
+                <Search size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.searchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Tracking / Shipping Mark"
+                  placeholderTextColor={colors.textSecondary}
+                  onSubmitEditing={onSearch}
+                  returnKeyType="search"
+                />
+                <TouchableOpacity style={styles.searchBtn} onPress={onSearch} disabled={loading}>
+                  {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.searchBtnText}>OK</Text>}
+                </TouchableOpacity>
+              </View>
+
+              {selectedColis && (
+                <View style={styles.selectedColis}>
+                  <CheckCircle2 size={18} color={colors.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selectedText}>{selectedColis.tracking_number}</Text>
+                    <Text style={styles.selectedSub}>{selectedColis.description || selectedColis.nature || '—'}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => { setSelectedColis(null); setSearch(''); }}>
+                    <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>✕</Text>
                   </TouchableOpacity>
-                ))
+                </View>
+              )}
+
+              {!selectedColis && (
+                <>
+                  <Text style={styles.hint}>Colis réceptionnés disponibles :</Text>
+                  {loadingRecent ? (
+                    <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
+                  ) : recentColis.length === 0 ? (
+                    <Text style={styles.emptyHint}>Aucun colis reçu en attente de groupage.</Text>
+                  ) : (
+                    recentColis.slice(0, 10).map((c) => (
+                      <TouchableOpacity key={colisIdOf(c)} style={styles.colisRow} onPress={() => selectColis(c)}>
+                        <Box size={18} color={colors.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.colisTracking}>{c.tracking_number}</Text>
+                          <Text style={styles.colisDesc} numberOfLines={1}>{c.description || c.nature}</Text>
+                        </View>
+                        <ChevronRight size={18} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.searchRow}>
+                <Search size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.searchInput}
+                  value={clientQ}
+                  onChangeText={searchClients}
+                  placeholder="Nom, téléphone, code client…"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              {clientResults.map((c) => (
+                <TouchableOpacity key={c.id || c.email} style={styles.colisRow} onPress={() => pickClient(c)}>
+                  <Users size={18} color={colors.secondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.colisTracking}>{c.full_name || c.email}</Text>
+                    <Text style={styles.colisDesc}>{c.phone || c.email} · {c.client_code || ''}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+
+              {selectedClient && (
+                <View style={[styles.selectedColis, { marginTop: 8 }]}>
+                  <CheckCircle2 size={18} color={colors.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selectedText}>{selectedClient.full_name || selectedClient.email}</Text>
+                    <Text style={styles.selectedSub}>
+                      {selectedIds.size} / {clientPackages.length} colis sélectionné(s)
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => {
+                    setSelectedClient(null);
+                    setClientPackages([]);
+                    setSelectedIds(new Set());
+                    setClientQ('');
+                  }}>
+                    <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {selectedClient && (
+                <>
+                  {loading ? (
+                    <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
+                  ) : clientPackages.length === 0 ? (
+                    <Text style={styles.emptyHint}>Aucun colis reçu en attente pour ce client.</Text>
+                  ) : (
+                    <>
+                      <View style={styles.bulkRow}>
+                        <TouchableOpacity onPress={() => setSelectedIds(new Set(clientPackages.map((p) => String(colisIdOf(p)))))}>
+                          <Text style={styles.bulkLink}>Tout sélectionner</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setSelectedIds(new Set())}>
+                          <Text style={styles.bulkLink}>Tout désélectionner</Text>
+                        </TouchableOpacity>
+                      </View>
+                      {clientPackages.map((c) => {
+                        const id = String(colisIdOf(c));
+                        const on = selectedIds.has(id);
+                        return (
+                          <TouchableOpacity
+                            key={id}
+                            style={[styles.colisRow, on && styles.colisRowOn]}
+                            onPress={() => togglePkg(id)}
+                          >
+                            <View style={[styles.check, on && styles.checkOn]}>
+                              {on && <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>✓</Text>}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.colisTracking}>{c.tracking_number}</Text>
+                              <Text style={styles.colisDesc} numberOfLines={1}>{c.description || c.nature}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </>
+                  )}
+                </>
               )}
             </>
           )}
@@ -234,10 +444,15 @@ export default function GroupageScreen() {
 
         <View style={styles.section}>
           <Text style={styles.stepLabel}>2. {t('operator.groupage_select')}</Text>
-          {!selectedColis && (
+          {!hasSelection && (
             <View style={styles.warnBanner}>
-              <Text style={styles.warnText}>↑ Sélectionnez d'abord un colis ci-dessus</Text>
+              <Text style={styles.warnText}>
+                ↑ {pickMode === 'client' ? 'Sélectionnez un client et ses colis' : 'Sélectionnez d\'abord un colis ci-dessus'}
+              </Text>
             </View>
+          )}
+          {hasSelection && selectionCount > 1 && (
+            <Text style={styles.hint}>{selectionCount} colis seront ajoutés au conteneur choisi</Text>
           )}
 
           {containers.length === 0 ? (
@@ -246,7 +461,7 @@ export default function GroupageScreen() {
             containers.map((item) => {
               const cid = containerId(item);
               const isAssigning = assigning === cid;
-              const canTap = !!selectedColis && !isAssigning;
+              const canTap = hasSelection && !isAssigning;
               return (
                 <TouchableOpacity
                   key={cid}
@@ -313,6 +528,13 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.card, borderBottomWidth: 1, borderColor: colors.border },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   back: { padding: 4, minWidth: 40 },
+  modeTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  modeTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: radii.button, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  },
+  modeTabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  modeTabText: { fontWeight: '800', fontSize: 12, color: colors.textSecondary },
   section: { padding: spacing.lg, paddingBottom: 0 },
   stepLabel: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, borderRadius: radii.input, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
@@ -325,8 +547,13 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, color: colors.textSecondary, marginTop: 16, marginBottom: 8 },
   emptyHint: { color: colors.textSecondary, fontStyle: 'italic', marginTop: 8 },
   colisRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, padding: 14, borderRadius: radii.card, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
+  colisRowOn: { borderColor: colors.primary, backgroundColor: `${colors.primary}15` },
   colisTracking: { fontWeight: '800', color: colors.text, fontFamily: fonts.mono, fontSize: 14 },
   colisDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  check: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  bulkRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 },
+  bulkLink: { color: colors.primary, fontWeight: '700', fontSize: 12 },
   warnBanner: { backgroundColor: `${colors.accent}20`, padding: 12, borderRadius: radii.card, marginBottom: 12 },
   warnText: { color: colors.accent, fontWeight: '700', fontSize: 13, textAlign: 'center' },
   card: { backgroundColor: colors.card, borderRadius: radii.card, padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 2, borderColor: colors.primary, ...shadow.card },

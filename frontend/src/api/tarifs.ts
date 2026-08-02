@@ -16,7 +16,12 @@ export interface CalculationResult {
   tarif: Tarif;
   unit_value: number;
   unit_label: string;
+  unit_price?: number;
   total: number;
+  raw_weight_kg?: number | null;
+  billed_weight_kg?: number | null;
+  billing_note?: string | null;
+  note?: string;
 }
 
 export const tarifsApi = {

@@ -9,6 +9,7 @@ import {
   Settings, List, Info, AlertCircle, Search, User
 } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api';
+import { billedQuantitiesForInvoice, airChargeableKgRaw, airBilledKg, packageCbm } from '@/lib/freightBilling';
 const TVA_RATE = 0.1925;
 
 function CreateInvoiceContent() {
@@ -100,8 +101,6 @@ function CreateInvoiceContent() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const pkgId = (p: any) => p?.id || p?._id;
-
   const fetchCustomerPackages = async (email: string, preSelected?: Set<string>, currentEditId?: string | null) => {
     if (!token || !email) return;
     setLoadingPackages(true);
@@ -166,24 +165,57 @@ function CreateInvoiceContent() {
   };
 
   const calculateAutoUnitPrice = (pkg: any) => {
-    const category = pkg.category || 'standard';
+    // category_key = grille tarifaire (simulateur) ; category = taxonomie marchandises
+    const category = pkg.category_key || 'standard';
     const tarif = tarifs.find(t => t.mode === pkg.transport_mode && t.category_key === category)
       || tarifs.find(t => t.mode === pkg.transport_mode);
     return tarif ? tarif.price : 0;
   };
   
+  const pkgId = (p: any) => String(p?.id || p?._id || '');
+
+  const getQtyMap = () =>
+    billedQuantitiesForInvoice(
+      availablePackages,
+      Array.from(selectedPackageIds),
+      pkgId,
+    );
+
   const getPackageQteValue = (pkg: any) => {
-    if (pkg?.transport_mode === 'air') return pkg.weight_real || 0;
-    const dims = pkg?.dimensions || {};
-    const cbm = (dims.l || 0) * (dims.w || 0) * (dims.h || 0) / 1000000;
-    return cbm > 0 ? cbm : 0;
+    if (!pkg) return 0;
+    const map = getQtyMap();
+    const id = pkgId(pkg);
+    if (selectedPackageIds.has(id) && map.has(id)) return map.get(id)!;
+    // hors sélection : fallback individuel
+    if (pkg.transport_mode === 'air' || pkg.transport_mode === 'air_express') {
+      return airBilledKg(pkg);
+    }
+    return packageCbm(pkg);
   };
   
   const getPackageQteStr = (pkg: any) => {
-    if (pkg.transport_mode === 'air') return `${pkg.weight_real || 0} kg`;
-    const dims = pkg.dimensions || {};
-    const cbm = (dims.l || 0) * (dims.w || 0) * (dims.h || 0) / 1000000;
-    return `${cbm.toFixed(3)} CBM`;
+    if (!pkg) return '—';
+    if (pkg.transport_mode === 'air' || pkg.transport_mode === 'air_express') {
+      const billed = getPackageQteValue(pkg);
+      const raw = airChargeableKgRaw(pkg);
+      const map = getQtyMap();
+      const selectedAir = availablePackages.filter((p) => {
+        const id = pkgId(p);
+        if (!selectedPackageIds.has(id)) return false;
+        const m = String(p.transport_mode || '').toLowerCase();
+        return (m === 'air' || m === 'air_express')
+          && (p.category_key || 'standard') === (pkg.category_key || 'standard')
+          && (p.client_group_id || 'invoice') === (pkg.client_group_id || 'invoice');
+      });
+      if (selectedAir.length > 1 && selectedPackageIds.has(pkgId(pkg))) {
+        const rawSum = selectedAir.reduce((s, p) => s + airChargeableKgRaw(p), 0);
+        const groupBilled = Math.ceil(rawSum);
+        return `${raw} kg (groupe ${rawSum} → ${groupBilled} kg)`;
+      }
+      if (raw > 0 && billed !== raw) return `${raw} kg → ${billed} kg facturés`;
+      return `${billed} kg`;
+    }
+    return `${packageCbm(pkg).toFixed(3)} CBM`;
   };
 
   const togglePackage = (rawId: string) => {

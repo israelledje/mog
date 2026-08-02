@@ -180,7 +180,9 @@
     "select_platform": "Sélectionner",
     "client_code": "Code client",
     "recap": "Récapitulatif",
-    "transport_mode": "Mode de transport"
+    "transport_mode": "Mode de transport",
+    "freight_category": "Catégorie tarifaire",
+    "freight_category_hint": "Même grille que le simulateur de fret (Express, Normal, Balles…)"
   },
   "shipment": {
     "title": "Expéditions",

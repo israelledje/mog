@@ -2,24 +2,31 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Image, ActivityIndicator, FlatList, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, Scan, Camera, CheckCircle2, Box, Scale, Maximize, Save, Trash2, Search, PlusCircle, User } from 'lucide-react-native';
+import { ChevronLeft, Scan, Camera, CheckCircle2, Box, Scale, Maximize, Save, Trash2, Search, PlusCircle, User, ImagePlus, Plane, Ship } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
 import { colisApi } from '../../src/api/colis';
+import { BASE } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { useSyncStore } from '../../src/store/syncStore';
 import QRScanner from '../../src/components/QRScanner';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
 import { OPERATOR_OPEN_SCAN } from '../../src/utils/operatorEvents';
+import { CategoryChips } from '../../src/components/ui/HorizontalChips';
+import {
+  freightCategoriesForMode,
+  defaultFreightCategoryKey,
+} from '../../src/constants/freightCategories';
 
 type Step = 'search' | 'scan' | 'form' | 'photos' | 'create' | 'success';
 
 export default function ReceptionScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const params = useLocalSearchParams<{ tracking?: string }>();
   const { user } = useAuthStore();
   const [step, setStep] = useState<Step>('search');
   const [loading, setLoading] = useState(false);
@@ -39,6 +46,8 @@ export default function ReceptionScreen() {
   const [colisId, setColisId] = useState<string | null>(null);
   const [tracking, setTracking] = useState<string>('');
   const [nature, setNature] = useState('');
+  const [transportMode, setTransportMode] = useState<'sea' | 'air'>('sea');
+  const [categoryKey, setCategoryKey] = useState('standard');
   const [weight, setWeight] = useState('');
   const [dims, setDims] = useState({ l: '', w: '', h: '' });
   const [photos, setPhotos] = useState<string[]>([]);
@@ -50,7 +59,13 @@ export default function ReceptionScreen() {
 
   useEffect(() => {
     fetchPending();
-  }, []);
+    if (params.tracking) {
+      setSearchQuery(params.tracking);
+      colisApi.list({ tracking_number: params.tracking }).then((res) => {
+        if (res.length > 0) selectColis(res[0]);
+      }).catch(() => {});
+    }
+  }, [params.tracking]);
 
   // FAB layout → ouvrir le scan sans remonter / empiler reception
   useEffect(() => {
@@ -102,7 +117,27 @@ export default function ReceptionScreen() {
   const selectColis = (item: any) => {
     setColisId(item.id);
     setTracking(item.tracking_number);
-    setNature(item.description || '');
+    setNature(item.description || item.nature || '');
+    const mode = item.transport_mode === 'air' ? 'air' : 'sea';
+    setTransportMode(mode);
+    const keys = freightCategoriesForMode(mode).map((c) => c.key);
+    setCategoryKey(
+      item.category_key && keys.includes(item.category_key)
+        ? item.category_key
+        : defaultFreightCategoryKey(mode),
+    );
+    setWeight(item.weight_real ? String(item.weight_real) : '');
+    const d = item.dimensions || {};
+    setDims({
+      l: d.l ? String(d.l) : '',
+      w: d.w ? String(d.w) : '',
+      h: d.h ? String(d.h) : '',
+    });
+    if (Array.isArray(item.photos)) {
+      setPhotos(item.photos.filter(Boolean));
+    } else {
+      setPhotos([]);
+    }
     setStep('form');
   };
 
@@ -160,7 +195,9 @@ export default function ReceptionScreen() {
       const newColis = await colisApi.create({
         owner_id: selectedUser.email,
         description: nature,
-        tracking_number: tracking // Optionnel, le back en génère un si vide
+        tracking_number: tracking, // Optionnel, le back en génère un si vide
+        transport_mode: transportMode,
+        category_key: categoryKey || defaultFreightCategoryKey(transportMode),
       });
       setColisId(newColis.id);
       setTracking(newColis.tracking_number);
@@ -174,6 +211,11 @@ export default function ReceptionScreen() {
   };
 
   const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('errors.server'), 'Permission caméra refusée');
+      return;
+    }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -181,8 +223,28 @@ export default function ReceptionScreen() {
       quality: 0.6,
     });
 
-    if (!result.canceled) {
-      setPhotos([...photos, result.assets[0].uri]);
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setPhotos((prev) => [...prev, result.assets[0].uri].slice(0, 5));
+    }
+  };
+
+  const pickFromGallery = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('errors.server'), 'Permission galerie refusée');
+      return;
+    }
+    const remaining = Math.max(0, 5 - photos.length);
+    if (remaining <= 0) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+      quality: 0.6,
+    });
+    if (!result.canceled && result.assets?.length) {
+      const uris = result.assets.map((a) => a.uri).filter(Boolean);
+      setPhotos((prev) => [...prev, ...uris].slice(0, 5));
     }
   };
 
@@ -214,6 +276,8 @@ export default function ReceptionScreen() {
         nature,
         status: statusVal,
         entrepot_id: user?.active_entrepot_id || undefined,
+        transport_mode: transportMode,
+        category_key: categoryKey,
       },
     });
   };
@@ -245,7 +309,8 @@ export default function ReceptionScreen() {
     }
 
     try {
-      const failed = await uploadPhotosParallel(colisId, photos);
+      const localPhotos = photos.filter((p) => !p.startsWith('http://') && !p.startsWith('https://') && !p.startsWith('/'));
+      const failed = await uploadPhotosParallel(colisId, localPhotos);
       // Réessai unique des photos en échec.
       const stillFailed = failed.length > 0 ? await uploadPhotosParallel(colisId, failed) : [];
       // Les photos définitivement en échec sont mises en file pour synchro ultérieure.
@@ -253,13 +318,31 @@ export default function ReceptionScreen() {
         await addToQueue({ type: 'photo', colisId, data: { uri } });
       }
 
-      await colisApi.receive(colisId, {
-        weight_real: Number(weight),
-        dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
-        nature,
-        status: statusVal,
-        entrepot_id: user?.active_entrepot_id || undefined,
-      });
+      // Vérifier le statut initial ou appeler audit si déjà réceptionné
+      try {
+        await colisApi.receive(colisId, {
+          weight_real: Number(weight),
+          dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
+          nature,
+          status: statusVal,
+          entrepot_id: user?.active_entrepot_id || undefined,
+          transport_mode: transportMode,
+          category_key: categoryKey,
+        });
+      } catch (receiveErr: any) {
+        // Si le colis a déjà été réceptionné, on bascule sur l'endpoint de mise à jour audit
+        await colisApi.updateAudit(colisId, {
+          weight_real: Number(weight),
+          dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
+          nature,
+          entrepot_id: user?.active_entrepot_id || undefined,
+          transport_mode: transportMode,
+          category_key: categoryKey,
+        });
+        if (statusVal === 'damaged') {
+          await colisApi.updateStatus(colisId, 'damaged', 'Entrepôt MOG');
+        }
+      }
       setStep('success');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (stillFailed.length > 0) {
@@ -277,6 +360,8 @@ export default function ReceptionScreen() {
             nature,
             status: statusVal,
             entrepot_id: user?.active_entrepot_id || undefined,
+            transport_mode: transportMode,
+            category_key: categoryKey,
           },
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -365,10 +450,16 @@ export default function ReceptionScreen() {
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={styles.emptyText}>{t('operator.no_pending_found')}</Text>
-                <TouchableOpacity style={styles.createGhostBtn} onPress={() => setStep('create')} accessibilityRole="button" accessibilityLabel={t('operator.create_office')}>
-                  <PlusCircle size={20} color={colors.primary} />
-                  <Text style={styles.createGhostText}>{t('operator.create_office')}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity style={styles.createGhostBtn} onPress={() => setStep('create')} accessibilityRole="button" accessibilityLabel={t('operator.create_office')}>
+                    <PlusCircle size={20} color={colors.primary} />
+                    <Text style={styles.createGhostText}>{t('operator.create_office')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.createGhostBtn, { backgroundColor: `${colors.accent}25` }]} onPress={() => router.push({ pathname: '/(operator)/warehouses', params: { tab: 'saisie' } } as any)} accessibilityRole="button" accessibilityLabel="Saisie complète">
+                    <Box size={20} color={colors.accent} />
+                    <Text style={[styles.createGhostText, { color: colors.accent }]}>Saisie colis</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             }
           />
@@ -413,6 +504,34 @@ export default function ReceptionScreen() {
           <Text style={styles.label}>{t('operator.articles_nature')}</Text>
           <TextInput style={styles.input} value={nature} onChangeText={setNature} placeholder={t('operator.articles_nature_ph')} placeholderTextColor={colors.textSecondary} />
 
+          <Text style={styles.label}>Mode de transport</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+            {(['sea', 'air'] as const).map((m) => {
+              const Icon = m === 'air' ? Plane : Ship;
+              const on = transportMode === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.modeChip, on && styles.modeChipOn]}
+                  onPress={() => {
+                    setTransportMode(m);
+                    const keys = freightCategoriesForMode(m).map((c) => c.key);
+                    if (!keys.includes(categoryKey)) setCategoryKey(defaultFreightCategoryKey(m));
+                  }}
+                >
+                  <Icon size={16} color={on ? '#fff' : colors.textSecondary} />
+                  <Text style={[styles.modeChipText, on && { color: '#fff' }]}>{m === 'sea' ? 'Maritime' : 'Aérien'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.label}>Catégorie tarifaire</Text>
+          <CategoryChips
+            items={freightCategoriesForMode(transportMode)}
+            activeKey={categoryKey}
+            onSelect={setCategoryKey}
+          />
+
           <TouchableOpacity style={styles.primaryBtn} onPress={handleCreate} disabled={loading}>
             <Text style={styles.primaryBtnText}>{t('operator.create_continue')}</Text>
           </TouchableOpacity>
@@ -428,6 +547,34 @@ export default function ReceptionScreen() {
 
           <Text style={styles.label}>{t('operator.audit_nature')}</Text>
           <TextInput style={styles.input} value={nature} onChangeText={setNature} placeholderTextColor={colors.textSecondary} />
+
+          <Text style={styles.label}>Mode de transport</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+            {(['sea', 'air'] as const).map((m) => {
+              const Icon = m === 'air' ? Plane : Ship;
+              const on = transportMode === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.modeChip, on && styles.modeChipOn]}
+                  onPress={() => {
+                    setTransportMode(m);
+                    const keys = freightCategoriesForMode(m).map((c) => c.key);
+                    if (!keys.includes(categoryKey)) setCategoryKey(defaultFreightCategoryKey(m));
+                  }}
+                >
+                  <Icon size={16} color={on ? '#fff' : colors.textSecondary} />
+                  <Text style={[styles.modeChipText, on && { color: '#fff' }]}>{m === 'sea' ? 'Maritime' : 'Aérien'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.label}>Catégorie tarifaire (grille simulateur)</Text>
+          <CategoryChips
+            items={freightCategoriesForMode(transportMode)}
+            activeKey={categoryKey}
+            onSelect={setCategoryKey}
+          />
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -466,19 +613,29 @@ export default function ReceptionScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           <Text style={styles.sectionTitle}>{t('operator.visual_audit')}</Text>
           <View style={styles.photoGrid}>
-            {photos.map((p, i) => (
-              <View key={i} style={styles.photoWrap}>
-                <Image source={{ uri: p }} style={styles.photo} />
-                <TouchableOpacity style={styles.removePhoto} onPress={() => setPhotos(photos.filter((_, idx) => idx !== i))} accessibilityRole="button" accessibilityLabel={t('common.cancel')}>
-                  <Trash2 size={16} color="#fff" />
+            {photos.map((p, i) => {
+              const uri = p.startsWith('http') ? p : p.startsWith('/') ? `${BASE}${p}` : p;
+              return (
+                <View key={i} style={styles.photoWrap}>
+                  <Image source={{ uri }} style={styles.photo} />
+                  <TouchableOpacity style={styles.removePhoto} onPress={() => setPhotos(photos.filter((_, idx) => idx !== i))} accessibilityRole="button" accessibilityLabel={t('common.cancel')}>
+                    <Trash2 size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+            {photos.length < 5 && (
+              <View style={styles.photoActions}>
+                <TouchableOpacity style={styles.addPhoto} onPress={takePhoto} accessibilityRole="button" accessibilityLabel={t('operator.visual_audit')}>
+                  <Camera size={28} color={colors.primary} />
+                  <Text style={styles.addPhotoText}>Caméra</Text>
+                  <Text style={styles.addPhotoText}>{photos.length}/5</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.addPhoto} onPress={pickFromGallery} accessibilityRole="button" accessibilityLabel="Galerie">
+                  <ImagePlus size={28} color={colors.secondary} />
+                  <Text style={styles.addPhotoText}>Galerie</Text>
                 </TouchableOpacity>
               </View>
-            ))}
-            {photos.length < 5 && (
-              <TouchableOpacity style={styles.addPhoto} onPress={takePhoto} accessibilityRole="button" accessibilityLabel={t('operator.visual_audit')}>
-                <Camera size={32} color={colors.primary} />
-                <Text style={styles.addPhotoText}>{photos.length}/3</Text>
-              </TouchableOpacity>
             )}
           </View>
           <TouchableOpacity style={[styles.primaryBtn, photos.length < 3 && styles.disabled]} onPress={() => {
@@ -569,11 +726,18 @@ const styles = StyleSheet.create({
   disabled: { backgroundColor: colors.border },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  addPhoto: { width: '47%', height: 140, borderRadius: radii.card, backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  addPhotoText: { color: colors.primary, fontWeight: '700', marginTop: 8 },
+  photoActions: { width: '100%', flexDirection: 'row', gap: 12 },
+  addPhoto: { flex: 1, minWidth: '40%', height: 120, borderRadius: radii.card, backgroundColor: colors.card, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  addPhotoText: { color: colors.primary, fontWeight: '700', marginTop: 6, fontSize: 12 },
   photoWrap: { width: '47%', height: 140, position: 'relative' },
   photo: { width: '100%', height: '100%', borderRadius: radii.card },
   removePhoto: { position: 'absolute', top: -5, right: -5, backgroundColor: colors.danger, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   successTitle: { fontSize: 26, fontWeight: '900', color: colors.text, marginTop: 20 },
   successDesc: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 10 },
+  modeChip: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 12, borderRadius: radii.button, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  },
+  modeChipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  modeChipText: { fontWeight: '800', fontSize: 13, color: colors.textSecondary },
 });

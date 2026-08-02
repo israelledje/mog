@@ -43,11 +43,31 @@ export const colisApi = {
     const { data } = await api.get('/colis/kpi');
     return data as { pending: number; warehouse: number; transit: number; delivered: number };
   },
-  async receive(id: string, payload: { weight_real: number; dimensions: any; nature?: string; warehouse_location?: string; status?: 'received' | 'damaged'; entrepot_id?: string }): Promise<void> {
+  async receive(id: string, payload: {
+    weight_real: number;
+    dimensions: any;
+    nature?: string;
+    warehouse_location?: string;
+    status?: 'received' | 'damaged';
+    entrepot_id?: string;
+    transport_mode?: string;
+    category_key?: string;
+  }): Promise<void> {
     await api.post(`/colis/${id}/receive`, payload);
   },
   async updateStatus(id: string, status: string, location?: string): Promise<void> {
     await api.patch(`/colis/${id}/status`, { status, location });
+  },
+  async updateAudit(id: string, payload: {
+    weight_real?: number;
+    dimensions?: any;
+    nature?: string;
+    category_key?: string;
+    transport_mode?: string;
+    entrepot_id?: string;
+  }): Promise<Colis> {
+    const { data } = await api.patch(`/colis/${id}/audit`, payload);
+    return normalizeColis(data);
   },
   async uploadPhoto(id: string, uri: string): Promise<string> {
     const formData = new FormData();

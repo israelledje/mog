@@ -15,7 +15,8 @@ class PackageBase(BaseModel):
     order_ref: Optional[str] = None
     supplier_tracking: Optional[str] = None  # Tracking fournisseur (obligatoire à la déclaration)
     description: str
-    category: str = "other"
+    category: str = "other"  # taxonomie marchandises (electronics, clothing…)
+    category_key: str = "standard"  # grille tarifaire simulateur (express, bales…)
     declared_value: float = 0.0
     currency: str = "CNY"
     transport_mode: str = "sea"
@@ -53,18 +54,18 @@ class PackageCreate(PackageBase):
     owner_id: Optional[str] = None
     tracking_number: Optional[str] = None
 
-    @field_validator("supplier_tracking")
+    @field_validator("supplier_tracking", mode="before")
     @classmethod
-    def require_supplier_tracking(cls, v):
-        if not v or not str(v).strip():
-            raise ValueError("Le tracking number fournisseur est obligatoire")
+    def normalize_supplier_tracking(cls, v):
+        if v is None or str(v).strip() == "":
+            return None
         return str(v).strip()
 
-    @field_validator("photos")
+    @field_validator("photos", mode="before")
     @classmethod
-    def require_photos(cls, v):
-        if not v or len(v) < 1:
-            raise ValueError("Au moins 1 photo du colis est obligatoire")
+    def normalize_photos(cls, v):
+        if v is None:
+            return []
         if len(v) > 3:
             raise ValueError("Maximum 3 photos autorisées à la déclaration")
         return v
@@ -83,6 +84,18 @@ class PackageReceive(BaseModel):
     nature: Optional[str] = None
     warehouse_location: Optional[str] = "Zone A"
     status: Optional[str] = "received" # received, damaged
+    entrepot_id: Optional[str] = None
+    transport_mode: Optional[str] = None
+    category_key: Optional[str] = None
+
+
+class PackageAuditUpdate(BaseModel):
+    """Mise à jour audit opérateur (colis déjà réceptionné)."""
+    weight_real: Optional[float] = None
+    dimensions: Optional[dict] = None
+    nature: Optional[str] = None
+    category_key: Optional[str] = None
+    transport_mode: Optional[str] = None
     entrepot_id: Optional[str] = None
 
 class PackageInDB(PackageBase):

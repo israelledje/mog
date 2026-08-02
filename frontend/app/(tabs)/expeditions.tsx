@@ -17,13 +17,16 @@ import { getActiveContainers, containerProgressIndex, CONTAINER_PROGRESS_STAGES 
 import { api } from '../../src/api/client';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 import { CategoryChips } from '../../src/components/ui/HorizontalChips';
+import {
+  AIR_FREIGHT_CATEGORIES,
+  SEA_FREIGHT_CATEGORIES,
+  isUnitBasedAirCategory,
+} from '../../src/constants/freightCategories';
 
 // ─────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────
 type TransportMode = 'air' | 'sea';
-type AirCategory = 'standard' | 'sensitive' | 'express';
-type SeaCategory = 'standard' | 'heavy';
 
 interface TarifResult {
   tarif: { label: string; price: number; unit: string; description: string };
@@ -63,7 +66,7 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
       setLoading(true);
 
       const category = mode === 'air' ? airCategory : seaCategory;
-      const unitBased = ['phone_boxed', 'phone_unboxed', 'laptop', 'tablet_adult', 'tablet_child', 'powerbank'].includes(category);
+      const unitBased = isUnitBasedAirCategory(category);
 
       if (mode === 'air' && !unitBased) {
         if (!weight || isNaN(Number(weight)) || Number(weight) <= 0) {
@@ -98,32 +101,10 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
     }
   };
 
-  const AIR_CATEGORIES: { key: string; label: string; icon: string; desc: string; color: string }[] = [
-    { key: 'express', label: 'Express', icon: '⚡', desc: '13 500 F/kg · 2–3 j', color: colors.accent },
-    { key: 'standard', label: 'Normal', icon: '📦', desc: '9 000 F/kg · 7–14 j', color: colors.primary },
-    { key: 'phone_boxed', label: 'Tél. carton', icon: '📱', desc: '10k / 7k dès 10', color: '#F59E0B' },
-    { key: 'phone_unboxed', label: 'Tél. s/carton', icon: '📲', desc: '6k / 5k dès 10', color: '#F97316' },
-    { key: 'laptop', label: 'Ordinateur', icon: '💻', desc: '30 000 F/u', color: '#6366F1' },
-    { key: 'tablet_adult', label: 'Tablette', icon: '📟', desc: '10 000 F/u', color: '#8B5CF6' },
-    { key: 'tablet_child', label: 'Tab. enfant', icon: '🎮', desc: '8–9 000 F/u', color: '#A855F7' },
-    { key: 'battery', label: 'Batterie', icon: '🔋', desc: '11 000 F/kg', color: '#EF4444' },
-    { key: 'powerbank', label: 'Powerbank', icon: '🔌', desc: '5k / 11k', color: '#14B8A6' },
-    { key: 'liquid', label: 'Liquide/Poudre', icon: '🧴', desc: '11 000 F/kg', color: '#06B6D4' },
-  ];
+  const AIR_CATEGORIES = AIR_FREIGHT_CATEGORIES;
+  const SEA_CATEGORIES = SEA_FREIGHT_CATEGORIES;
 
-  const SEA_CATEGORIES: { key: string; label: string; icon: string; desc: string; color: string }[] = [
-    { key: 'standard', label: 'Standard', icon: '📦', desc: '355 000 F/CBM', color: '#0EA5E9' },
-    { key: 'bales', label: 'Balles', icon: '🧺', desc: '400 000 F/CBM', color: '#0284C7' },
-    { key: 'bigball', label: 'Big Ball', icon: '🗜️', desc: '415 000 F/CBM', color: '#0369A1' },
-    { key: 'cosmetics', label: 'Cosmétiques', icon: '💄', desc: '360 000 F/CBM', color: '#DB2777' },
-    { key: 'medical', label: 'Médical', icon: '🏥', desc: '360 000 F/CBM', color: '#059669' },
-    { key: 'chemical', label: 'Industriel', icon: '🏭', desc: '370 000 F/CBM', color: '#64748B' },
-    { key: 'building', label: 'Carreaux/Fer', icon: '🏗️', desc: '380 000 F/t', color: colors.accent },
-    { key: 'machines', label: 'Machines', icon: '⚙️', desc: '370–400k F/CBM', color: '#B45309' },
-    { key: 'supplements', label: 'Bien-être', icon: '💊', desc: '370 000 F/CBM', color: '#7C3AED' },
-  ];
-
-  const unitBasedAir = ['phone_boxed', 'phone_unboxed', 'laptop', 'tablet_adult', 'tablet_child', 'powerbank'].includes(airCategory);
+  const unitBasedAir = isUnitBasedAirCategory(airCategory);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -274,9 +255,14 @@ function SimulatorModal({ visible, onClose }: { visible: boolean; onClose: () =>
                       <Text style={sim.premiumValue}>{formatXAF(result.tarif.price)} / {result.tarif.unit}</Text>
                     </View>
                     <View style={sim.premiumRow}>
-                      <Text style={sim.premiumLabel}>{mode === 'air' ? 'Poids calculé' : 'Volume calculé'}</Text>
+                      <Text style={sim.premiumLabel}>{mode === 'air' ? 'Poids facturé' : 'Volume calculé'}</Text>
                       <Text style={sim.premiumValue}>{result.unit_value} {result.unit_label}</Text>
                     </View>
+                    {!!result.billing_note && (
+                      <View style={sim.premiumRow}>
+                        <Text style={[sim.premiumLabel, { flex: 1 }]}>{result.billing_note}</Text>
+                      </View>
+                    )}
                     <View style={sim.premiumRow}>
                       <Text style={sim.premiumLabel}>Délai estimé</Text>
                       <Text style={sim.premiumValue}>

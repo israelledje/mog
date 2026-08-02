@@ -14,7 +14,8 @@ class EntrepotCreate(BaseModel):
     city: str              # Ex: "Guangzhou"
     country: str           # Ex: "Chine"
     type: str = "origin"   # "origin" | "destination"
-    address: Optional[str] = None
+    transport_mode: str = "sea"  # "sea" | "air"
+    address: str           # Adresse complète obligatoire
     contact: Optional[str] = None
 
 
@@ -22,6 +23,10 @@ class EntrepotUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     contact: Optional[str] = None
+    transport_mode: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    type: Optional[str] = None
 
 
 @router.get("/")
@@ -40,6 +45,10 @@ async def create_entrepot(
     current_user: dict = Depends(check_role(["admin", "operator"])),
     db=Depends(get_database),
 ):
+    if not (data.address or "").strip():
+        raise HTTPException(status_code=400, detail="L'adresse de l'entrepôt est obligatoire")
+    if data.transport_mode not in ("sea", "air"):
+        raise HTTPException(status_code=400, detail="transport_mode doit être sea ou air")
     doc = data.model_dump()
     doc.update({
         "_id": str(uuid.uuid4()),

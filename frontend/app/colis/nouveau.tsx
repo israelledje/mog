@@ -19,6 +19,12 @@ import { parseDeclaredValue } from '../../src/utils/format';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
 import ShippingMark from '../../src/components/ShippingMark';
+import { CategoryChips } from '../../src/components/ui/HorizontalChips';
+import {
+  freightCategoriesForMode,
+  defaultFreightCategoryKey,
+  freightCategoryLabel,
+} from '../../src/constants/freightCategories';
 
 const PLATFORMS = ['Alibaba', '1688', 'Taobao', 'Other'];
 const CATEGORIES = ['electronics', 'clothing', 'shoes', 'cosmetics', 'food', 'construction', 'toys', 'appliances', 'other'];
@@ -47,13 +53,26 @@ export default function NewColisScreen() {
     declared_value: '',
     currency: 'CNY' as 'CNY' | 'USD',
     transport_mode: 'sea' as 'sea' | 'air',
+    category_key: 'standard',
     delivery_address: user?.default_delivery_address || '',
     insurance_enabled: false,
     instructions: '',
   });
   const [photos, setPhotos] = useState<string[]>([]);
 
-  const update = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const update = (k: string, v: any) => setForm((f) => {
+    if (k === 'transport_mode') {
+      const nextKey = defaultFreightCategoryKey(v);
+      // garder la clé si elle existe encore dans le nouveau mode, sinon reset
+      const keys = freightCategoriesForMode(v).map((c) => c.key);
+      return {
+        ...f,
+        transport_mode: v,
+        category_key: keys.includes(f.category_key) ? f.category_key : nextKey,
+      };
+    }
+    return { ...f, [k]: v };
+  });
 
   const onPickImage = async () => {
     if (photos.length >= 3) {
@@ -297,6 +316,21 @@ export default function NewColisScreen() {
                 })}
               </View>
 
+              <FieldLabel
+                label={t('form.freight_category', { defaultValue: 'Catégorie tarifaire' })}
+                required
+              />
+              <Text style={styles.instr}>
+                {t('form.freight_category_hint', {
+                  defaultValue: 'Même grille que le simulateur de fret (Express, Normal, Balles…)',
+                })}
+              </Text>
+              <CategoryChips
+                items={freightCategoriesForMode(form.transport_mode)}
+                activeKey={form.category_key}
+                onSelect={(key) => update('category_key', key)}
+              />
+
               <FieldLabel label={t('form.delivery_address')} />
               <TextInput style={[styles.input, { height: 80 }]} multiline value={form.delivery_address} onChangeText={(v) => update('delivery_address', v)} />
 
@@ -322,6 +356,10 @@ export default function NewColisScreen() {
               <RecapRow label={t('form.description')} value={form.description} />
               <RecapRow label={t('form.photos', { defaultValue: 'Photos' })} value={`${photos.length} photo(s)`} />
               <RecapRow label={t('form.category')} value={t(`categories.${form.category}`)} />
+              <RecapRow
+                label={t('form.freight_category', { defaultValue: 'Catégorie tarifaire' })}
+                value={freightCategoryLabel(form.transport_mode, form.category_key)}
+              />
               <RecapRow label={t('form.declared_value')} value={`${form.declared_value || 0} ${form.currency}`} />
               <RecapRow label={t('form.transport_mode')} value={t(`transport.${form.transport_mode}`)} />
               <RecapRow label={t('form.insurance')} value={form.insurance_enabled ? t('common.yes') : t('common.no')} />

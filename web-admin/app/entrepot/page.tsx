@@ -47,7 +47,7 @@ const STATUS_TABS = [
 ];
 
 const BLANK_ENTREPOT = {
-  name: '', city: 'Guangzhou', country: 'Chine', type: 'origin', address: '', contact: ''
+  name: '', city: 'Guangzhou', country: 'Chine', type: 'origin', transport_mode: 'sea', address: '', contact: ''
 };
 
 export default function EntrepotPage() {
@@ -406,7 +406,10 @@ export default function EntrepotPage() {
                       <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
                         <Building2 size={22} className="text-slate-400 group-hover:text-blue-600" />
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase ${e.transport_mode === 'air' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                          {e.transport_mode === 'air' ? '✈️ Aérien' : '🚢 Maritime'}
+                        </span>
                         <button onClick={() => setEditEntrepot({ ...e })} className="p-2 rounded-xl text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all">
                           <Edit3 size={14} />
                         </button>
@@ -420,8 +423,8 @@ export default function EntrepotPage() {
                       <MapPin size={12} />
                       <p className="text-xs font-bold">{e.city}, {e.country}</p>
                     </div>
-                    {e.address && <p className="text-[10px] text-slate-400 mt-2 font-medium">{e.address}</p>}
-                    {e.contact && <p className="text-[10px] text-blue-500 mt-1 font-bold">{e.contact}</p>}
+                    {e.address && <p className="text-xs text-slate-600 mt-2 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-100">📍 {e.address}</p>}
+                    {e.contact && <p className="text-[10px] text-blue-500 mt-1 font-bold">📞 {e.contact}</p>}
                     <div className="mt-4 pt-4 border-t border-slate-50">
                       <p className="text-[10px] text-slate-400 font-bold uppercase">
                         {count} colis actuellement
@@ -451,25 +454,34 @@ export default function EntrepotPage() {
                   {actionError}
                 </div>
               )}
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {(['origin', 'destination'] as const).map(t => (
                   <button key={t} onClick={() => setNewEntrepot(f => ({ ...f, type: t }))}
-                    className={`flex-1 py-3 rounded-2xl border-2 font-black text-sm transition-all ${newEntrepot.type === t ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                    className={`py-3 rounded-2xl border-2 font-black text-sm transition-all ${newEntrepot.type === t ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
                   >
                     {t === 'origin' ? '🇨🇳 Origine' : '🇨🇲 Destination'}
                   </button>
                 ))}
               </div>
-              <WField label="Nom de l'entrepôt" value={newEntrepot.name} onChange={(v: string) => setNewEntrepot(f => ({ ...f, name: v }))} placeholder="Ex: Entrepôt MOG Guangzhou A" />
               <div className="grid grid-cols-2 gap-3">
-                <WField label="Ville" value={newEntrepot.city} onChange={(v: string) => setNewEntrepot(f => ({ ...f, city: v }))} />
-                <WField label="Pays" value={newEntrepot.country} onChange={(v: string) => setNewEntrepot(f => ({ ...f, country: v }))} />
+                {(['sea', 'air'] as const).map(m => (
+                  <button key={m} onClick={() => setNewEntrepot(f => ({ ...f, transport_mode: m }))}
+                    className={`py-3 rounded-2xl border-2 font-black text-sm transition-all ${newEntrepot.transport_mode === m ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                  >
+                    {m === 'sea' ? '🚢 Maritime' : '✈️ Aérien'}
+                  </button>
+                ))}
               </div>
-              <WField label="Adresse complète" value={newEntrepot.address} onChange={(v: string) => setNewEntrepot(f => ({ ...f, address: v }))} placeholder="Ex: 23 Guangzhou Rd..." />
+              <WField label="Nom de l'entrepôt *" value={newEntrepot.name} onChange={(v: string) => setNewEntrepot(f => ({ ...f, name: v }))} placeholder="Ex: Entrepôt MOG Guangzhou Maritime" />
+              <div className="grid grid-cols-2 gap-3">
+                <WField label="Ville *" value={newEntrepot.city} onChange={(v: string) => setNewEntrepot(f => ({ ...f, city: v }))} />
+                <WField label="Pays *" value={newEntrepot.country} onChange={(v: string) => setNewEntrepot(f => ({ ...f, country: v }))} />
+              </div>
+              <WField label="Adresse complète *" value={newEntrepot.address} onChange={(v: string) => setNewEntrepot(f => ({ ...f, address: v }))} placeholder="Ex: 23 Guangzhou Rd, District Yuexiu..." />
               <WField label="Contact" value={newEntrepot.contact} onChange={(v: string) => setNewEntrepot(f => ({ ...f, contact: v }))} placeholder="+86 xxx xxx xxxx" />
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowCreateEntrepot(false)} className="flex-1 py-3 text-slate-400 font-bold hover:text-slate-600">Annuler</button>
-                <button onClick={createEntrepot} disabled={submitting || !newEntrepot.name}
+                <button onClick={createEntrepot} disabled={submitting || !newEntrepot.name.trim() || !newEntrepot.address.trim()}
                   className="flex-[2] py-3 bg-slate-900 text-white rounded-2xl font-black text-sm hover:bg-blue-600 transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                 >
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}

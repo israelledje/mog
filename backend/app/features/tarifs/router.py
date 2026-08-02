@@ -307,7 +307,15 @@ async def calculate_price(
     powerbank_tier: str = "low",  # low=5000mAh, high=10-20k
     db=Depends(get_database),
 ):
-    """Calcule le prix estimé selon la grille M.O.G."""
+    """Calcule le prix estimé selon la grille M.O.G.
+
+    Règles :
+    - Aérien au kg : poids facturé = ceil(poids) — 1,3 kg → 2 kg
+    - Maritime au CBM : volume saisi (ou estimé)
+    - Unités (téléphones, laptops…) : quantité
+    """
+    import math
+
     await seed_tarifs(db, force_refresh=True)
 
     aliases = {
@@ -344,17 +352,24 @@ async def calculate_price(
     if category_key == "powerbank" and powerbank_tier == "high" and tarif.get("price_high"):
         unit_price = float(tarif["price_high"])
 
+    billed_note = None
+    raw_weight = max(float(weight_kg or 0), 0.0)
+
     if unit == "kg":
-        unit_value = weight_kg
+        # Facturation aérienne : kilo supérieur (1.3 → 2)
+        billed_kg = math.ceil(raw_weight) if raw_weight > 0 else 0
+        unit_value = billed_kg
         unit_label = "kg"
-        total = unit_price * weight_kg
+        total = unit_price * billed_kg
+        if raw_weight > 0 and billed_kg != raw_weight:
+            billed_note = f"Poids saisi {raw_weight:g} kg → {billed_kg} kg facturés (arrondi au kilo supérieur)"
     elif unit == "cbm":
-        unit_value = volume_cbm
+        unit_value = float(volume_cbm or 0)
         unit_label = "CBM"
-        total = unit_price * volume_cbm
+        total = unit_price * unit_value
     elif unit == "tonne":
         # Approximation : 1 CBM ≈ 1 tonne pour estimation ; l'opérateur affine
-        unit_value = volume_cbm if volume_cbm > 0 else qty
+        unit_value = float(volume_cbm) if volume_cbm > 0 else qty
         unit_label = "tonne"
         total = unit_price * unit_value
     else:  # unit
@@ -368,5 +383,8 @@ async def calculate_price(
         "unit_label": unit_label,
         "unit_price": unit_price,
         "total": total,
+        "raw_weight_kg": raw_weight if unit == "kg" else None,
+        "billed_weight_kg": unit_value if unit == "kg" else None,
+        "billing_note": billed_note,
         "note": "Écrire M.O.G, le nom, le numéro de téléphone et la ville de réception au Cameroun sur vos colis.",
     }

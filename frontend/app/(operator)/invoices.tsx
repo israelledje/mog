@@ -16,12 +16,15 @@ import { fileService } from '../../src/api/files';
 import { formatErr } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { darkColors as colors, radii, spacing } from '../../src/constants/theme';
+import { airBilledKg, packageCbm, billedQuantitiesForInvoice } from '../../src/utils/freightBilling';
+import { tarifsApi, type Tarif } from '../../src/api/tarifs';
 
 export default function InvoicesAdminScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [items, setItems] = useState<any[]>([]);
   const [customers, setCustomers] = useState<AdminUser[]>([]);
+  const [tarifs, setTarifs] = useState<Tarif[]>([]);
   const [loading, setLoading] = useState(true);
   const [show, setShow] = useState(false);
   const [customerId, setCustomerId] = useState('');
@@ -40,12 +43,14 @@ export default function InvoicesAdminScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [inv, cust] = await Promise.all([
+      const [inv, cust, tfs] = await Promise.all([
         invoicesApi.list(),
         adminApi.customers().catch(() => []),
+        tarifsApi.list().catch(() => []),
       ]);
       setItems(Array.isArray(inv) ? inv : []);
       setCustomers(Array.isArray(cust) ? cust : []);
+      setTarifs(Array.isArray(tfs) ? tfs : []);
     } catch (e: any) {
       Toast.show({ type: 'error', text1: formatErr(e, 'Factures') });
     } finally {
@@ -85,12 +90,15 @@ export default function InvoicesAdminScreen() {
       for (const p of billable as any[]) {
         const mode = (p.transport_mode || p.mode || 'sea') as string;
         const isAir = mode === 'air' || mode === 'air_express';
-        const dims = p.dimensions || {};
-        const cbm = ((Number(dims.l || 0) * Number(dims.w || 0) * Number(dims.h || 0)) / 1_000_000) || Number(p.cbm || 0);
-        const qty = isAir ? Number(p.weight || p.weight_kg || p.weight_real || 0) : cbm;
-        defaults[p.id || p._id] = {
-          qty: String(qty || 1),
-          unitPrice: String(p.total_price || 0),
+        const pid = String(p.id || p._id);
+        // Qty individuelle par défaut ; le total facture applique le regroupement sur la sélection
+        const qty = isAir ? airBilledKg(p) : packageCbm(p);
+        const cat = p.category_key || 'standard';
+        const tarif = tarifs.find((t) => t.mode === (isAir ? 'air' : 'sea') && t.category_key === cat)
+          || tarifs.find((t) => t.mode === (isAir ? 'air' : 'sea'));
+        defaults[pid] = {
+          qty: String(qty || 0),
+          unitPrice: String(tarif?.price ?? p.total_price ?? 0),
           unit: isAir ? 'kg' : 'cbm',
         };
       }
@@ -115,30 +123,43 @@ export default function InvoicesAdminScreen() {
 
   const isSelected = (id: string) => !!(selectedPkgs as any)[`_sel_${id}`];
 
+  const selectedIds = useMemo(
+    () => Object.keys(selectedPkgs).filter((id) => !id.startsWith('_sel_') && (selectedPkgs as any)[`_sel_${id}`]),
+    [selectedPkgs],
+  );
+
+  const groupQtyMap = useMemo(
+    () => billedQuantitiesForInvoice(packages, selectedIds, (p) => String(p.id || p._id)),
+    [packages, selectedIds],
+  );
+
   const total = useMemo(() => {
     let sum = 0;
-    for (const [id, line] of Object.entries(selectedPkgs)) {
-      if (id.startsWith('_sel_')) continue;
-      if (!(selectedPkgs as any)[`_sel_${id}`]) continue;
-      sum += Number(line.qty || 0) * Number(line.unitPrice || 0);
+    for (const id of selectedIds) {
+      const line = selectedPkgs[id];
+      if (!line) continue;
+      const qty = groupQtyMap.get(id)?.qty ?? Number(line.qty || 0);
+      sum += qty * Number(line.unitPrice || 0);
     }
     return Math.max(0, sum - Number(discount || 0));
-  }, [selectedPkgs, discount]);
+  }, [selectedPkgs, selectedIds, groupQtyMap, discount]);
 
   const createInvoice = async () => {
     if (!customerId) {
       Toast.show({ type: 'error', text1: 'Sélectionnez un client' });
       return;
     }
-    const lines = Object.entries(selectedPkgs)
-      .filter(([id]) => !id.startsWith('_sel_') && (selectedPkgs as any)[`_sel_${id}`])
-      .map(([package_id, line]) => ({
+    const lines = selectedIds.map((package_id) => {
+      const line = selectedPkgs[package_id];
+      const qty = groupQtyMap.get(package_id)?.qty ?? Number(line?.qty || 0);
+      return {
         package_id,
-        weight_or_volume: Number(line.qty || 0),
-        manual_unit_price: Number(line.unitPrice || 0),
-        calculated_unit_price: Number(line.unitPrice || 0),
-        unit: line.unit || 'kg',
-      }));
+        weight_or_volume: qty,
+        manual_unit_price: Number(line?.unitPrice || 0),
+        calculated_unit_price: Number(line?.unitPrice || 0),
+        unit: line?.unit || 'kg',
+      };
+    });
     if (!lines.length) {
       Toast.show({ type: 'error', text1: 'Sélectionnez au moins un colis' });
       return;

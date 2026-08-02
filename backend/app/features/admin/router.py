@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from bson import ObjectId
 from app.core.database import get_database
 from app.features.auth.schemas import UserCreate
 from app.core.security import get_password_hash
@@ -7,6 +10,9 @@ from app.core.user_codes import generate_client_code
 from app.core.deps import get_current_user, check_role
 from datetime import datetime, timedelta
 import pandas as pd
+import re
+import secrets
+import string
 from io import BytesIO
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
@@ -158,46 +164,206 @@ async def list_team(db = Depends(get_database)):
         users.append(user)
     return users
 
-@router.get("/customers", dependencies=[Depends(check_role(["admin"]))])
+@router.get("/customers", dependencies=[Depends(check_role(["admin", "operator"]))])
 async def list_customers(db = Depends(get_database)):
     cursor = db.users.find({"role": {"$nin": ["admin", "operator"]}}, {"password": 0, "hashed_password": 0})
     users = []
     async for user in cursor:
         user["id"] = str(user["_id"])
         del user["_id"]
+        email = (user.get("email") or "").lower()
+        app_enabled = user.get("app_enabled")
+        if app_enabled is None:
+            app_enabled = not email.endswith("@mog.local")
+        user["app_enabled"] = bool(app_enabled)
         users.append(user)
     return users
 
-@router.post("/users", dependencies=[Depends(check_role(["admin"]))])
-async def create_user_as_admin(user_in: UserCreate, db = Depends(get_database)):
-    # Vérifier si l'utilisateur existe déjà
-    existing_user = await db.users.find_one({"email": user_in.email})
-    if existing_user:
+
+class OperationalCustomerCreate(BaseModel):
+    full_name: str
+    phone: str
+    city: Optional[str] = "Douala"
+    email: Optional[EmailStr] = None
+    notes: Optional[str] = None
+
+
+class EnableAppRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
+def _normalize_phone(phone: str) -> str:
+    return re.sub(r"\D+", "", phone or "")
+
+
+def _phone_email(phone: str) -> str:
+    digits = _normalize_phone(phone) or secrets.token_hex(4)
+    return f"client.{digits}@mog.local"
+
+
+def _temp_password(length: int = 10) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "Mog!" + "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _customer_app_enabled(user: dict) -> bool:
+    email = (user.get("email") or "").lower()
+    app_enabled = user.get("app_enabled")
+    if app_enabled is None:
+        return not email.endswith("@mog.local")
+    return bool(app_enabled)
+
+
+@router.post("/customers/operational", dependencies=[Depends(check_role(["admin", "operator"]))])
+async def create_operational_customer(data: OperationalCustomerCreate, db=Depends(get_database)):
+    """
+    Crée une fiche client métier (expédition / entrepôt) sans activer le compte app.
+    Réutilise la fiche si le téléphone existe déjà.
+    """
+    phone = (data.phone or "").strip()
+    phone_digits = _normalize_phone(phone)
+    if not data.full_name.strip() or len(phone_digits) < 6:
+        raise HTTPException(status_code=400, detail="Nom et téléphone valides requis")
+
+    existing = await db.users.find_one({
+        "role": "client",
+        "$or": [
+            {"phone": phone},
+            {"phone": phone_digits},
+            {"phone": {"$regex": f"{phone_digits}$"}},
+        ],
+    })
+    if existing:
+        existing["id"] = str(existing["_id"])
+        existing.pop("_id", None)
+        existing.pop("hashed_password", None)
+        existing.pop("password", None)
+        existing["app_enabled"] = _customer_app_enabled(existing)
+        existing["reused"] = True
+        return existing
+
+    email = str(data.email).lower() if data.email else _phone_email(phone)
+    if await db.users.find_one({"email": email}):
+        email = _phone_email(phone + secrets.token_hex(2))
+
+    doc = {
+        "email": email,
+        "full_name": data.full_name.strip(),
+        "phone": phone,
+        "city": (data.city or "Douala").strip(),
+        "role": "client",
+        "gender": "male",
+        "app_enabled": False,
+        "notes": (data.notes or "").strip() or None,
+        "client_code": await generate_client_code(db, "client"),
+        "hashed_password": get_password_hash(_temp_password()),
+        "preferred_language": "fr",
+        "notification_preferences": {
+            "received": True, "quoted": True, "departed": True, "delivered": True,
+        },
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    result = await db.users.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    doc.pop("hashed_password", None)
+    doc["reused"] = False
+    return doc
+
+
+@router.post("/customers/{user_id}/enable-app", dependencies=[Depends(check_role(["admin"]))])
+async def enable_customer_app(user_id: str, data: EnableAppRequest, db=Depends(get_database)):
+    """Active l'accès app pour un client métier (génère email/mot de passe si besoin)."""
+    if ObjectId.is_valid(user_id):
+        query_id = ObjectId(user_id)
+        user = await db.users.find_one({"_id": query_id})
+    else:
+        query_id = user_id
+        user = await db.users.find_one({"_id": user_id})
+
+    if not user or user.get("role") != "client":
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+
+    current_email = (user.get("email") or "").lower()
+    new_email = str(data.email).lower() if data.email else None
+
+    if new_email and new_email != current_email:
+        if await db.users.find_one({"email": new_email}):
+            raise HTTPException(status_code=400, detail="Cet email est déjà utilisé")
+    elif current_email.endswith("@mog.local") and not new_email:
         raise HTTPException(
             status_code=400,
-            detail="Cet email est déjà utilisé",
+            detail="Indiquez un vrai email pour activer le compte app",
         )
-    
-    # Créer l'objet utilisateur pour la base
+    else:
+        new_email = current_email
+
+    password = data.password if data.password and len(data.password) >= 6 else _temp_password()
+    set_data = {
+        "app_enabled": True,
+        "hashed_password": get_password_hash(password),
+        "email": new_email,
+    }
+
+    if new_email != current_email:
+        await db.packages.update_many(
+            {"owner_id": current_email},
+            {"$set": {"owner_id": new_email}},
+        )
+        await db.invoices.update_many(
+            {"customer_id": current_email},
+            {"$set": {"customer_id": new_email}},
+        )
+
+    await db.users.update_one({"_id": query_id}, {"$set": set_data})
+    return {
+        "message": "Compte app activé",
+        "email": new_email,
+        "temporary_password": password,
+        "app_enabled": True,
+    }
+
+
+@router.get("/customers/{user_id}/packages", dependencies=[Depends(check_role(["admin", "operator"]))])
+async def customer_packages(user_id: str, db=Depends(get_database)):
+    if ObjectId.is_valid(user_id):
+        user = await db.users.find_one({"_id": ObjectId(user_id)})
+    else:
+        user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+
+    email = user.get("email")
+    pkgs = []
+    async for p in db.packages.find({"owner_id": email}).sort("created_at", -1).limit(200):
+        p["id"] = str(p["_id"])
+        p.pop("_id", None)
+        pkgs.append(p)
+    return pkgs
+
+
+@router.post("/users", dependencies=[Depends(check_role(["admin"]))])
+async def create_user_as_admin(user_in: UserCreate, db=Depends(get_database)):
+    existing_user = await db.users.find_one({"email": user_in.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Cet email est déjà utilisé")
+
     user_dict = user_in.model_dump()
     user_dict["hashed_password"] = get_password_hash(user_in.password)
     role = user_dict.get("role", "client")
     user_dict["client_code"] = await generate_client_code(db, role)
+    # Création admin classique = compte app actif
+    user_dict["app_enabled"] = True
     if role in ("operator", "admin") and not user_dict.get("badge_secret"):
-        import secrets
         user_dict["badge_secret"] = secrets.token_urlsafe(16)
     del user_dict["password"]
-    
-    # Insérer dans MongoDB
+
     await db.users.insert_one(user_dict)
-    
-    # Retourner l'utilisateur sans le mot de passe
+
     if "_id" in user_dict:
         user_dict["id"] = str(user_dict["_id"])
         del user_dict["_id"]
-    if "hashed_password" in user_dict:
-        del user_dict["hashed_password"]
-    
+    user_dict.pop("hashed_password", None)
     return user_dict
 
 @router.get("/export/packages", dependencies=[Depends(check_role(["admin"]))])
