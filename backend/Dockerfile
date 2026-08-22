@@ -17,5 +17,13 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Start server
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start server — Gunicorn (process manager) + Uvicorn workers (async)
+# 4 workers = bonne valeur pour 2-4 vCPU ; ajuster selon l'infra
+CMD ["gunicorn", "app.main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30", \
+     "--keep-alive", "5", \
+     "--access-logfile", "-"]

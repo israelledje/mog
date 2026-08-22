@@ -6,6 +6,7 @@ from app.core.database import get_database
 from app.core.utils import apply_watermark
 from app.core.pdf_service import generate_invoice_pdf
 from app.core.notification_service import NotificationService
+from app.core.task_queue import fire_and_forget
 from app.core.config import settings
 from typing import List, Optional
 from pydantic import BaseModel
@@ -160,7 +161,11 @@ async def create_colis(
     await db.packages.insert_one(package_dict)
 
     package_dict["id"] = package_dict["_id"]
-    await NotificationService.notify_colis_created(package_dict)
+    # Notification en arrière-plan — ne bloque pas la réponse HTTP
+    fire_and_forget(
+        NotificationService.notify_colis_created(package_dict),
+        label=f"notify_colis_created:{tracking_number}",
+    )
     return package_dict
 
 

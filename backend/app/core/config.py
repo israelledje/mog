@@ -17,10 +17,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     
-    # CORS
+    # CORS — liste explicite des origines autorisées (pas de wildcard en production)
     ALLOWED_ORIGINS: List[str] = [
-        "*"
+        "https://mog.dis-network.net",
+        "http://localhost:3000",
+        "http://localhost:8080",
     ]
+
+    # Environnement — conditionne les cookies secure et autres comportements
+    ENVIRONMENT: str = "production"  # "development" pour le dev local
 
     # Notifications
     WHATSAPP_TOKEN: str = ""

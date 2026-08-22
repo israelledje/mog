@@ -19,9 +19,14 @@ from contextlib import asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
-    
-    # Seed Global Settings
+
+    # Créer les index MongoDB (idempotent)
     from app.core.database import db_manager
+    from app.core.indexes import create_indexes
+    if db_manager.db is not None:
+        await create_indexes(db_manager.db)
+
+    # Seed Global Settings
     if db_manager.db is not None:
         settings_count = await db_manager.db.settings.count_documents({"_id": "global"})
         if settings_count == 0:
@@ -57,6 +62,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate Limiting — protection contre le brute force et le spam SMS/WhatsApp
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.rate_limit import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 import logging
 import time

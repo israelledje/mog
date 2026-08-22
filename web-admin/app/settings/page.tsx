@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Settings, Save, Loader2, DollarSign, Clock, CheckCircle2, TrendingUp, Anchor, Plane, ShieldCheck } from 'lucide-react';
 import { API_BASE_URL } from '@/lib/api';
+import { BackupPanel } from './components/BackupPanel';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState({
@@ -289,6 +290,14 @@ export default function SettingsPage() {
               <p className="text-xs font-medium text-slate-500">Ce numéro sera utilisé dans toute l'application mobile pour les boutons "Contacter le support". Format international sans le '+' recommandé.</p>
             </div>
           </div>
+        </div>
+
+        {/* ── Section Sauvegarde — admin uniquement ── */}
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <span>🗄️</span> Base de données
+          </h2>
+          <BackupPanel token={typeof window !== 'undefined' ? (localStorage.getItem('admin_token') || '') : ''} />
         </div>
 
       </div>

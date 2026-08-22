@@ -62,11 +62,25 @@ async def get_global_stats(db = Depends(get_database)):
     vol_data = await vol_cursor.to_list(length=1)
     total_volume_cbm = round(vol_data[0]["total_cbm"], 2) if vol_data else 0
 
-    # Conteneurs : compat mode / transport_mode
-    all_containers = await db.containers.find({}).to_list(length=5000)
-    sea_count = sum(1 for c in all_containers if (c.get("mode") or c.get("transport_mode") or "sea") == "sea")
-    air_count = sum(1 for c in all_containers if (c.get("mode") or c.get("transport_mode")) in ("air", "air_express"))
-    open_containers = sum(1 for c in all_containers if c.get("status") == "open")
+    # Conteneurs : agrégation côté MongoDB (évite de charger 5000 docs en RAM)
+    containers_pipeline = [
+        {
+            "$group": {
+                "_id": {
+                    "$ifNull": [
+                        "$transport_mode",
+                        {"$ifNull": ["$mode", "sea"]}
+                    ]
+                },
+                "total": {"$sum": 1},
+                "open": {"$sum": {"$cond": [{"$eq": ["$status", "open"]}, 1, 0]}},
+            }
+        }
+    ]
+    containers_agg = await db.containers.aggregate(containers_pipeline).to_list(length=10)
+    sea_count = sum(g["total"] for g in containers_agg if g["_id"] == "sea")
+    air_count = sum(g["total"] for g in containers_agg if g["_id"] in ("air", "air_express"))
+    open_containers = sum(g["open"] for g in containers_agg)
 
     # Tendances journalières (7 derniers jours)
     daily_pipeline = [
@@ -460,3 +474,60 @@ async def update_user_as_admin(user_id: str, update_data: dict, db = Depends(get
         "role": set_data.get("role", existing.get("role")),
         "promoted": new_role in ("operator", "admin") and existing.get("role") == "client",
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BACKUP MongoDB — Endpoints admin uniquement
+# ═══════════════════════════════════════════════════════════════════════════
+
+from app.features.admin.backup import run_backup, list_backups, cleanup_old_backups
+from fastapi.responses import FileResponse
+from pathlib import Path
+import os
+
+_BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
+
+
+@router.get("/backup/list", dependencies=[Depends(check_role(["admin"]))])
+async def get_backup_list():
+    """Liste les sauvegardes MongoDB disponibles (20 max, triées par date desc)."""
+    return list_backups()
+
+
+@router.post("/backup/create", dependencies=[Depends(check_role(["admin"]))])
+async def create_backup(db=Depends(get_database)):
+    """
+    Déclenche une sauvegarde manuelle MongoDB via mongodump.
+    L'archive .tar.gz est créée dans le volume /app/backups/.
+    Les 10 plus récentes sont conservées automatiquement.
+    """
+    try:
+        result = await run_backup(db.name)
+        deleted = cleanup_old_backups(keep=10)
+        return {**result, "old_backups_deleted": deleted}
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/backup/download/{filename}", dependencies=[Depends(check_role(["admin"]))])
+async def download_backup(filename: str):
+    """
+    Télécharge une archive de backup MongoDB.
+    Sécurisé contre la traversée de répertoire (path traversal).
+    """
+    # Sécurité : interdire tout caractère de navigation de répertoire
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Nom de fichier invalide")
+    if not filename.endswith(".tar.gz"):
+        raise HTTPException(status_code=400, detail="Seuls les fichiers .tar.gz sont autorisés")
+
+    path = _BACKUP_DIR / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Archive non trouvée")
+
+    return FileResponse(
+        path=str(path),
+        filename=filename,
+        media_type="application/x-tar",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

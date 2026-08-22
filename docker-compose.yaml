@@ -1,17 +1,69 @@
 services:
   mongodb:
-    image: mongo:latest
+    image: mongo:7.0          # Version fixe — ne pas utiliser "latest" en production
     container_name: cargo-tracker-db
+    # --replSet : active les transactions ACID et la HA future
+    # --auth : authentification obligatoire
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mogadmin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - mongodb_data:/data/db
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "mogadmin", "-p", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: always
+
+  # Conteneur éphémère pour configurer automatiquement le Replica Set et l'utilisateur
+  mongo-setup:
+    image: mongo:7.0
+    container_name: cargo-tracker-mongo-setup
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    environment:
+      - MONGO_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_APP_PASSWORD=${MONGO_APP_PASSWORD}
+    command: >
+      bash -c "
+      echo '⏳ Attente de MongoDB...';
+      sleep 2;
+      mongosh --host mongodb:27017 -u mogadmin -p $${MONGO_ROOT_PASSWORD} --authenticationDatabase admin --eval '
+        try {
+          rs.initiate({_id:\"rs0\", members:[{_id:0, host:\"mongodb:27017\"}]});
+          print(\"✅ Replica Set initialisé\");
+        } catch(e) {
+          if (e.codeName === \"AlreadyInitialized\") {
+            print(\"ℹ️ Replica Set déjà initialisé\");
+          } else { throw e; }
+        }
+      ';
+      echo '⏳ Attente de l'élection du PRIMARY...';
+      sleep 5;
+      mongosh --host mongodb:27017 -u mogadmin -p $${MONGO_ROOT_PASSWORD} --authenticationDatabase admin --eval '
+        const db = db.getSiblingDB(\"cargo_app\");
+        try {
+          db.createUser({
+            user: \"moguser\",
+            pwd: \"'$${MONGO_APP_PASSWORD}'\",
+            roles: [{role: \"readWrite\", db: \"cargo_app\"}]
+          });
+          print(\"✅ Utilisateur applicatif créé\");
+        } catch(e) {
+          if (e.codeName === \"DuplicateKey\" || e.code === 51003) {
+            print(\"ℹ️ Utilisateur applicatif déjà existant\");
+          } else { throw e; }
+        }
+      ';
+      echo '🚀 Setup MongoDB terminé !';
+      "
 
   backend:
     build: ./backend
@@ -21,9 +73,11 @@ services:
         condition: service_healthy
     volumes:
       - uploads_data:/app/uploads
+      - backups_data:/app/backups
     environment:
       - MONGO_URI=mongodb://mongodb:27017
       - UPLOAD_DIR=/app/uploads
+      - BACKUP_DIR=/app/backups
     env_file:
       - ./backend/.env
     networks:
@@ -93,3 +147,4 @@ volumes:
   mongodb_data:
   whatsapp_session:
   uploads_data:
+  backups_data:       # Volume persistant pour les sauvegardes MongoDB

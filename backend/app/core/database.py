@@ -12,9 +12,16 @@ db_manager = Database()
 
 async def connect_to_mongo():
     logger.info("Connecting to MongoDB...")
-    db_manager.client = AsyncIOMotorClient(settings.MONGO_URI)
+    db_manager.client = AsyncIOMotorClient(
+        settings.MONGO_URI,
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=30000,
+    )
+    # Test de connexion au démarrage — lève une exception si MongoDB est inaccessible
+    await db_manager.client.admin.command("ping")
     db_manager.db = db_manager.client[settings.DATABASE_NAME]
-    logger.info("Connected to MongoDB successfully!")
+    logger.info("✅ Connected to MongoDB successfully!")
 
 async def close_mongo_connection():
     logger.info("Closing MongoDB connection...")

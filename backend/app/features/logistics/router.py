@@ -3,6 +3,7 @@ from app.core.database import get_database
 from app.core.deps import check_role, get_current_user
 from app.core.pdf_service import generate_manifest_pdf, generate_client_packing_list_pdf
 from app.core.notification_service import NotificationService
+from app.core.task_queue import fire_and_forget
 from .schemas import ContainerCreate, ContainerInDB, ContainerUpdate
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from pydantic import BaseModel
@@ -144,7 +145,10 @@ async def add_package_to_container(
 
     package["status"] = "loaded"
     package["container_id"] = container_id
-    await NotificationService.notify_status_change(package, "loaded")
+    fire_and_forget(
+        NotificationService.notify_status_change(package, "loaded"),
+        label=f"notify_loaded:{package.get('tracking_number', package_id)}",
+    )
 
     return {"message": "Colis ajouté avec succès au conteneur"}
 
@@ -317,17 +321,21 @@ async def update_container_status(
         from app.features.payments.loyalty import award_loyalty_for_packages
         loyalty_awards = await award_loyalty_for_packages(db, packages, force_status="in_transit")
 
-    notify_result = await NotificationService.notify_groupage_packages_status(
-        packages,
-        package_status,
-        container_number=container.get("container_number") or "",
+    # Notifications en arrière-plan — ne bloquent pas la réponse HTTP
+    fire_and_forget(
+        NotificationService.notify_groupage_packages_status(
+            packages,
+            package_status,
+            container_number=container.get("container_number") or "",
+        ),
+        label=f"notify_groupage_status:{new_status}",
     )
 
     return {
         "message": f"Conteneur et {len(packages)} colis mis à jour avec succès",
         "status": new_status,
         "packages_updated": len(packages),
-        "notifications": notify_result,
+        "notifications": {"queued": True, "count": len(packages)},
         "loyalty_awards": loyalty_awards,
     }
 

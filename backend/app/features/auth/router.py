@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Response, Request
+from app.core.rate_limit import limiter
 from app.features.auth.schemas import (
     LoginRequest, Token, RefreshRequest, UserCreate, UserBase,
     ForgotPasswordRequest, VerifyOTPRequest, ResetPasswordRequest,
@@ -9,7 +10,7 @@ from app.core.user_codes import generate_client_code, ensure_client_code
 from app.core.phone_utils import normalize_phone, is_valid_phone
 from app.core.database import get_database
 from app.core.paths import UPLOAD_DIR
-import random
+from app.core.config import settings
 import secrets
 from datetime import datetime, timedelta, timezone
 from app.core.notification_service import NotificationService
@@ -75,8 +76,8 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     access_token = create_access_token({"sub": user_in.email, "role": "client"})
     refresh_token = create_refresh_token({"sub": user_in.email})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
     
     return {
         "access_token": access_token,
@@ -86,7 +87,8 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     }
 
 @router.post("/login", response_model=Token)
-async def login(login_data: LoginRequest, response: Response, db = Depends(get_database)):
+@limiter.limit("10/minute")
+async def login(request: Request, login_data: LoginRequest, response: Response, db = Depends(get_database)):
     # Simuler la récupération utilisateur (En attendant Story 1.2)
     # Dans la vraie vie, on cherche dans MongoDB
     escaped_email = re.escape(login_data.email.strip())
@@ -117,8 +119,8 @@ async def login(login_data: LoginRequest, response: Response, db = Depends(get_d
     access_token = create_access_token({"sub": user["email"], "role": user["role"]})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
 
     user_copy = user.copy()
     if "_id" in user_copy:
@@ -244,7 +246,9 @@ async def set_active_entrepot(
     return user_copy
 
 @router.post("/phone/send-otp")
+@limiter.limit("3/minute")
 async def send_phone_otp(
+    http_request: Request,
     request: PhoneOTPRequest,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_database),
@@ -253,7 +257,7 @@ async def send_phone_otp(
     if not is_valid_phone(phone):
         raise HTTPException(status_code=400, detail="Numéro de téléphone invalide")
 
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = str(secrets.randbelow(900000) + 100000)  # 6 chiffres cryptographiques
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
     await db.otp_codes.update_one(
@@ -367,7 +371,8 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     return user_copy
 
 @router.post("/qr-login")
-async def qr_login_step1(qr_token: str, db = Depends(get_database)):
+@limiter.limit("5/minute")
+async def qr_login_step1(http_request: Request, qr_token: str, db = Depends(get_database)):
     # 1. On cherche d'abord par le secret de badge (format sécurisé)
     user = await db.users.find_one({"badge_secret": qr_token})
     
@@ -382,7 +387,7 @@ async def qr_login_step1(qr_token: str, db = Depends(get_database)):
         )
     
     # Générer OTP
-    otp_code = f"{random.randint(1000, 9999)}"
+    otp_code = str(secrets.randbelow(900000) + 100000)  # 6 chiffres cryptographiques
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     
     # Stocker l'OTP pour la vérification QR
@@ -422,7 +427,7 @@ async def operator_manual_login(login_data: LoginRequest, db = Depends(get_datab
         )
 
     # Générer OTP
-    otp_code = f"{random.randint(1000, 9999)}"
+    otp_code = str(secrets.randbelow(900000) + 100000)  # 6 chiffres cryptographiques
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     
     # Stocker l'OTP pour la vérification QR (on réutilise le même mécanisme)
@@ -480,8 +485,8 @@ async def qr_login_step2(request: QRVerifyRequest, response: Response, db = Depe
     access_token = create_access_token({"sub": user["email"], "role": user.get("role", "operator")})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=False, max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
 
     user_copy = user.copy()
     if "_id" in user_copy:
@@ -518,7 +523,7 @@ async def refresh(refresh_data: RefreshRequest, response: Response, db = Depends
 
     access_token = create_access_token({"sub": email, "role": user.get("role", "operator")})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=False, max_age=15*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
     
     return {
         "access_token": access_token,
@@ -528,14 +533,15 @@ async def refresh(refresh_data: RefreshRequest, response: Response, db = Depends
     }
 
 @router.post("/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest, db = Depends(get_database)):
+@limiter.limit("3/minute")
+async def forgot_password(http_request: Request, request: ForgotPasswordRequest, db = Depends(get_database)):
     user = await db.users.find_one({"email": request.email})
     if not user:
         # On ne révèle pas si l'email existe pour des raisons de sécurité
         return {"message": "Si l'email existe, un code OTP a été envoyé."}
     
     # Générer OTP à 6 chiffres
-    otp_code = f"{random.randint(100000, 999999)}"
+    otp_code = str(secrets.randbelow(900000) + 100000)  # 6 chiffres cryptographiques
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     
     # Stocker en base (upsert)
