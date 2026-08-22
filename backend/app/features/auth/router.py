@@ -76,8 +76,8 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
     access_token = create_access_token({"sub": user_in.email, "role": "client"})
     refresh_token = create_refresh_token({"sub": user_in.email})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=7*24*60*60)
     
     return {
         "access_token": access_token,
@@ -119,8 +119,8 @@ async def login(request: Request, login_data: LoginRequest, response: Response, 
     access_token = create_access_token({"sub": user["email"], "role": user["role"]})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=7*24*60*60)
 
     user_copy = user.copy()
     if "_id" in user_copy:
@@ -485,8 +485,8 @@ async def qr_login_step2(request: QRVerifyRequest, response: Response, db = Depe
     access_token = create_access_token({"sub": user["email"], "role": user.get("role", "operator")})
     refresh_token = create_refresh_token({"sub": user["email"]})
 
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=7*24*60*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=15*60)
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=7*24*60*60)
 
     user_copy = user.copy()
     if "_id" in user_copy:
@@ -523,7 +523,7 @@ async def refresh(refresh_data: RefreshRequest, response: Response, db = Depends
 
     access_token = create_access_token({"sub": email, "role": user.get("role", "operator")})
     
-    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == " production\), max_age=15*60)
+    response.set_cookie(key="access_token", value=access_token, httponly=True, samesite="lax", secure=(settings.ENVIRONMENT == "production"), max_age=15*60)
     
     return {
         "access_token": access_token,
