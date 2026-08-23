@@ -22,6 +22,11 @@ class PackageBase(BaseModel):
     transport_mode: str = "sea"
     delivery_address: Optional[str] = None
     insurance_enabled: bool = False
+    insurance_rate: float = 0.035
+    insurance_amount: float = 0.0
+    insurance_paid: bool = False
+    insurance_payment_status: str = "pending" # pending, waiting_validation, paid
+    insurance_payment_method: Optional[str] = None
     instructions: Optional[str] = None
     payment_status: str = "pending" # pending, waiting_validation, paid, rejected, bank_pending
     payment_method: Optional[str] = None  # om, momo, bank, points

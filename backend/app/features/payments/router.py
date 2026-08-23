@@ -28,6 +28,7 @@ AIR_KG_PER_CBM = DEFAULT_LOYALTY["air_kg_per_cbm"]
 class MobilePayRequest(BaseModel):
     package_id: Optional[str] = None
     invoice_id: Optional[str] = None
+    payment_type: Optional[Literal["shipping", "insurance"]] = "shipping"
     amount: float
     phone: str
     method: Literal["om", "momo"]
@@ -37,6 +38,7 @@ class MobilePayRequest(BaseModel):
 class BankPayRequest(BaseModel):
     package_id: Optional[str] = None
     invoice_id: Optional[str] = None
+    payment_type: Optional[Literal["shipping", "insurance"]] = "shipping"
     amount: float
     reference: Optional[str] = None
     proof_url: Optional[str] = None
@@ -108,6 +110,7 @@ async def pay_mobile(
         "user_email": current_user["email"],
         "package_id": data.package_id,
         "invoice_id": data.invoice_id,
+        "payment_type": data.payment_type or "shipping",
         "method": data.method,
         "phone": data.phone,
         "amount_original": data.amount,
@@ -126,11 +129,9 @@ async def pay_mobile(
     login = os.getenv("INTOUCH_LOGIN_API", "")
     password = os.getenv("INTOUCH_PASSWORD_API", "")
 
-    provider_ref = None
     if base and agent and login and password and amount_due > 0:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                # Endpoint générique Intouch — à adapter selon le contrat partenaire
                 payload = {
                     "amount": int(amount_due),
                     "phone": data.phone,
@@ -140,18 +141,21 @@ async def pay_mobile(
                     "login_api": login,
                     "password_api": password,
                 }
-                resp = await client.post(f"{base}/merchant/payment", json=payload)
-                if resp.status_code >= 400:
-                    payment["status"] = "failed"
-                    payment["provider_error"] = resp.text[:500]
-                else:
-                    body = resp.json() if resp.content else {}
-                    provider_ref = body.get("transaction_id") or body.get("id")
+                r = await client.post(f"{base}/payment/init", json=payload)
+                if r.status_code == 200:
+                    res = r.json()
+                    payment["provider_response"] = res
+                    provider_ref = res.get("transaction_id") or res.get("reference")
                     payment["provider_ref"] = provider_ref
-                    payment["status"] = "processing"
+                    if res.get("status") in ("SUCCESSFUL", "PAID", "SUCCESS"):
+                        payment["status"] = "paid"
+                    elif res.get("status") in ("FAILED", "REJECTED"):
+                        payment["status"] = "failed"
+                    else:
+                        payment["status"] = "processing"
         except Exception as e:
-            payment["status"] = "failed"
             payment["provider_error"] = str(e)
+            payment["status"] = "processing"
     else:
         # Mode démo / sans credentials : simulation (à remplacer en prod)
         payment["status"] = "processing"
@@ -163,18 +167,32 @@ async def pay_mobile(
 
     await db.payments.insert_one(payment)
 
-    if data.package_id and payment["status"] in ("processing", "pending"):
-        await db.packages.update_one(
-            {"_id": data.package_id},
-            {
-                "$set": {
-                    "payment_status": "waiting_validation",
-                    "payment_method": data.method,
-                    "loyalty_points_used": data.loyalty_points,
-                    "updated_at": datetime.now(),
-                }
-            },
-        )
+    if data.package_id and payment["status"] in ("processing", "pending", "paid"):
+        if data.payment_type == "insurance":
+            await db.packages.update_one(
+                {"_id": data.package_id},
+                {
+                    "$set": {
+                        "insurance_paid": True,
+                        "insurance_payment_status": "paid" if payment["status"] == "paid" else "waiting_validation",
+                        "insurance_payment_method": data.method,
+                        "insurance_amount": data.amount,
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
+        else:
+            await db.packages.update_one(
+                {"_id": data.package_id},
+                {
+                    "$set": {
+                        "payment_status": "waiting_validation",
+                        "payment_method": data.method,
+                        "loyalty_points_used": data.loyalty_points,
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
 
     payment["id"] = payment_id
     payment.pop("_id", None)
@@ -204,6 +222,7 @@ async def pay_bank(
         "user_email": current_user["email"],
         "package_id": data.package_id,
         "invoice_id": data.invoice_id,
+        "payment_type": data.payment_type or "shipping",
         "method": "bank",
         "amount_original": data.amount,
         "loyalty_points": data.loyalty_points,
@@ -219,18 +238,32 @@ async def pay_bank(
     await db.payments.insert_one(payment)
 
     if data.package_id:
-        await db.packages.update_one(
-            {"_id": data.package_id},
-            {
-                "$set": {
-                    "payment_status": "bank_pending",
-                    "payment_method": "bank",
-                    "payment_proof_url": data.proof_url,
-                    "loyalty_points_used": data.loyalty_points,
-                    "updated_at": datetime.now(),
-                }
-            },
-        )
+        if data.payment_type == "insurance":
+            await db.packages.update_one(
+                {"_id": data.package_id},
+                {
+                    "$set": {
+                        "insurance_paid": False,
+                        "insurance_payment_status": "waiting_validation",
+                        "insurance_payment_method": "bank",
+                        "insurance_amount": data.amount,
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
+        else:
+            await db.packages.update_one(
+                {"_id": data.package_id},
+                {
+                    "$set": {
+                        "payment_status": "bank_pending",
+                        "payment_method": "bank",
+                        "payment_proof_url": data.proof_url,
+                        "loyalty_points_used": data.loyalty_points,
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
 
     payment["id"] = payment_id
     payment.pop("_id", None)

@@ -43,7 +43,6 @@ export default function HomeScreen() {
   }, [fetchAll, fetchSettings]);
 
   const activeShipments = getActiveShipments(colis, groupages).slice(0, 5);
-  const recent = colis.slice(0, 5);
   const unread = unreadCount();
   const supportPhoneDigits = getSupportPhoneDigits(settings);
   const supportPhoneDisplay = formatSupportPhoneDisplay(supportPhoneDigits);
@@ -61,58 +60,84 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={styles.container} testID="home-screen">
-      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* HEADER (LIKE IN DESIGN) */}
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              style={styles.avatarWrap}
-              activeOpacity={0.85}
-              onPress={() => router.push('/(tabs)/profil')}
-              accessibilityRole="button"
-              accessibilityLabel={t('tabs.profile', { defaultValue: 'Profil' })}
+    <LinearGradient
+      colors={['#F0F5FF', '#F8FAFC', '#F1F5F9', '#EFF6FF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}
+      testID="home-screen"
+    >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* HERO CURVED HEADER AVEC IMAGE home.jpg ET OVERLAY ELEGANTE */}
+        <View style={styles.heroCurveContainer}>
+          <ImageBackground
+            source={require('../../assets/images/home.jpg')}
+            style={styles.heroHeaderBg}
+            resizeMode="cover"
+          >
+            <LinearGradient
+              colors={['rgba(15, 23, 42, 0.94)', 'rgba(30, 58, 138, 0.88)', 'rgba(15, 23, 42, 0.96)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.8, y: 1 }}
+              style={styles.heroGradientOverlay}
             >
-              {user?.avatar_url ? (
-                <Image
-                  source={{ uri: resolveMediaUrl(user.avatar_url) }}
-                  style={styles.avatarImage}
+              <SafeAreaView edges={['top']} style={styles.heroSafeArea}>
+                {/* HEADER ROW (AVATAR + BONJOUR + NOTIFICATIONS) */}
+                <View style={styles.headerRow}>
+                  <TouchableOpacity
+                    style={styles.avatarWrap}
+                    activeOpacity={0.85}
+                    onPress={() => router.push('/(tabs)/profil')}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('tabs.profile', { defaultValue: 'Profil' })}
+                  >
+                    {user?.avatar_url ? (
+                      <Image
+                        source={{ uri: resolveMediaUrl(user.avatar_url) }}
+                        style={styles.avatarImage}
+                      />
+                    ) : (
+                      <Text style={styles.avatarText}>{user?.full_name?.charAt(0)?.toUpperCase() || 'C'}</Text>
+                    )}
+                  </TouchableOpacity>
+                  <View style={styles.headerTextWrap}>
+                    <Text style={styles.greeting}>{t('home.greeting')} 👋</Text>
+                    <Text style={styles.userName} numberOfLines={1}>{user?.full_name || t('home.client_fallback')}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications')}>
+                    <Bell size={22} color="#FFFFFF" strokeWidth={2.2} />
+                    {unread > 0 && <View style={styles.badge} />}
+                  </TouchableOpacity>
+                </View>
+
+                {/* INFOS D'EXPEDITION & KPIS INCLUS DANS LE HEADER ARRONDI */}
+                <HomeTopPanels
+                  user={user}
+                  colis={colis}
+                  kpi={kpi}
                 />
-              ) : (
-                <Text style={styles.avatarText}>{user?.full_name?.charAt(0)?.toUpperCase() || 'C'}</Text>
-              )}
-            </TouchableOpacity>
-            <View style={styles.headerTextWrap}>
-              <Text style={styles.greeting}>{t('home.greeting')}!</Text>
-              <Text style={styles.userName}>{user?.full_name || t('home.client_fallback')}</Text>
-            </View>
-            <TouchableOpacity style={styles.bellWrap} onPress={() => router.push('/notifications')}>
-              <Bell size={24} color={colors.text} strokeWidth={2.5} />
-              {unread > 0 && <View style={styles.badge} />}
-            </TouchableOpacity>
-          </View>
+              </SafeAreaView>
+            </LinearGradient>
+          </ImageBackground>
+        </View>
 
-          <HomeTopPanels
-            user={user}
-            colis={colis}
-            kpi={kpi}
-          />
-
-          {/* MAIN HERO CARD (LIKE PURPLE CARD IN DESIGN) */}
+        {/* CONTENU PRINCIPAL DU DASHBOARD */}
+        <View style={styles.mainBodyWrap}>
+          {/* MAIN HERO CARD (NOUVELLE EXPEDITION) */}
           <TouchableOpacity activeOpacity={0.95} onPress={onShip}>
             <LinearGradient
-              colors={[colors.primary, '#4B6CB7']}
+              colors={['#2563EB', '#1D4ED8']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={[styles.heroCard, { overflow: 'hidden' }]}
             >
-              {/* BACKGROUND WATERMARK IMAGE - Fixed absolute size to prevent layout issues */}
+              {/* BACKGROUND WATERMARK IMAGE */}
               <Image 
                 source={require('../../assets/images/package_card_bg.png')}
-                style={{ position: 'absolute', right: -50, bottom: -50, width: 300, height: 300, opacity: 0.3 }}
+                style={{ position: 'absolute', right: -50, bottom: -50, width: 300, height: 300, opacity: 0.25 }}
                 resizeMode="cover"
               />
 
@@ -129,7 +154,7 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={styles.heroRight}>
-                  {/* Simulated Circular Progress from design */}
+                  {/* Simulated Circular Progress */}
                   <View style={styles.circleOuter}>
                     <View style={styles.circleInner}>
                       <Text style={styles.circleText}>{kpi.warehouse}</Text>
@@ -216,25 +241,6 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* TASK GROUPS -> RECENT ACTIVITY (VERTICAL LIST) */}
-          <View style={[styles.sectionWrap, { marginTop: spacing.md }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t('home.recent_activity')}</Text>
-              <View style={styles.countBadge}><Text style={styles.countBadgeText}>{recent.length}</Text></View>
-            </View>
-
-            {loading && colis.length === 0 ? (
-              <><SkeletonCard /><SkeletonCard /></>
-            ) : recent.length === 0 ? (
-              <View style={styles.empty}>
-                <Package size={36} color={colors.textSecondary} />
-                <Text style={styles.emptyText}>{t('home.nothing_to_report')}</Text>
-              </View>
-            ) : (
-              recent.map((c) => <RecentItem key={c.id} item={c} onPress={() => router.push(`/colis/${c.id}`)} />)
-            )}
-          </View>
-
           <HomeBottomPanels settings={settings} />
 
           {/* EXCHANGE RATE CARD (VISA STYLE) */}
@@ -295,8 +301,8 @@ export default function HomeScreen() {
             <HomeServicesMenu />
             
           </View>
-        </ScrollView>
-      </SafeAreaView>
+        </View>
+      </ScrollView>
 
       {/* FAB marketplace discret */}
       <TouchableOpacity
@@ -311,55 +317,93 @@ export default function HomeScreen() {
       >
         <ShoppingBag size={20} color={colors.primary} strokeWidth={2.2} />
       </TouchableOpacity>
-    </View>
-  );
-}
-
-function RecentItem({ item, onPress }: { item: Colis; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.recentItem} onPress={onPress}>
-      <View style={[styles.recentIconWrap, { backgroundColor: item.transport_mode === 'air' ? '#FCECE8' : '#E8F1FC' }]}>
-        <Package size={22} color={item.transport_mode === 'air' ? colors.accent : colors.secondary} strokeWidth={2} />
-      </View>
-      <View style={styles.recentTextWrap}>
-        <Text style={styles.recentTitle} numberOfLines={1}>{item.description}</Text>
-        <Text style={styles.recentSub}>{item.tracking_number}</Text>
-        {item.total_price && item.total_price > 0 ? (
-          <View style={{ backgroundColor: '#EEF2FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginTop: 4 }}>
-            <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '700' }}>{item.total_price.toLocaleString()} FCFA</Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.recentRight}>
-        <StatusBadge status={item.status} small />
-      </View>
-    </TouchableOpacity>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FB' }, // Light off-white like design
+  container: { flex: 1 },
   scroll: { paddingBottom: 100 },
   
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.lg },
+  /* Hero Curved Header */
+  heroCurveContainer: {
+    width: '100%',
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    overflow: 'hidden',
+    backgroundColor: '#0F172A',
+    ...shadow.floating,
+    marginBottom: spacing.md,
+  },
+  heroHeaderBg: {
+    width: '100%',
+  },
+  heroGradientOverlay: {
+    width: '100%',
+    paddingBottom: spacing.xs,
+  },
+  heroSafeArea: {
+    paddingTop: spacing.xs,
+  },
+  
+  /* Header Top Bar */
+  headerRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: spacing.lg, 
+    marginTop: spacing.xs, 
+    marginBottom: spacing.md 
+  },
   avatarWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    ...shadow.sm,
   },
-  avatarImage: { width: 52, height: 52, borderRadius: 26 },
-  avatarText: { color: '#fff', fontSize: 24, fontWeight: '800', fontFamily: fonts.heading },
-  headerTextWrap: { flex: 1, marginLeft: 14 },
-  greeting: { fontSize: 15, color: colors.textSecondary, fontWeight: '500', marginBottom: 2 },
-  userName: { fontSize: 20, fontWeight: '800', color: colors.text, fontFamily: fonts.heading },
-  bellWrap: { padding: 8 },
-  badge: { position: 'absolute', top: 6, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent, borderWidth: 2, borderColor: '#F8F9FB' },
+  avatarImage: { width: 48, height: 48, borderRadius: 24 },
+  avatarText: { color: colors.primary, fontSize: 22, fontWeight: '900', fontFamily: fonts.heading },
+  headerTextWrap: { flex: 1, marginLeft: 12 },
+  greeting: { fontSize: 13, color: '#93C5FD', fontWeight: '600', marginBottom: 2 },
+  userName: { fontSize: 19, fontWeight: '900', color: '#FFFFFF', fontFamily: fonts.heading, letterSpacing: 0.3 },
+  bellWrap: { 
+    width: 42, 
+    height: 42, 
+    borderRadius: 21, 
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  badge: { 
+    position: 'absolute', 
+    top: 9, 
+    right: 9, 
+    width: 9, 
+    height: 9, 
+    borderRadius: 4.5, 
+    backgroundColor: '#EF4444', 
+    borderWidth: 1.5, 
+    borderColor: '#0F172A' 
+  },
   
-  heroCard: { marginHorizontal: spacing.lg, borderRadius: 28, padding: 24, marginBottom: spacing.xl, ...shadow.floating },
+  /* Main Body Content */
+  mainBodyWrap: {
+    paddingTop: spacing.xs,
+  },
+  heroCard: { 
+    marginHorizontal: spacing.lg, 
+    borderRadius: 28, 
+    padding: 22, 
+    marginBottom: spacing.lg, 
+    ...shadow.floating 
+  },
   marketBanner: {
     marginHorizontal: spacing.lg,
     marginTop: -spacing.md,

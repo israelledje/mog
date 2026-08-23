@@ -75,6 +75,11 @@ export interface Colis {
   transport_mode: TransportMode;
   delivery_address?: string | null;
   insurance_enabled: boolean;
+  insurance_rate?: number;
+  insurance_amount?: number;
+  insurance_paid?: boolean;
+  insurance_payment_status?: 'pending' | 'waiting_validation' | 'paid' | string;
+  insurance_payment_method?: string | null;
   instructions?: string | null;
   payment_status: 'pending' | 'waiting_validation' | 'paid' | 'rejected' | 'bank_pending' | string;
   payment_method?: string | null;

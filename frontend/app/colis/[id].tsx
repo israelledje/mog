@@ -154,7 +154,18 @@ export default function ColisDetailScreen() {
           <Info label={t('package.supplier')} value={colis.supplier_name || '-'} Icon={Store} color="#f59e0b" />
           <Info label={t('package.platform')} value={colis.platform || '-'} Icon={Globe} color="#6366f1" />
           <Info label={t('package.declared_value')} value={formatDeclaredValue(colis.declared_value, colis.currency)} Icon={DollarSign} color="#f43f5e" />
-          <Info label={t('form.insurance')} value={colis.insurance_enabled ? t('common.yes') : t('common.no')} Icon={ShieldCheck} color={colis.insurance_enabled ? "#10b981" : "#9ca3af"} />
+          <Info 
+            label="Assurance (3.5%)" 
+            value={colis.insurance_enabled 
+              ? (colis.insurance_paid 
+                  ? 'Active (Payée)' 
+                  : (colis.insurance_amount 
+                      ? `${colis.insurance_amount.toLocaleString()} F` 
+                      : t('common.yes'))) 
+              : t('common.no')} 
+            Icon={ShieldCheck} 
+            color={colis.insurance_enabled ? (colis.insurance_paid ? "#10b981" : "#f59e0b") : "#9ca3af"} 
+          />
         </View>
 
         {colis.container_number && (
@@ -179,12 +190,24 @@ export default function ColisDetailScreen() {
         />
 
         <View style={styles.actions}>
+          {colis.insurance_enabled && !colis.insurance_paid && (colis.insurance_amount || 0) > 0 && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: '#10B981', backgroundColor: '#ECFDF5' }]}
+              onPress={() => router.push({ pathname: '/colis/paiement', params: { id: colis.id, type: 'insurance', amount: String(colis.insurance_amount) } })}
+            >
+              <ShieldCheck size={18} color="#059669" />
+              <Text style={[styles.actionText, { color: '#059669', fontWeight: '800' }]}>
+                Payer l'assurance ({colis.insurance_amount?.toLocaleString()} FCFA)
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {colis.total_price > 0 && colis.payment_status !== 'paid' && (
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: colors.accent }]}
               onPress={() => router.push({ pathname: '/colis/paiement', params: { id: colis.id } })}
             >
-              <Text style={[styles.actionText, { color: colors.accent }]}>Payer (OM / MoMo / Virement)</Text>
+              <Text style={[styles.actionText, { color: colors.accent }]}>Payer le fret (OM / MoMo / Virement)</Text>
             </TouchableOpacity>
           )}
 

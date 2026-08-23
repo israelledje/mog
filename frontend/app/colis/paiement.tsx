@@ -15,17 +15,19 @@ import { colors, radii, spacing } from '../../src/constants/theme';
 type Method = 'om' | 'momo' | 'bank';
 
 export default function PaymentScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, type, amount: initialAmount } = useLocalSearchParams<{ id: string; type?: string; amount?: string }>();
   const router = useRouter();
   const { t } = useTranslation();
   const [method, setMethod] = useState<Method>('om');
   const [phone, setPhone] = useState('');
   const [reference, setReference] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(initialAmount || '');
   const [loyalty, setLoyalty] = useState({ points: 0, value_xaf: 0, point_value_xaf: 20 });
   const [usePoints, setUsePoints] = useState(0);
   const [loading, setLoading] = useState(false);
   const [bankInfo, setBankInfo] = useState<any>(null);
+
+  const isInsurance = type === 'insurance';
 
   useEffect(() => {
     (async () => {
@@ -37,10 +39,16 @@ export default function PaymentScreen() {
         ]);
         setLoyalty(loy);
         setBankInfo(bank);
-        if (colis?.total_price) setAmount(String(colis.total_price));
+        if (!initialAmount) {
+          if (isInsurance && colis?.insurance_amount) {
+            setAmount(String(colis.insurance_amount));
+          } else if (colis?.total_price) {
+            setAmount(String(colis.total_price));
+          }
+        }
       } catch {}
     })();
-  }, [id]);
+  }, [id, isInsurance, initialAmount]);
 
   const amountNum = Number(amount) || 0;
   const discount = usePoints * (loyalty.point_value_xaf || 20);
@@ -60,24 +68,30 @@ export default function PaymentScreen() {
       if (method === 'bank') {
         await paymentsApi.payBank({
           package_id: id,
+          payment_type: isInsurance ? 'insurance' : 'shipping',
           amount: amountNum,
-          reference,
+          reference: reference || (isInsurance ? `ASSUR-${id}` : undefined),
           loyalty_points: usePoints,
         });
         Toast.show({
           type: 'success',
-          text1: 'Virement enregistré',
+          text1: isInsurance ? 'Virement assurance enregistré' : 'Virement enregistré',
           text2: 'Validation sous 3 jours ouvrés',
         });
       } else {
         await paymentsApi.payMobile({
           package_id: id,
+          payment_type: isInsurance ? 'insurance' : 'shipping',
           amount: amountNum,
           phone,
           method,
           loyalty_points: usePoints,
         });
-        Toast.show({ type: 'success', text1: 'Paiement initié', text2: 'Validez sur votre téléphone' });
+        Toast.show({ 
+          type: 'success', 
+          text1: isInsurance ? 'Paiement assurance initié' : 'Paiement initié', 
+          text2: 'Validez sur votre téléphone' 
+        });
       }
       router.back();
     } catch (e: any) {

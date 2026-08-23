@@ -36,6 +36,7 @@ export const paymentsApi = {
   async payMobile(payload: {
     package_id?: string;
     invoice_id?: string;
+    payment_type?: 'shipping' | 'insurance';
     amount: number;
     phone: string;
     method: 'om' | 'momo';
@@ -47,6 +48,7 @@ export const paymentsApi = {
   async payBank(payload: {
     package_id?: string;
     invoice_id?: string;
+    payment_type?: 'shipping' | 'insurance';
     amount: number;
     reference?: string;
     proof_url?: string;

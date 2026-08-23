@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor, screen } from '@testing-library/react-nativ
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
+  useLocalSearchParams: () => ({}),
 }));
 
 jest.mock('../../src/store/authStore', () => ({

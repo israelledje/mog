@@ -1,26 +1,28 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ScrollView, 
-  Keyboard, 
-  TouchableWithoutFeedback, 
-  Image, 
-  ImageBackground, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Image,
+  ImageBackground,
   Linking,
   Modal
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Link } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
-import { Mail, Lock, Fingerprint, Copy, Plane, Anchor, MapPin, ExternalLink, X, PhoneCall, CheckCircle2 } from 'lucide-react-native';
+import { MaterialCommunityIcons, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { Mail, Lock, Eye, EyeOff, Fingerprint, Copy, ExternalLink, X, CheckSquare, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Toast from 'react-native-toast-message';
@@ -37,9 +39,12 @@ type LoginForm = { email: string; password: string };
 type AddressItem = {
   id: string;
   title: string;
+  subtitle: string;
   badge: string;
-  icon: any;
-  color: string;
+  flag: string;
+  iconName: keyof typeof MaterialCommunityIcons.glyphMap;
+  gradientColors: [string, string];
+  accentColor: string;
   address: string;
 };
 
@@ -51,33 +56,45 @@ const ADDRESSES: AddressItem[] = [
   {
     id: 'air',
     title: 'Air Cargo',
-    badge: 'CHINE (GUANGZHOU)',
-    icon: Plane,
-    color: '#3B82F6',
+    subtitle: 'Fret Aérien Express',
+    badge: 'Guangzhou',
+    flag: '🇨🇳',
+    iconName: 'airplane-takeoff',
+    gradientColors: ['#1E3A8A', '#2563EB'],
+    accentColor: '#60A5FA',
     address: AIR_CARGO_ADDRESS,
   },
   {
     id: 'sea',
-    title: 'Maritime',
-    badge: 'CHINE (FOSHAN)',
-    icon: Anchor,
-    color: '#10B981',
+    title: 'Entrepot Maritime',
+    subtitle: 'Groupage Conteneur',
+    badge: 'Foshan',
+    flag: '🇨🇳',
+    iconName: 'ferry',
+    gradientColors: ['#064E3B', '#059669'],
+    accentColor: '#34D399',
     address: CHINA_WAREHOUSE_ADDRESS,
   },
   {
     id: 'douala',
-    title: 'Douala',
-    badge: 'CAMEROUN',
-    icon: MapPin,
-    color: '#F59E0B',
+    title: 'Agence Douala',
+    subtitle: 'Livraison & Retrait',
+    badge: 'New Bell',
+    flag: '🇨🇲',
+    iconName: 'store-marker-outline',
+    gradientColors: ['#78350F', '#D97706'],
+    accentColor: '#FBBF24',
     address: DOUALA_ADDRESS,
   },
   {
     id: 'yaounde',
-    title: 'Yaoundé',
-    badge: 'CAMEROUN',
-    icon: MapPin,
-    color: '#8B5CF6',
+    title: 'Agence Yaoundé',
+    subtitle: 'Livraison & Retrait',
+    badge: 'Messa',
+    flag: '🇨🇲',
+    iconName: 'map-marker-radius-outline',
+    gradientColors: ['#4C1D95', '#7C3AED'],
+    accentColor: '#A78BFA',
     address: YAOUNDE_ADDRESS,
   },
 ];
@@ -89,8 +106,10 @@ export default function LoginScreen() {
   const loading = useAuthStore((s) => s.loading);
   const [error, setError] = useState<string | null>(null);
   const [bioEnabled, setBioEnabled] = useState(false);
-  
-  // State pour la modale d'adresse
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+
   const [selectedAddress, setSelectedAddress] = useState<AddressItem | null>(null);
 
   const schema = z.object({
@@ -113,9 +132,6 @@ export default function LoginScreen() {
     (async () => {
       const enabled = await biometricService.isEnabled();
       setBioEnabled(enabled);
-      if (enabled) {
-        setTimeout(handleBiometric, 500);
-      }
     })();
   }, []);
 
@@ -126,7 +142,7 @@ export default function LoginScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         await saveTokens('', refreshToken);
         await useAuthStore.getState().bootstrap();
-        
+
         const authedUser = useAuthStore.getState().user;
         if (authedUser) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -167,6 +183,15 @@ export default function LoginScreen() {
     }
   });
 
+  const handleTabChange = (tab: 'login' | 'register') => {
+    Haptics.selectionAsync();
+    if (tab === 'register') {
+      router.push('/(auth)/register');
+    } else {
+      setActiveTab('login');
+    }
+  };
+
   const copyToClipboard = async (text: string) => {
     await Clipboard.setStringAsync(text);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -186,454 +211,799 @@ export default function LoginScreen() {
   };
 
   return (
-    <ImageBackground
-      source={require('../../assets/images/logistics-transportation-container-cargo-ship-cargo-plane-with-working-crane-bridge-shipyard-sunrise-logistic-import-export-transport-industry-background-ai-generative.jpg')}
-      style={styles.bgImage}
-      resizeMode="cover"
+    <LinearGradient
+      colors={['#F0F5FF', '#F8FAFC', '#F1F5F9', '#EFF6FF']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.screenBg}
     >
-      {/* Superposition sombre renforcée pour une excellente lisibilité du texte */}
-      <View style={styles.bgOverlay} />
-      
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']} testID="login-screen">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              
-              <View style={styles.langRow}>
-                <LanguageSelector />
-              </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-              <View style={styles.brandWrap}>
-                <View style={styles.logoWrap}>
-                  <Image source={require('../../assets/images/logo_MOG.jpeg')} style={styles.logoImg} resizeMode="contain" />
+            {/* Header bleu royal élégant avec fond home.jpg */}
+            <ImageBackground
+              source={require('../../assets/images/home.jpg')}
+              style={styles.heroHeader}
+              resizeMode="cover"
+            >
+              <View style={styles.heroOverlay} />
+              <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+                <View style={styles.headerTopRow}>
+                  <LanguageSelector />
                 </View>
-                <Text style={styles.brandTitle}>{t('auth.brand_name')}</Text>
-                <Text style={styles.brandSubtitle}>{t('auth.welcome_subtitle')}</Text>
-                <Text style={styles.brandSlogan}>{t('auth.brand_slogan')}</Text>
-              </View>
 
-              {/* Formulaire Compact & Moderne */}
-              <View style={styles.card}>
-                <Text style={styles.welcome}>{t('auth.welcome_back')}</Text>
+                <View style={styles.heroBrandArea}>
+                  <View style={styles.brandBadgeSquare}>
+                    <Image source={require('../../assets/images/logo_MOG.jpeg')} style={styles.logoImgSquare} resizeMode="contain" />
+                  </View>
+                  <Text style={styles.heroTitleMain}>{t('auth.brand_name')}</Text>
+                  <Text style={styles.heroSloganSub}>{t('auth.brand_slogan')}</Text>
+                  <Text style={styles.heroSubtitleDesc}>{t('auth.welcome_subtitle')}</Text>
+                </View>
+              </SafeAreaView>
+            </ImageBackground>
 
-                <Controller
-                  control={control}
-                  name="email"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <View style={[styles.inputWrap, errors.email && styles.inputError]}>
-                      <Mail size={18} color={colors.textSecondary} />
-                      <TextInput
-                        testID="login-email"
-                        style={styles.input}
-                        placeholder="Email ou N° Téléphone"
-                        placeholderTextColor={colors.textSecondary}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                      />
-                    </View>
-                  )}
-                />
-                {errors.email && <Text style={styles.fieldError} testID="login-email-error">{errors.email.message}</Text>}
+            {/* Carte Blanche interactive superposée (Modèle Figma/Dribbble) */}
+            <View style={styles.cardContainer}>
+              <View style={styles.authCard}>
 
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <View style={[styles.inputWrap, errors.password && styles.inputError]}>
-                      <Lock size={18} color={colors.textSecondary} />
-                      <TextInput
-                        testID="login-password"
-                        style={styles.input}
-                        placeholder={t('auth.password')}
-                        placeholderTextColor={colors.textSecondary}
-                        secureTextEntry
-                        value={value}
-                        onChangeText={onChange}
-                        onBlur={onBlur}
-                      />
-                    </View>
-                  )}
-                />
-                {errors.password && <Text style={styles.fieldError} testID="login-password-error">{errors.password.message}</Text>}
-
-                <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgotBtn} testID="login-forgot">
-                  <Text style={styles.forgotText}>{t('auth.forgot_password')}</Text>
-                </TouchableOpacity>
-
-                {error && <Text style={styles.error}>{error}</Text>}
-
-                <View style={styles.submitRow}>
-                  <TouchableOpacity style={styles.submit} onPress={onSubmit} disabled={loading} testID="login-submit-button" accessibilityRole="button" accessibilityLabel={t('auth.sign_in')}>
-                    <Text style={styles.submitText}>{loading ? t('common.loading') : t('auth.sign_in')}</Text>
+                {/* Switcher Log In / Sign Up */}
+                <View style={styles.tabSwitcher}>
+                  <TouchableOpacity
+                    style={[styles.tabBtn, activeTab === 'login' && styles.tabBtnActive]}
+                    onPress={() => handleTabChange('login')}
+                  >
+                    <Text style={[styles.tabText, activeTab === 'login' && styles.tabTextActive]}>{t('auth.login')}</Text>
                   </TouchableOpacity>
-                  
+                  <TouchableOpacity
+                    style={[styles.tabBtn, activeTab === 'register' && styles.tabBtnActive]}
+                    onPress={() => handleTabChange('register')}
+                  >
+                    <Text style={[styles.tabText, activeTab === 'register' && styles.tabTextActive]}>{t('auth.register')}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Champ Identifiant (Email ou Phone) */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Email ou N° Téléphone</Text>
+                  <Controller
+                    control={control}
+                    name="email"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <View style={[styles.inputBox, errors.email && styles.inputError]}>
+                        <Mail size={18} color="#94A3B8" style={{ marginRight: 10 }} />
+                        <TextInput
+                          testID="login-email"
+                          style={styles.input}
+                          placeholder="ex: client@mog.com ou 698321187"
+                          placeholderTextColor="#94A3B8"
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          value={value}
+                          onChangeText={onChange}
+                          onBlur={onBlur}
+                        />
+                      </View>
+                    )}
+                  />
+                  {errors.email && <Text style={styles.fieldError} testID="login-email-error">{errors.email.message}</Text>}
+                </View>
+
+                {/* Champ Mot de passe avec Toggle Œil */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
+                  <Controller
+                    control={control}
+                    name="password"
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <View style={[styles.inputBox, errors.password && styles.inputError]}>
+                        <Lock size={18} color="#94A3B8" style={{ marginRight: 10 }} />
+                        <TextInput
+                          testID="login-password"
+                          style={styles.input}
+                          placeholder="••••••••"
+                          placeholderTextColor="#94A3B8"
+                          secureTextEntry={!showPassword}
+                          value={value}
+                          onChangeText={onChange}
+                          onBlur={onBlur}
+                        />
+                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                          {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  />
+                  {errors.password && <Text style={styles.fieldError} testID="login-password-error">{errors.password.message}</Text>}
+                </View>
+
+                {/* Se souvenir de moi & Mot de passe oublié */}
+                <View style={styles.optionsRow}>
+                  <TouchableOpacity style={styles.rememberWrap} onPress={() => setRememberMe(!rememberMe)}>
+                    {rememberMe ? <CheckSquare size={18} color="#2563EB" /> : <Square size={18} color="#94A3B8" />}
+                    <Text style={styles.rememberText}>Se souvenir de moi</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} testID="login-forgot">
+                    <Text style={styles.forgotText}>{t('auth.forgot_password')}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                {/* Bouton de Connexion vibrant */}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.primaryLoginBtn} onPress={onSubmit} disabled={loading} testID="login-submit-button" accessibilityRole="button" accessibilityLabel={t('auth.sign_in')}>
+                    <Text style={styles.primaryLoginText}>{loading ? t('common.loading') : t('auth.sign_in')}</Text>
+                  </TouchableOpacity>
+
                   {bioEnabled && (
-                    <TouchableOpacity style={styles.bioBtn} onPress={handleBiometric} accessibilityRole="button" accessibilityLabel={t('profile.biometrics')}>
-                      <Fingerprint size={26} color={colors.primary} />
+                    <TouchableOpacity style={styles.biometricBtn} onPress={handleBiometric} accessibilityRole="button" accessibilityLabel={t('profile.biometrics')}>
+                      <Fingerprint size={26} color="#2563EB" />
                     </TouchableOpacity>
                   )}
                 </View>
 
-                <View style={styles.bottomRow}>
-                  <Text style={styles.bottomText}>{t('auth.no_account')} </Text>
-                  <Link href="/(auth)/register" asChild>
-                    <TouchableOpacity testID="login-go-register">
-                      <Text style={styles.link}>{t('auth.sign_up')}</Text>
-                    </TouchableOpacity>
-                  </Link>
+                {/* Séparateur et Connexion Opérateur */}
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerLabel}>OU ACCÈS OPÉRATEUR</Text>
+                  <View style={styles.dividerLine} />
                 </View>
 
-                <View style={styles.dividerWrap}>
-                  <View style={styles.divider} />
-                  <Text style={styles.dividerText}>{t('common.or')}</Text>
-                  <View style={styles.divider} />
-                </View>
-
-                <TouchableOpacity 
-                  style={styles.operatorBtn} 
-                  onPress={() => router.push('/(auth)/operator-login')} 
+                <TouchableOpacity
+                  style={styles.operatorOutlineBtn}
+                  onPress={() => router.push('/(auth)/operator-login')}
                   testID="login-operator"
                   accessibilityRole="button"
                   accessibilityLabel={t('auth.operator_login')}
                 >
-                  <Text style={styles.operatorBtnText}>{t('auth.operator_login')}</Text>
+                  <Text style={styles.operatorOutlineText}>{t('auth.operator_login')}</Text>
                 </TouchableOpacity>
+
               </View>
 
-              {/* Grille d'Icônes pour les Entrepôts & Agences */}
-              <View style={styles.addressSection}>
-                <Text style={styles.addressSectionTitle}>Nos Entrepôts & Agences</Text>
-                <View style={styles.addressGrid}>
+              {/* Section Adresses (Carrousel Horizontal Subtil) */}
+              <View style={styles.warehouseSection}>
+                <View style={styles.warehouseHeadingRow}>
+                  <Text style={styles.sectionHeading}>Adresses</Text>
+                  <Text style={styles.sectionSubHeading}>Glissez pour voir & copier tout ➔</Text>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalScrollList}
+                  decelerationRate="fast"
+                >
                   {ADDRESSES.map((item) => {
-                    const IconComp = item.icon;
                     return (
                       <TouchableOpacity
                         key={item.id}
-                        style={styles.gridItem}
                         onPress={() => {
                           Haptics.selectionAsync();
                           setSelectedAddress(item);
                         }}
-                        activeOpacity={0.75}
+                        activeOpacity={0.88}
                       >
-                        <View style={[styles.gridIconWrap, { backgroundColor: item.color + '20' }]}>
-                          <IconComp size={22} color={item.color} />
-                        </View>
-                        <Text style={styles.gridItemTitle}>{item.title}</Text>
-                        <Text style={styles.gridItemSub}>{item.badge}</Text>
+                        <LinearGradient
+                          colors={item.gradientColors}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.gradientCard}
+                        >
+                          {/* En-tête : Drapeau/Ville + Bouton Copier */}
+                          <View style={styles.gradCardHeader}>
+                            <View style={styles.flagPill}>
+                              <Text style={styles.flagEmoji}>{item.flag}</Text>
+                              <Text style={styles.flagText}>{item.badge}</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.gradCopyBtn}
+                              onPress={() => copyToClipboard(item.address)}
+                            >
+                              <Copy size={12} color="#FFFFFF" />
+                              <Text style={styles.gradCopyText}>Copier</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* Zone centrale : Icône Material Design + Titre & Sous-titre */}
+                          <View style={styles.gradCardBody}>
+                            <View style={styles.gradIconWrap}>
+                              <MaterialCommunityIcons name={item.iconName} size={24} color="#FFFFFF" />
+                            </View>
+                            <View style={styles.gradTitleWrap}>
+                              <Text style={styles.gradTitle} numberOfLines={1}>{item.title}</Text>
+                              <Text style={styles.gradSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+                            </View>
+                          </View>
+
+                          {/* Pied de carte : Aperçu d'adresse en verre dépoli */}
+                          <View style={styles.gradGlassFooter}>
+                            <Text style={styles.gradAddressPreview} numberOfLines={2}>{item.address}</Text>
+                          </View>
+                        </LinearGradient>
                       </TouchableOpacity>
                     );
                   })}
-                </View>
+                </ScrollView>
               </View>
 
               {/* Réseaux Sociaux MOG */}
-              <View style={styles.socialCard}>
-                <Text style={styles.socialTitle}>Rejoignez-nous sur nos réseaux</Text>
-                <View style={styles.socialRow}>
-                  <TouchableOpacity 
-                    style={[styles.socialPill, { backgroundColor: '#E1306C' }]} 
+              <View style={styles.socialBar}>
+                <Text style={styles.socialBarTitle}>Suivez MOG Group Multiservice</Text>
+                <View style={styles.socialPillsWrap}>
+                  <TouchableOpacity
+                    style={[styles.socialPillBtn, { backgroundColor: '#E1306C' }]}
                     onPress={() => openSocialLink('https://www.instagram.com/mog_group_multiservice?igsh=MXJrejc0a2gwYTZkOQ==')}
                   >
                     <ExternalLink size={13} color="#fff" />
-                    <Text style={styles.socialText}>Instagram</Text>
+                    <Text style={styles.socialPillText}>Instagram</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.socialPill, { backgroundColor: '#1877F2' }]} 
+                  <TouchableOpacity
+                    style={[styles.socialPillBtn, { backgroundColor: '#1877F2' }]}
                     onPress={() => openSocialLink('https://www.facebook.com/share/1BjDRxHTdF/?mibextid=wwXIfr')}
                   >
                     <ExternalLink size={13} color="#fff" />
-                    <Text style={styles.socialText}>Facebook</Text>
+                    <Text style={styles.socialPillText}>Facebook</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.socialPill, { backgroundColor: '#000000' }]} 
+                  <TouchableOpacity
+                    style={[styles.socialPillBtn, { backgroundColor: '#000000' }]}
                     onPress={() => openSocialLink('https://www.tiktok.com/@moggroupmultiservice4?_r=1&_t=ZS-98POD5Aaq0a')}
                   >
                     <ExternalLink size={13} color="#fff" />
-                    <Text style={styles.socialText}>TikTok</Text>
+                    <Text style={styles.socialPillText}>TikTok</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-            </ScrollView>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-
-        {/* Modale d'Affichage & Copie d'Adresse */}
-        <Modal
-          visible={!!selectedAddress}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setSelectedAddress(null)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View style={styles.modalTitleRow}>
-                  {selectedAddress && (
-                    <View style={[styles.modalIconWrap, { backgroundColor: selectedAddress.color + '20' }]}>
-                      <selectedAddress.icon size={20} color={selectedAddress.color} />
-                    </View>
-                  )}
-                  <View>
-                    <Text style={styles.modalTitle}>{selectedAddress?.title}</Text>
-                    <Text style={styles.modalBadge}>{selectedAddress?.badge}</Text>
-                  </View>
-                </View>
-                <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedAddress(null)}>
-                  <X size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.modalBody}>
-                <Text style={styles.modalAddressText}>{selectedAddress?.address}</Text>
-              </View>
-
-              <View style={styles.modalFooter}>
-                <TouchableOpacity 
-                  style={styles.modalCopyBtn} 
-                  onPress={() => {
-                    if (selectedAddress) {
-                      copyToClipboard(selectedAddress.address);
-                    }
-                  }}
-                >
-                  <Copy size={18} color="#fff" />
-                  <Text style={styles.modalCopyBtnText}>Copier l'adresse</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          </View>
-        </Modal>
 
-      </SafeAreaView>
-    </ImageBackground>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+
+      {/* Modale d'Affichage & Copie d'Adresse */}
+      <Modal
+        visible={!!selectedAddress}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedAddress(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalTop}>
+              <View style={styles.modalTitleBlock}>
+                {selectedAddress && (
+                  <View style={[styles.modalIconWrap, { backgroundColor: selectedAddress.accentColor + '20' }]}>
+                    <MaterialCommunityIcons name={selectedAddress.iconName} size={24} color={selectedAddress.accentColor} />
+                  </View>
+                )}
+                <View>
+                  <Text style={styles.modalMainTitle}>{selectedAddress?.title}</Text>
+                  <Text style={styles.modalSubBadge}>{selectedAddress?.badge}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.modalCloseIcon} onPress={() => setSelectedAddress(null)}>
+                <X size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBodyContainer}>
+              <Text style={styles.modalAddressContent}>{selectedAddress?.address}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalPrimaryCopyBtn}
+              onPress={() => {
+                if (selectedAddress) {
+                  copyToClipboard(selectedAddress.address);
+                }
+              }}
+            >
+              <Copy size={18} color="#fff" />
+              <Text style={styles.modalPrimaryCopyText}>Copier l'adresse</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  bgImage: { flex: 1, width: '100%', height: '100%' },
-  // Assombrissement renforcé de l'arrière plan (0.78)
-  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(11, 19, 36, 0.78)' },
-  container: { flex: 1 },
-  scroll: { flexGrow: 1, padding: spacing.lg, paddingBottom: spacing.xxl },
-  langRow: { alignItems: 'flex-end' },
-  brandWrap: { alignItems: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
-  logoWrap: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: '#fff',
-    alignItems: 'center', justifyContent: 'center', ...shadow.floating,
-    padding: 4,
+  screenBg: {
+    flex: 1,
   },
-  logoImg: { width: '100%', height: '100%', borderRadius: 32 },
-  brandTitle: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', marginTop: spacing.sm, fontFamily: fonts.heading, letterSpacing: 0.5 },
-  brandSubtitle: { fontSize: 12, color: '#CBD5E1', marginTop: 2, textAlign: 'center', paddingHorizontal: 16, lineHeight: 17 },
-  brandSlogan: { fontSize: 11, color: '#60A5FA', marginTop: 4, fontWeight: '700', textAlign: 'center', fontStyle: 'italic' },
-  
-  /* Formulaire compact & moderne */
-  card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: radii.card + 4,
-    padding: spacing.md + 2,
-    ...shadow.floating,
-    marginTop: spacing.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+  scroll: {
+    flexGrow: 1,
+    paddingBottom: spacing.xxl,
   },
-  welcome: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: spacing.md },
-  inputWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: '#F8FAFC', borderRadius: radii.input, paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm, height: 46, borderWidth: 1, borderColor: '#E2E8F0',
-  },
-  input: { flex: 1, fontSize: 14, color: colors.text },
-  inputError: { borderWidth: 1, borderColor: colors.danger },
-  fieldError: { color: colors.danger, fontSize: 11, marginTop: -spacing.xs, marginBottom: spacing.xs, marginLeft: spacing.xs },
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: spacing.sm },
-  forgotText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
-  error: { color: colors.danger, fontSize: 12, marginBottom: spacing.xs },
-  submitRow: { flexDirection: 'row', gap: 10 },
-  submit: { flex: 1, backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 12, alignItems: 'center' },
-  submitText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  bioBtn: { width: 46, height: 46, borderRadius: radii.button, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF' },
-  bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.md },
-  bottomText: { color: colors.textSecondary, fontSize: 13 },
-  link: { color: colors.primary, fontSize: 13, fontWeight: '700' },
-  dividerWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.md },
-  divider: { flex: 1, height: 1, backgroundColor: colors.borderLight },
-  dividerText: { fontSize: 11, color: colors.textSecondary, fontWeight: '600' },
-  operatorBtn: { 
-    borderWidth: 1, 
-    borderColor: '#BFDBFE', 
-    borderRadius: radii.button, 
-    paddingVertical: 10, 
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-  },
-  operatorBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
 
-  /* Grille des adresses entrepôts & agences */
-  addressSection: {
-    marginTop: spacing.md,
+  /* Header Hero Sombre & Élégant avec accent bleu nuit */
+  heroHeader: {
+    width: '100%',
+    minHeight: 250,
+    backgroundColor: '#0F172A',
   },
-  addressSectionTitle: {
-    fontSize: 13,
+  // Superposition sombre renforcée (Navy Profond 0.94) pour faire ressortir le texte & le logo 100%
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+  },
+  headerSafeArea: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 44,
+  },
+  headerTopRow: {
+    alignItems: 'flex-end',
+    marginTop: spacing.xs,
+  },
+  heroBrandArea: {
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  brandBadgeSquare: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 5,
+    ...shadow.floating,
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+  },
+  logoImgSquare: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 15,
+  },
+  heroTitleMain: {
+    fontSize: 25,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginTop: spacing.sm,
+    fontFamily: fonts.heading,
+    letterSpacing: 1,
+    textAlign: 'center',
+    textShadowColor: '#000000',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  heroSloganSub: {
+    fontSize: 12,
+    color: '#60A5FA',
+    marginTop: 3,
     fontWeight: '800',
-    color: '#E2E8F0',
-    marginBottom: spacing.xs + 2,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
-  addressGrid: {
+  heroSubtitleDesc: {
+    fontSize: 12,
+    color: '#CBD5E1',
+    marginTop: 6,
+    textAlign: 'center',
+    fontWeight: '500',
+    paddingHorizontal: 24,
+    lineHeight: 18,
+  },
+
+  /* Carte Blanche de Connexion superposée (100% Full Width comme Figma) */
+  cardContainer: {
+    width: '100%',
+    marginTop: -24,
+  },
+  authCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: spacing.lg,
+    paddingTop: spacing.xl,
+    ...shadow.floating,
+    minHeight: 480,
+  },
+
+  /* Segmented Tab Switcher (Log In / Sign Up) */
+  tabSwitcher: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: spacing.lg,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    ...shadow.sm,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  tabTextActive: {
+    color: '#1E293B',
+    fontWeight: '800',
+  },
+
+  /* Champs de saisie avec Labels */
+  fieldGroup: {
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.input + 2,
+    paddingHorizontal: spacing.md,
+    height: 50,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  fieldError: {
+    color: colors.danger,
+    fontSize: 11,
+    marginTop: 4,
+    marginLeft: 2,
+  },
+
+  /* Options Row (Remember me + Forgot pwd) */
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    marginTop: 2,
+  },
+  rememberWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rememberText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  forgotText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    marginBottom: spacing.md,
+  },
+
+  /* Action Buttons */
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  primaryLoginBtn: {
+    flex: 1,
+    backgroundColor: '#2563EB',
+    borderRadius: radii.button + 2,
+    paddingVertical: 15,
+    alignItems: 'center',
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  primaryLoginText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  biometricBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: radii.button + 2,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+  },
+
+  /* Separator */
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginVertical: spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  dividerLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  operatorOutlineBtn: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: radii.button + 2,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  operatorOutlineText: {
+    color: '#475569',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  /* Section Nos Entrepôts & Agences (Carrousel Horizontal Modernisé) */
+  warehouseSection: {
+    marginTop: spacing.xl,
+  },
+  warehouseHeadingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  sectionHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#334155',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  sectionSubHeading: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  horizontalScrollList: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 4,
     gap: spacing.sm,
   },
-  gridItem: {
-    width: '48%',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: radii.card,
+  gradientCard: {
+    width: 240,
+    borderRadius: radii.card + 6,
     padding: spacing.md,
-    alignItems: 'center',
-    ...shadow.card,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    ...shadow.floating,
+    justifyContent: 'space-between',
   },
-  gridIconWrap: {
+  gradCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  flagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  flagEmoji: {
+    fontSize: 12,
+  },
+  flagText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  gradCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  gradCopyText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  gradCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 4,
+  },
+  gradIconWrap: {
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
-  gridItemTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
+  gradTitleWrap: {
+    flex: 1,
   },
-  gridItemSub: {
+  gradTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  gradSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 1,
+  },
+  gradGlassFooter: {
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    borderRadius: radii.input,
+    padding: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  gradAddressPreview: {
     fontSize: 10,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 14,
+    fontFamily: fonts.body,
   },
 
-  /* Social Media */
-  socialCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: radii.card,
+  /* Social Bar */
+  socialBar: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.card + 2,
     padding: spacing.md,
     marginTop: spacing.md,
     alignItems: 'center',
-    ...shadow.card,
+    ...shadow.sm,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  socialTitle: {
+  socialBarTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    color: '#64748B',
+    marginBottom: spacing.xs + 2,
   },
-  socialRow: {
+  socialPillsWrap: {
     flexDirection: 'row',
-    gap: spacing.xs + 2,
+    gap: 8,
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
-  socialPill: {
+  socialPillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
   },
-  socialText: {
+  socialPillText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
   },
 
-  /* Modal Adresse */
-  modalOverlay: {
+  /* Modal */
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
   },
-  modalContent: {
+  modalCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: radii.card + 6,
+    borderRadius: radii.card + 8,
     padding: spacing.lg,
     ...shadow.floating,
   },
-  modalHeader: {
+  modalTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  modalTitleRow: {
+  modalTitleBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
   modalIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalTitle: {
-    fontSize: 17,
+  modalMainTitle: {
+    fontSize: 18,
     fontWeight: '800',
-    color: colors.text,
+    color: '#0F172A',
   },
-  modalBadge: {
+  modalSubBadge: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#2563EB',
   },
-  modalCloseBtn: {
+  modalCloseIcon: {
     padding: 4,
   },
-  modalBody: {
+  modalBodyContainer: {
     backgroundColor: '#F8FAFC',
-    borderRadius: radii.input,
+    borderRadius: radii.input + 2,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     marginBottom: spacing.lg,
   },
-  modalAddressText: {
+  modalAddressContent: {
     fontSize: 14,
-    color: colors.text,
+    color: '#334155',
     lineHeight: 22,
     fontFamily: fonts.body,
     fontWeight: '500',
   },
-  modalFooter: {},
-  modalCopyBtn: {
+  modalPrimaryCopyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: '#2563EB',
     paddingVertical: 14,
-    borderRadius: radii.button,
+    borderRadius: radii.button + 2,
   },
-  modalCopyBtnText: {
+  modalPrimaryCopyText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });
+
 
 
