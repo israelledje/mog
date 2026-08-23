@@ -46,7 +46,7 @@ services:
           } else { throw e; }
         }
       ';
-      echo '⏳ Attente de l'élection du PRIMARY...';
+      echo \"⏳ Attente de l'élection du PRIMARY...\";
       sleep 5;
       mongosh --host mongodb:27017 -u mogadmin -p $${MONGO_ROOT_PASSWORD} --authenticationDatabase admin --eval '
         const db = db.getSiblingDB(\"cargo_app\");
