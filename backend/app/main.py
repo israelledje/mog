@@ -26,11 +26,11 @@ async def lifespan(app: FastAPI):
     if db_manager.db is not None:
         await create_indexes(db_manager.db)
 
-    # Seed Global Settings
+    # Seed Global Settings (upsert idempotent pour éviter les conflits multi-workers Gunicorn)
     if db_manager.db is not None:
-        settings_count = await db_manager.db.settings.count_documents({"_id": "global"})
-        if settings_count == 0:
-            await db_manager.db.settings.insert_one({
+        await db_manager.db.settings.update_one(
+            {"_id": "global"},
+            {"$setOnInsert": {
                 "_id": "global",
                 "exchange_rate_cny_xaf_under_1m": 100.0,
                 "exchange_rate_cny_xaf_over_1m": 85.0,
@@ -40,8 +40,10 @@ async def lifespan(app: FastAPI):
                 "air_express_delay_days": 3,
                 "sea_delay_days": 45,
                 "support_phone": "237694581150"
-            })
-            print("Global settings seeded successfully.")
+            }},
+            upsert=True
+        )
+        print("Global settings seeded successfully.")
 
     yield
     # Shutdown
