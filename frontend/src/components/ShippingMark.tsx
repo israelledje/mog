@@ -13,23 +13,20 @@ interface ShippingMarkProps {
   name: string;
   phone: string;
   city: string;
+  transportMode?: 'air' | 'sea';
 }
 
-export default function ShippingMark({ name, phone, city }: ShippingMarkProps) {
+const AIR_CARGO_ADDRESS = `广东省广州市越秀区广园西路83号宇航大厦添越中心负二层205A档 18802010441`;
+const SEA_WAREHOUSE_ADDRESS = `广东省佛山市南海区大步村发展路1号（天福药业有限公司院内2号楼） MOG 18802010441`;
+
+export default function ShippingMark({ name, phone, city, transportMode = 'sea' }: ShippingMarkProps) {
+  const isAir = transportMode === 'air';
+  const warehouseInfo = isAir ? AIR_CARGO_ADDRESS : SEA_WAREHOUSE_ADDRESS;
+
   const markText = `1- M.O.G
 2- NAME: ${name}
 3- PHONE: ${phone}
 4- CITY: ${city}`;
-
-  const warehouseInfo = `收件人 : MOG
-电话 : 18802010441
-导航输入 : MOG
-地址 : 广东省佛山市南海区大步村发展路1号
-( 天福药业有限公司院内2号楼 )
-
-注意 : 必须写上客户的唛头
-( 客户的名字和国外的电话号码 )
-拒收到付件!!!`;
 
   const fullText = `${markText}\n\n${warehouseInfo}`;
 
@@ -148,11 +145,8 @@ export default function ShippingMark({ name, phone, city }: ShippingMarkProps) {
         </View>
 
         <View style={styles.chineseArea}>
-          <Text style={styles.chineseText}>收件人 : MOG</Text>
-          <Text style={styles.chineseText}>电话 : 18802010441</Text>
-          <Text style={styles.chineseText}>导航输入 : MOG</Text>
-          <Text style={styles.chineseText}>地址 : 广东省佛山市南海区大步村发展路1号</Text>
-          <Text style={styles.chineseText}>( 天福药业有限公司院内2号楼 )</Text>
+          <Text style={styles.modeBadge}>{isAir ? '✈️ ENTREPÔT AÉRIEN (AIR CARGO)' : '🚢 ENTREPÔT MARITIME (FOSHAN)'}</Text>
+          <Text style={styles.chineseText}>{warehouseInfo}</Text>
           
           <Text style={styles.warning}>注意 : 必须写上客户的唛头</Text>
           <Text style={styles.warning}>( 客户的名字和国外的电话号码 )</Text>
@@ -266,11 +260,19 @@ const styles = StyleSheet.create({
   chineseArea: {
     marginBottom: spacing.md,
   },
+  modeBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primary,
+    marginBottom: 6,
+    letterSpacing: 0.5,
+  },
   chineseText: {
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 22,
-    marginBottom: 2,
+    marginBottom: 4,
+    fontWeight: '600',
   },
   warning: {
     fontSize: 13,

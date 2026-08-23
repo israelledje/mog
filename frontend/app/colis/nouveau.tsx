@@ -187,6 +187,7 @@ export default function NewColisScreen() {
             name={user?.full_name || ''} 
             phone={user?.phone || ''} 
             city={user?.city || ''} 
+            transportMode={form.transport_mode}
           />
 
           <TouchableOpacity style={styles.primary} onPress={onClose} testID="new-colis-done">

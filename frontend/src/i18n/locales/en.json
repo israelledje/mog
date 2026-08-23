@@ -3,7 +3,7 @@
     "login": "Login",
     "register": "Register",
     "forgot_password": "Forgot password?",
-    "email": "Email",
+    "email": "Email or Phone Number",
     "password": "Password",
     "full_name": "Full name",
     "phone": "WhatsApp phone",
@@ -28,7 +28,16 @@
     "create_account_subtitle": "Join the groupage platform",
     "operator_login": "Operator Login",
     "brand_name": "M.O.G CONNECT+",
-    "brand_slogan": "The future is built with you, and it is now."
+    "brand_slogan": "The future is built with you, and it is now.",
+    "our_warehouses": "Our Warehouses & Agencies",
+    "china_warehouses": "China Warehouses",
+    "cameroon_agencies": "Cameroon Agencies",
+    "social_networks": "Join us on social media",
+    "copied_toast": "Address copied to clipboard!",
+    "air_cargo_title": "Air Cargo Address (China)",
+    "sea_wh_title": "Maritime Warehouse (China)",
+    "douala_agency_title": "Douala Agency",
+    "yaounde_agency_title": "Yaoundé Agency"
   },
   "home": {
     "greeting": "Hello",

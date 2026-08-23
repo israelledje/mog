@@ -90,9 +90,19 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
 @limiter.limit("10/minute")
 async def login(request: Request, login_data: LoginRequest, response: Response, db = Depends(get_database)):
     # Simuler la récupération utilisateur (En attendant Story 1.2)
-    # Dans la vraie vie, on cherche dans MongoDB
-    escaped_email = re.escape(login_data.email.strip())
-    user = await db.users.find_one({"email": {"$regex": f"^{escaped_email}$", "$options": "i"}})
+    identifier = login_data.email.strip()
+    escaped = re.escape(identifier)
+    
+    # Nettoyage du numéro de téléphone s'il s'agit d'un téléphone (ex: supprimer espaces)
+    clean_phone = re.sub(r'\D', '', identifier)
+    
+    query_conditions = [
+        {"email": {"$regex": f"^{escaped}$", "$options": "i"}}
+    ]
+    if clean_phone and len(clean_phone) >= 6:
+        query_conditions.append({"phone": {"$regex": f"{clean_phone}$"}})
+
+    user = await db.users.find_one({"$or": query_conditions})
     
     hashed_pwd = None
     if user:
@@ -101,7 +111,7 @@ async def login(request: Request, login_data: LoginRequest, response: Response, 
     if not user or not hashed_pwd or not verify_password(login_data.password, hashed_pwd):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou mot de passe incorrect",
+            detail="Identifiant (Email / Téléphone) ou mot de passe incorrect",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

@@ -1,9 +1,4 @@
-/** Adresse entrepôt MOG en Chine (Foshan) */
-export const CHINA_WAREHOUSE_ADDRESS = `收件人 : MOG
-电话 : 18802010441
-导航输入 : MOG
-地址 : 广东省佛山市南海区大步村发展路1号
-( 天福药业有限公司院内2号楼 )`;
+export const CHINA_WAREHOUSE_ADDRESS = `广东省佛山市南海区大步村发展路1号（天福药业有限公司院内2号楼） MOG 18802010441`;
 
 export function buildWarehouseClipboardText(params: {
   clientCode?: string | null;
