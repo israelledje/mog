@@ -76,7 +76,6 @@ services:
       - uploads_data:/app/uploads
       - backups_data:/app/backups
     environment:
-      - MONGO_URI=mongodb://mongodb:27017
       - UPLOAD_DIR=/app/uploads
       - BACKUP_DIR=/app/backups
     env_file:
