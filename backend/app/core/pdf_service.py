@@ -192,6 +192,108 @@ def generate_invoice_pdf(package_data: dict) -> BytesIO:
     return _pdf_bytes(pdf)
 
 
+def generate_insurance_invoice_pdf(package_data: dict, user_data: Optional[dict] = None) -> BytesIO:
+    """Génère la facture et certificat officiel de police d'assurance cargo 3.5%."""
+    pdf = MogDocumentPDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    tracking = package_data.get("tracking_number", "N/A")
+
+    # En-tête Titre
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(*MOG_BLUE)
+    pdf.cell(0, 8, "CERTIFICAT & FACTURE D'ASSURANCE CARGO", ln=True)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*MOG_TEXT)
+    pdf.cell(0, 5, f"Police d'Assurance N° : ASSUR-{tracking}", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(*MOG_MUTED)
+    created = package_data.get("created_at")
+    date_str = created.strftime("%d/%m/%Y") if hasattr(created, "strftime") else datetime.now().strftime("%d/%m/%Y")
+    pdf.cell(0, 5, f"Date d'émission : {date_str}", ln=True)
+    pdf.ln(4)
+
+    # Section Client / Marchandise
+    pdf.set_fill_color(240, 245, 250)
+    pdf.set_text_color(*MOG_TEXT)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(89, 9, " ASSURÉ (CLIENT)", fill=True)
+    pdf.cell(89, 9, " MARCHANDISE ASSURÉE", fill=True, ln=True)
+
+    pdf.set_font("Helvetica", "", 10)
+    client_name = user_data.get("full_name") if user_data else package_data.get("owner_id", "N/A")
+    client_phone = user_data.get("phone") if user_data else "N/A"
+    pdf.cell(89, 6, f"Nom : {client_name}")
+    pdf.cell(89, 6, f"Colis Tracking : {tracking}", ln=True)
+
+    pdf.cell(89, 6, f"Email/ID : {package_data.get('owner_id', 'N/A')}")
+    pdf.cell(89, 6, f"Fournisseur : {package_data.get('supplier_name', 'N/A')}", ln=True)
+
+    pdf.cell(89, 6, f"Téléphone : {client_phone}")
+    pdf.cell(89, 6, f"Transport : {str(package_data.get('transport_mode', 'N/A')).upper()}", ln=True)
+    pdf.ln(6)
+
+    # Détail de la couverture
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(*MOG_BLUE)
+    pdf.cell(0, 8, "CONDITIONS DE GARANTIE & COUVERTURE", ln=True, border="B")
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*MOG_TEXT)
+    pdf.cell(45, 6, "Taux de prime :", border=0)
+    pdf.cell(0, 6, "3.5% de la valeur déclarée", ln=True)
+
+    val_declaree = package_data.get("declared_value", 0)
+    currency = package_data.get("currency", "CNY")
+    pdf.cell(45, 6, "Valeur marchande déclarée :", border=0)
+    pdf.cell(0, 6, f"{val_declaree:,.2f} {currency}", ln=True)
+
+    pdf.cell(45, 6, "Nature de la couverture :", border=0)
+    pdf.cell(0, 6, "Couverture intégrale à 100% contre la perte, avarie et détérioration transport.", ln=True)
+
+    pdf.cell(45, 6, "Statut du règlement :", border=0)
+    statut_reglement = "PAYÉE / VALIDÉE" if package_data.get("insurance_paid") else "EN COURS DE TRAITEMENT"
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(0, 6, statut_reglement, ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.ln(6)
+
+    # QR Code
+    qr = qrcode.QRCode(version=1, box_size=8, border=3)
+    qr.add_data(f"https://tracker.cargoline.com/track/{tracking}")
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+
+    qr_buffer = BytesIO()
+    qr_img.save(qr_buffer, format="PNG")
+    qr_buffer.seek(0)
+    pdf.image(qr_buffer, x=15, y=pdf.get_y(), w=26, h=26)
+    pdf.set_xy(45, pdf.get_y() + 5)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(*MOG_MUTED)
+    pdf.cell(0, 4, "Scannez ce QR Code pour consulter l'authenticité", ln=True)
+    pdf.set_x(45)
+    pdf.cell(0, 4, "et le suivi en direct de votre expédition assurée.", ln=True)
+    pdf.ln(18)
+
+    # Tableau Récapitulatif Financier
+    insurance_amount = package_data.get("insurance_amount", 0) or 0
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*MOG_TEXT)
+    pdf.cell(130, 7, "Prime d'assurance cargo (3.5%)", align="R")
+    pdf.cell(0, 7, f"{insurance_amount:,.0f} FCFA", ln=True, align="R")
+
+    pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_fill_color(22, 163, 74)  # Vert assurance émeraude
+    pdf.set_text_color(255)
+    pdf.cell(0, 11, f" MONTANT TOTAL ASSURANCE : {insurance_amount:,.0f} FCFA ", ln=True, align="R", fill=True)
+
+    return _pdf_bytes(pdf)
+
+
 def generate_manifest_pdf(container_data: dict, packages: List[dict]) -> BytesIO:
     pdf = MogDocumentPDF()
     pdf.alias_nb_pages()

@@ -109,11 +109,21 @@ class NotificationService:
         if not user:
             return
         tracking = package_data.get("tracking_number") or "N/A"
-        msg = (
-            f"MOG : Votre colis {tracking} a été créé avec succès. "
-            f"Il est en attente de réception à Foshan. "
-            f"Communiquez le marquage (shipping mark) à votre fournisseur."
-        )
+        declared_val = package_data.get("declared_value", 0)
+        currency = package_data.get("currency", "CNY")
+        insurance_enabled = package_data.get("insurance_enabled", False)
+        insurance_amount = package_data.get("insurance_amount", 0)
+        insurance_paid = package_data.get("insurance_paid", False)
+
+        msg = f"MOG : Votre colis {tracking} (Valeur déclarée : {declared_val:,.0f} {currency}) a été enregistré avec succès."
+        if insurance_enabled:
+            if insurance_paid:
+                msg += f" Assurance 3.5% réglée ({insurance_amount:,.0f} FCFA). Couverture 100% active."
+            else:
+                msg += f" Assurance 3.5% activée ({insurance_amount:,.0f} FCFA). Facture disponible dans Mes Documents."
+        else:
+            msg += " En attente de réception à Foshan. Communiquez le marquage à votre fournisseur."
+
         await NotificationService.notify_phone(user.get("phone"), msg)
         if user.get("push_token"):
             await NotificationService.send_push(
@@ -123,6 +133,34 @@ class NotificationService:
                 data={
                     "colis_id": str(package_data.get("id") or package_data.get("_id") or ""),
                     "type": "colis_created",
+                    "tracking_number": tracking,
+                },
+                owner_email=user.get("email"),
+            )
+
+    @staticmethod
+    async def notify_insurance_paid(package_data: dict, amount: float):
+        """Notification de confirmation du paiement de l'assurance cargo."""
+        user = await NotificationService._owner_user(package_data)
+        if not user:
+            return
+        tracking = package_data.get("tracking_number") or "N/A"
+        declared_val = package_data.get("declared_value", 0)
+        currency = package_data.get("currency", "CNY")
+        msg = (
+            f"MOG CONFIRMATION : Paiement de l'assurance validé ({amount:,.0f} FCFA) "
+            f"pour le colis {tracking} (Valeur déclarée : {declared_val:,.0f} {currency}). "
+            f"Votre marchandise est couverte à 100%. Votre certificat/facture est disponible dans Mes Documents."
+        )
+        await NotificationService.notify_phone(user.get("phone"), msg)
+        if user.get("push_token"):
+            await NotificationService.send_push(
+                user["push_token"],
+                "Assurance validée — MOG",
+                msg,
+                data={
+                    "colis_id": str(package_data.get("id") or package_data.get("_id") or ""),
+                    "type": "insurance_paid",
                     "tracking_number": tracking,
                 },
                 owner_email=user.get("email"),

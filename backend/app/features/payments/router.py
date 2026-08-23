@@ -14,6 +14,8 @@ import os
 
 from app.core.database import get_database
 from app.core.deps import get_current_user, check_role
+from app.core.notification_service import NotificationService
+from app.core.task_queue import fire_and_forget
 from app.features.payments.loyalty import (
     DEFAULT_LOYALTY,
     build_loyalty_summary,
@@ -181,6 +183,12 @@ async def pay_mobile(
                     }
                 },
             )
+            pkg = await db.packages.find_one({"_id": data.package_id})
+            if pkg:
+                fire_and_forget(
+                    NotificationService.notify_insurance_paid(pkg, data.amount),
+                    label=f"notify_insurance_paid:{data.package_id}",
+                )
         else:
             await db.packages.update_one(
                 {"_id": data.package_id},
@@ -251,6 +259,12 @@ async def pay_bank(
                     }
                 },
             )
+            pkg = await db.packages.find_one({"_id": data.package_id})
+            if pkg:
+                fire_and_forget(
+                    NotificationService.notify_insurance_paid(pkg, data.amount),
+                    label=f"notify_insurance_bank:{data.package_id}",
+                )
         else:
             await db.packages.update_one(
                 {"_id": data.package_id},

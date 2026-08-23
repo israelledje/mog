@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, FileText, Download, Receipt, Package } from 'lucide-react-native';
+import { ChevronLeft, FileText, Download, Receipt, Package, ShieldCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { colisApi, groupagesApi } from '../../src/api/colis';
 import { fileService } from '../../src/api/files';
@@ -25,8 +25,7 @@ export default function DocumentsScreen() {
           groupagesApi.getMyPackingLists().catch(() => [])
         ]);
 
-        // Factures : on réutilise exactement le mécanisme du détail colis
-        // (endpoint /colis/{id}/invoice). On ne liste que les colis déjà facturés.
+        // Factures de fret
         const invoiceDocs = colis
           .filter((c) => c.invoice_status && c.invoice_status !== 'none' && c.status !== 'pending_reception')
           .map((c) => ({
@@ -38,6 +37,19 @@ export default function DocumentsScreen() {
             filename: `Facture_${c.tracking_number}.pdf`
           }));
 
+        // Factures & Certificats d'Assurance Cargo 3.5%
+        const insuranceDocs = colis
+          .filter((c) => c.insurance_enabled && (c.insurance_paid || (c.insurance_amount && c.insurance_amount > 0)))
+          .map((c) => ({
+            id: `ins-${c.id}`,
+            title: `Facture Assurance - ${c.tracking_number}`,
+            date: c.updated_at || c.created_at,
+            type: 'insurance_invoice',
+            downloadPath: `/colis/${c.id}/insurance-invoice`,
+            filename: `Facture_Assurance_${c.tracking_number}.pdf`
+          }));
+
+        // Packing Lists
         const packingDocs = packingLists.map(pl => ({
           id: pl.id || pl._id,
           title: t('profile.doc_packing_list', { ref: pl.container_number || t('profile.doc_groupage') }),
@@ -47,7 +59,7 @@ export default function DocumentsScreen() {
           filename: `PackingList_${pl.container_number || 'MOG'}.pdf`
         }));
 
-        const allDocs = [...invoiceDocs, ...packingDocs].sort(
+        const allDocs = [...invoiceDocs, ...insuranceDocs, ...packingDocs].sort(
           (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
         );
 
@@ -92,8 +104,10 @@ export default function DocumentsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.docCard}>
-              <View style={styles.iconContainer}>
-                {item.type === 'invoice' ? (
+              <View style={[styles.iconContainer, item.type === 'insurance_invoice' && { backgroundColor: '#ECFDF5' }]}>
+                {item.type === 'insurance_invoice' ? (
+                  <ShieldCheck size={24} color="#10B981" />
+                ) : item.type === 'invoice' ? (
                   <Receipt size={24} color={colors.primary} />
                 ) : (
                   <Package size={24} color={colors.primary} />

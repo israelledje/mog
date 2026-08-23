@@ -4,7 +4,7 @@ from app.core.paths import UPLOAD_DIR, upload_file_path, public_upload_url
 from app.features.shipping.schemas import PackageCreate, PackageInDB, PackageUpdate, PackageReceive, PackageAuditUpdate, InvoiceUpdate
 from app.core.database import get_database
 from app.core.utils import apply_watermark
-from app.core.pdf_service import generate_invoice_pdf
+from app.core.pdf_service import generate_invoice_pdf, generate_insurance_invoice_pdf
 from app.core.notification_service import NotificationService
 from app.core.task_queue import fire_and_forget
 from app.core.config import settings
@@ -722,6 +722,34 @@ async def get_package_invoice(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename=Facture_{package.get('tracking_number', 'Colis')}.pdf"
+        }
+    )
+
+
+@router.get("/{package_id}/insurance-invoice")
+async def get_package_insurance_invoice(
+    package_id: str,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+        
+    is_owner = package.get("owner_id") == current_user["email"]
+    is_staff = current_user.get("role") in ["admin", "operator"]
+    
+    if not (is_owner or is_staff):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    user = await db.users.find_one({"email": package.get("owner_id")})
+    pdf_buffer = generate_insurance_invoice_pdf(package, user)
+    
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=Facture_Assurance_{package.get('tracking_number', 'Colis')}.pdf"
         }
     )
 
