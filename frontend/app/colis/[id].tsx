@@ -50,6 +50,8 @@ export default function ColisDetailScreen() {
   const [colis, setColis] = useState<Colis | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingInsurance, setDownloadingInsurance] = useState(false);
+  const [addingInsurance, setAddingInsurance] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -86,6 +88,45 @@ export default function ColisDetailScreen() {
     }
   };
 
+  const onDownloadInsuranceInvoice = async () => {
+    if (!colis || !id) return;
+    setDownloadingInsurance(true);
+    Haptics.selectionAsync();
+    try {
+      await fileService.downloadAndShare(
+        `/colis/${id}/insurance-invoice`, 
+        `Facture_Assurance_${colis.tracking_number}.pdf`
+      );
+      Toast.show({ type: 'success', text1: 'Facture assurance téléchargée' });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Erreur lors du téléchargement' });
+    } finally {
+      setDownloadingInsurance(false);
+    }
+  };
+
+  const onAddInsurance = async () => {
+    if (!colis || !id) return;
+    setAddingInsurance(true);
+    Haptics.selectionAsync();
+    try {
+      const updated = await colisApi.addInsurance(id, {
+        declared_value: colis.declared_value,
+        currency: colis.currency,
+      });
+      setColis(updated);
+      Toast.show({ type: 'success', text1: 'Assurance 3.5% ajoutée avec succès !' });
+      router.push({
+        pathname: '/colis/paiement',
+        params: { id, type: 'insurance', amount: String(updated.insurance_amount || 0) },
+      });
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: 'Erreur lors de l\'ajout de l\'assurance' });
+    } finally {
+      setAddingInsurance(false);
+    }
+  };
+
   const onContactSupport = () => {
     Haptics.selectionAsync();
     const supportPhone = settings?.support_phone || '237694581150';
@@ -106,6 +147,11 @@ export default function ColisDetailScreen() {
       <View style={styles.loaderWrap}><Text>—</Text></View>
     );
   }
+
+  const cnyRate = Number(settings?.exchange_rate_cny_xaf_under_1m) || 100;
+  const fx = colis.currency === 'USD' ? 620 : cnyRate;
+  const estimatedInsuranceAmount = colis.insurance_amount || Math.round((colis.declared_value || 0) * 0.035 * fx);
+  const canAddInsurance = !colis.insurance_enabled && !['departed', 'in_transit', 'arrived', 'distributed', 'delivered'].includes(colis.status);
 
   const Icon = colis.transport_mode === 'air' ? Plane : Ship;
 
@@ -190,15 +236,53 @@ export default function ColisDetailScreen() {
         />
 
         <View style={styles.actions}>
-          {colis.insurance_enabled && !colis.insurance_paid && (colis.insurance_amount || 0) > 0 && (
+          {canAddInsurance && (
             <TouchableOpacity
               style={[styles.actionBtn, { borderColor: '#10B981', backgroundColor: '#ECFDF5' }]}
-              onPress={() => router.push({ pathname: '/colis/paiement', params: { id: colis.id, type: 'insurance', amount: String(colis.insurance_amount) } })}
+              onPress={onAddInsurance}
+              disabled={addingInsurance}
+            >
+              {addingInsurance ? (
+                <ActivityIndicator size="small" color="#059669" />
+              ) : (
+                <>
+                  <ShieldCheck size={18} color="#059669" />
+                  <Text style={[styles.actionText, { color: '#059669', fontWeight: '800' }]}>
+                    Souscrire Assurance Cargo 3.5% {estimatedInsuranceAmount > 0 ? `(${estimatedInsuranceAmount.toLocaleString()} FCFA)` : ''}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {colis.insurance_enabled && !colis.insurance_paid && estimatedInsuranceAmount > 0 && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: '#10B981', backgroundColor: '#ECFDF5' }]}
+              onPress={() => router.push({ pathname: '/colis/paiement', params: { id: colis.id, type: 'insurance', amount: String(estimatedInsuranceAmount) } })}
             >
               <ShieldCheck size={18} color="#059669" />
               <Text style={[styles.actionText, { color: '#059669', fontWeight: '800' }]}>
-                Payer l'assurance ({colis.insurance_amount?.toLocaleString()} FCFA)
+                Payer l'assurance ({estimatedInsuranceAmount.toLocaleString()} FCFA)
               </Text>
+            </TouchableOpacity>
+          )}
+
+          {colis.insurance_enabled && (colis.insurance_paid || (colis.insurance_amount || 0) > 0) && (
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: '#10B981' }]}
+              onPress={onDownloadInsuranceInvoice}
+              disabled={downloadingInsurance}
+            >
+              {downloadingInsurance ? (
+                <ActivityIndicator size="small" color="#059669" />
+              ) : (
+                <>
+                  <ShieldCheck size={18} color="#059669" />
+                  <Text style={[styles.actionText, { color: '#059669' }]}>
+                    Facture d'assurance (PDF)
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
 

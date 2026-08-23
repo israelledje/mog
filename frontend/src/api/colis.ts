@@ -95,6 +95,10 @@ export const colisApi = {
     });
     return data.url;
   },
+  async addInsurance(id: string, payload?: { declared_value?: number; currency?: string }): Promise<Colis> {
+    const { data } = await api.post(`/colis/${id}/add-insurance`, payload);
+    return normalizeColis(data);
+  },
 };
 
 export const groupagesApi = {

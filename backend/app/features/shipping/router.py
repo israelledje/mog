@@ -499,6 +499,58 @@ async def get_package_detail(
     
     return _prepare_package(package)
 
+
+class AddInsuranceRequest(BaseModel):
+    declared_value: Optional[float] = None
+    currency: Optional[str] = None
+
+
+@router.post("/{package_id}/add-insurance")
+async def add_insurance_to_existing_package(
+    package_id: str,
+    data: Optional[AddInsuranceRequest] = None,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    is_owner = package.get("owner_id") == current_user["email"]
+    is_staff = current_user.get("role") in ["admin", "operator"]
+    if not (is_owner or is_staff):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    if package.get("status") in ["departed", "in_transit", "arrived", "distributed", "delivered"]:
+        raise HTTPException(status_code=400, detail="L'assurance ne peut plus être ajoutée après le départ du colis.")
+
+    declared_value = (data.declared_value if data and data.declared_value is not None else package.get("declared_value", 0)) or 0
+    currency = (data.currency if data and data.currency else package.get("currency", "CNY")) or "CNY"
+
+    # Récupérer taux de change
+    settings_doc = await db.settings.find_one({}) or {}
+    cny_rate = float(settings_doc.get("exchange_rate_cny_xaf_under_1m", 100))
+    usd_rate = 620.0
+    rate = usd_rate if currency == "USD" else cny_rate
+
+    insurance_amount = round(declared_value * 0.035 * rate)
+
+    update_fields = {
+        "insurance_enabled": True,
+        "insurance_rate": 0.035,
+        "insurance_amount": insurance_amount,
+        "insurance_paid": False,
+        "insurance_payment_status": "pending",
+        "declared_value": declared_value,
+        "currency": currency,
+        "updated_at": datetime.now()
+    }
+
+    await db.packages.update_one({"_id": package_id}, {"$set": update_fields})
+    updated = await db.packages.find_one({"_id": package_id})
+    return _prepare_package(updated)
+
+
 @router.patch("/{package_id}/status")
 async def update_package_status(
     package_id: str,
