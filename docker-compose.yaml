@@ -4,12 +4,13 @@ services:
     container_name: cargo-tracker-db
     # --replSet : active les transactions ACID et la HA future
     # --auth : authentification obligatoire
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: mogadmin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - mongodb_data:/data/db
+      - ./mongo-keyfile:/etc/mongo-keyfile:ro
     networks:
       - app-network
     healthcheck:

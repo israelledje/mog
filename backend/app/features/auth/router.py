@@ -372,7 +372,7 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
 
 @router.post("/qr-login")
 @limiter.limit("5/minute")
-async def qr_login_step1(http_request: Request, qr_token: str, db = Depends(get_database)):
+async def qr_login_step1(request: Request, qr_token: str, db = Depends(get_database)):
     # 1. On cherche d'abord par le secret de badge (format sécurisé)
     user = await db.users.find_one({"badge_secret": qr_token})
     
