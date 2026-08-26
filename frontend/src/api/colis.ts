@@ -21,6 +21,7 @@ export const colisApi = {
     tracking_number?: string;
     status?: string;
     owner_id?: string;
+    entrepot_id?: string;
     skip?: number;
     limit?: number;
   }): Promise<Colis[]> {

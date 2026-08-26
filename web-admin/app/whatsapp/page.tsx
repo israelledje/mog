@@ -62,6 +62,7 @@ export default function WhatsAppPage() {
         return;
       }
 
+      setQrCode(null);
       setStatus('loading');
       setError(null);
     } catch (err) {

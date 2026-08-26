@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus, Users,
+  X, Sparkles, MapPin, Navigation, Check,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -495,29 +496,177 @@ export default function GroupageScreen() {
         </View>
       </ScrollView>
 
-      <Modal visible={showCreate} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Nouveau groupage</Text>
-            <TextInput style={styles.input} placeholder="N° conteneur / référence" placeholderTextColor={colors.textSecondary} value={form.container_number} onChangeText={(v) => setForm({ ...form, container_number: v })} />
-            <TextInput style={styles.input} placeholder="Ville destination" placeholderTextColor={colors.textSecondary} value={form.destination_city} onChangeText={(v) => setForm({ ...form, destination_city: v })} />
-            <TextInput style={styles.input} placeholder="Port d’origine" placeholderTextColor={colors.textSecondary} value={form.origin_port} onChangeText={(v) => setForm({ ...form, origin_port: v })} />
-            <TextInput style={styles.input} placeholder="Navire / vol (optionnel)" placeholderTextColor={colors.textSecondary} value={form.vessel_name} onChangeText={(v) => setForm({ ...form, vessel_name: v })} />
-            <View style={styles.modeRow}>
-              {(['sea', 'air'] as const).map((m) => (
-                <TouchableOpacity key={m} style={[styles.modeChip, form.mode === m && styles.modeOn]} onPress={() => setForm({ ...form, mode: m })}>
-                  <Text style={[styles.modeText, form.mode === m && { color: '#fff' }]}>{m === 'sea' ? 'Maritime' : 'Aérien'}</Text>
-                </TouchableOpacity>
-              ))}
+      {/* MODALE DE CRÉATION DE GROUPAGE MODERNE & PRO */}
+      <Modal
+        visible={showCreate}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCreate(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCreate(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBox}
+            onPress={(e) => e.stopPropagation?.()}
+          >
+            {/* Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderIconBadge}>
+                <Box size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Nouveau Groupage / Conteneur</Text>
+                <Text style={styles.modalSubtitle}>Expédition maritime LCL/FCL ou palette avion cargo</Text>
+              </View>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowCreate(false)}>
+                <X size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.createBtn} onPress={createGroupage} disabled={creating}>
-              {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.createBtnText}>Créer le groupage</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowCreate(false)}>
-              <Text style={{ color: colors.textSecondary, textAlign: 'center', fontWeight: '700', marginTop: 12 }}>Annuler</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+              {/* Presets rapides */}
+              <View style={styles.presetSection}>
+                <View style={styles.presetHeader}>
+                  <Sparkles size={14} color={colors.primary} />
+                  <Text style={styles.presetLabel}>Modèles rapides :</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScroll}>
+                  {[
+                    { label: '🇨🇳 TC 40\' Guangzhou → Douala', mode: 'sea', origin: 'Guangzhou', dest: 'Douala', num: `TC40-GZ-${Date.now().toString().slice(-4)}` },
+                    { label: '🇨🇳 TC 20\' Yiwu → Douala', mode: 'sea', origin: 'Yiwu', dest: 'Douala', num: `TC20-YW-${Date.now().toString().slice(-4)}` },
+                    { label: '✈️ Cargo Guangzhou → Douala', mode: 'air', origin: 'Guangzhou', dest: 'Douala', num: `AIR-GZ-${Date.now().toString().slice(-4)}` },
+                    { label: '🇦🇪 Cargo Dubaï → Douala', mode: 'air', origin: 'Dubaï', dest: 'Douala', num: `AIR-DXB-${Date.now().toString().slice(-4)}` },
+                  ].map((p) => (
+                    <TouchableOpacity
+                      key={p.num}
+                      style={styles.presetChip}
+                      onPress={() => setForm({
+                        container_number: p.num,
+                        destination_city: p.dest,
+                        origin_port: p.origin,
+                        mode: p.mode,
+                        vessel_name: '',
+                      })}
+                    >
+                      <Text style={styles.presetChipText}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Mode de transport */}
+              <Text style={styles.formSectionLabel}>1. Mode de fret & type de groupage</Text>
+              <View style={styles.modeSelectorRow}>
+                <TouchableOpacity
+                  style={[styles.modeCard, form.mode === 'sea' && styles.modeCardSeaActive]}
+                  onPress={() => setForm({ ...form, mode: 'sea' })}
+                >
+                  <Ship size={20} color={form.mode === 'sea' ? '#38BDF8' : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modeCardTitle, form.mode === 'sea' && { color: '#38BDF8' }]}>
+                      🚢 Fret Maritime
+                    </Text>
+                    <Text style={styles.modeCardSubtitle}>Conteneur maritime (CBM), transit portuaire</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modeCard, form.mode === 'air' && styles.modeCardAirActive]}
+                  onPress={() => setForm({ ...form, mode: 'air' })}
+                >
+                  <Plane size={20} color={form.mode === 'air' ? '#7DD3FC' : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modeCardTitle, form.mode === 'air' && { color: '#7DD3FC' }]}>
+                      ✈️ Fret Aérien
+                    </Text>
+                    <Text style={styles.modeCardSubtitle}>Palette avion, vol cargo rapide</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Référence et trajets */}
+              <Text style={styles.formSectionLabel}>2. Référence & itinéraire</Text>
+              <View style={styles.inputWrapper}>
+                <Box size={18} color={colors.primary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="N° Conteneur / Référence de groupage *"
+                  placeholderTextColor={colors.textSecondary}
+                  value={form.container_number}
+                  onChangeText={(v) => setForm({ ...form, container_number: v })}
+                />
+              </View>
+
+              <View style={styles.twoColsRow}>
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <Navigation size={16} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Port / Origine *"
+                    placeholderTextColor={colors.textSecondary}
+                    value={form.origin_port}
+                    onChangeText={(v) => setForm({ ...form, origin_port: v })}
+                  />
+                </View>
+
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <MapPin size={16} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Destination *"
+                    placeholderTextColor={colors.textSecondary}
+                    value={form.destination_city}
+                    onChangeText={(v) => setForm({ ...form, destination_city: v })}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+                {form.mode === 'sea' ? (
+                  <Ship size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                ) : (
+                  <Plane size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                )}
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder={form.mode === 'sea' ? "Nom du navire / N° Booking (optionnel)" : "Compagnie aérienne / N° Vol (optionnel)"}
+                  placeholderTextColor={colors.textSecondary}
+                  value={form.vessel_name}
+                  onChangeText={(v) => setForm({ ...form, vessel_name: v })}
+                />
+              </View>
+
+              {/* Footer */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.submitBtn}
+                  onPress={createGroupage}
+                  disabled={creating}
+                >
+                  {creating ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Check size={18} color="#fff" />
+                      <Text style={styles.submitBtnText}>Créer le groupage</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dismissBtn}
+                  onPress={() => setShowCreate(false)}
+                >
+                  <Text style={styles.dismissBtnText}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -563,14 +712,119 @@ const styles = StyleSheet.create({
   route: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   badgeText: { fontSize: 12, fontWeight: '800', color: colors.primary },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 },
-  input: { backgroundColor: colors.background, borderRadius: radii.input, padding: 12, color: colors.text, marginBottom: 10 },
-  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  modeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.background },
-  modeOn: { backgroundColor: colors.primary },
-  modeText: { fontWeight: '700', color: colors.textSecondary, fontSize: 12 },
-  createBtn: { backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 14, alignItems: 'center' },
-  createBtnText: { color: '#fff', fontWeight: '800' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalBox: {
+    backgroundColor: '#161B26',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeaderIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: `${colors.primary}20`,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, letterSpacing: -0.3 },
+  modalSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: { maxHeight: 460 },
+
+  presetSection: {
+    marginBottom: 14,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  presetHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  presetLabel: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  presetScroll: { gap: 8 },
+  presetChip: {
+    backgroundColor: colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  presetChipText: { fontSize: 12, fontWeight: '600', color: colors.text },
+
+  formSectionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+
+  modeSelectorRow: { gap: 8, marginBottom: 8 },
+  modeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modeCardSeaActive: { borderColor: '#38BDF8', backgroundColor: 'rgba(56,189,248,0.12)' },
+  modeCardAirActive: { borderColor: '#7DD3FC', backgroundColor: 'rgba(125,211,252,0.12)' },
+  modeCardTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
+  modeCardSubtitle: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+  },
+  inputIcon: { marginRight: 10 },
+  fieldInput: { flex: 1, paddingVertical: 12, color: colors.text, fontSize: 14, fontWeight: '600' },
+  twoColsRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
+
+  modalFooter: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', gap: 8 },
+  submitBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  dismissBtn: { paddingVertical: 10, alignItems: 'center' },
+  dismissBtnText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
 });

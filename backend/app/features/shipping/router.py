@@ -79,6 +79,7 @@ async def list_packages(
     status: Optional[str] = None,
     tracking_number: Optional[str] = None,
     owner_id: Optional[str] = None,
+    entrepot_id: Optional[str] = None,
     billable: Optional[bool] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_database)
@@ -96,6 +97,11 @@ async def list_packages(
         query["status"] = status
     if tracking_number:
         query["tracking_number"] = {"$regex": tracking_number, "$options": "i"}
+    if entrepot_id:
+        query["$or"] = [
+            {"current_entrepot_id": entrepot_id},
+            {"warehouse_location": entrepot_id},
+        ]
 
     if billable:
         query["status"] = {"$nin": ["draft", "pending_reception"]}

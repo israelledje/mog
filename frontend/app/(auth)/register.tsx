@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
   },
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...(StyleSheet.absoluteFill as object),
     backgroundColor: 'rgba(15, 23, 42, 0.94)',
   },
   headerSafeArea: {

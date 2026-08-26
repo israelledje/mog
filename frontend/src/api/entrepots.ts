@@ -7,6 +7,7 @@ export interface Entrepot {
   city: string;
   country: string;
   type: 'origin' | 'destination';
+  transport_mode?: 'sea' | 'air';
   address?: string;
   contact?: string;
 }
@@ -21,13 +22,25 @@ export const entrepotsApi = {
     city: string;
     country: string;
     type?: 'origin' | 'destination';
+    transport_mode?: 'sea' | 'air';
     address?: string;
     contact?: string;
   }) {
     const { data } = await api.post('/entrepots/', payload);
     return data as Entrepot;
   },
-  async update(id: string, payload: { name?: string; address?: string; contact?: string }) {
+  async update(
+    id: string,
+    payload: {
+      name?: string;
+      city?: string;
+      country?: string;
+      type?: 'origin' | 'destination';
+      transport_mode?: 'sea' | 'air';
+      address?: string;
+      contact?: string;
+    },
+  ) {
     const { data } = await api.patch(`/entrepots/${id}`, payload);
     return data;
   },

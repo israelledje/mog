@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
   },
   // Superposition sombre renforcée (Navy Profond 0.94) pour faire ressortir le texte & le logo 100%
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...(StyleSheet.absoluteFill as object),
     backgroundColor: 'rgba(15, 23, 42, 0.94)',
   },
   headerSafeArea: {

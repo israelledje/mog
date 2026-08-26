@@ -232,7 +232,7 @@ export default function ColisDetailScreen() {
           name={user?.full_name || ''} 
           phone={user?.phone || ''} 
           city={user?.city || ''} 
-          transportMode={colis.transport_mode}
+          transportMode={colis.transport_mode === 'sea' ? 'sea' : 'air'}
         />
 
         <View style={styles.actions}>

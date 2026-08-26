@@ -94,6 +94,53 @@ async def bank_info():
     }
 
 
+@router.get("/methods")
+async def get_payment_methods():
+    """Retourne la disponibilité et la configuration en direct des passerelles de paiement."""
+    base = os.getenv("INTOUCH_BASE_URL", "").rstrip("/")
+    agent = os.getenv("INTOUCH_AGENT_CODE", "")
+    login = os.getenv("INTOUCH_LOGIN_API", "")
+    password = os.getenv("INTOUCH_PASSWORD_API", "")
+    has_live_credentials = bool(base and agent and login and password)
+
+    return {
+        "gateway_active": True,
+        "mode": "live" if has_live_credentials else "demo",
+        "methods": {
+            "om": {
+                "id": "om",
+                "name": "Orange Money",
+                "country": "CM",
+                "currency": "XAF",
+                "available": True,
+                "instant": True,
+                "prefix_hint": "69, 655-659",
+                "notice": "Paiement direct USSD / Push notification Orange Money.",
+            },
+            "momo": {
+                "id": "momo",
+                "name": "MTN Mobile Money",
+                "country": "CM",
+                "currency": "XAF",
+                "available": True,
+                "instant": True,
+                "prefix_hint": "67, 68, 650-654",
+                "notice": "Paiement direct USSD / Approbation Mobile Money (*126#).",
+            },
+            "bank": {
+                "id": "bank",
+                "name": "Virement Bancaire",
+                "country": "CM",
+                "currency": "XAF",
+                "available": True,
+                "instant": False,
+                "verification_days": 3,
+                "notice": "Virement bancaire avec confirmation sous 3 jours ouvrés.",
+            },
+        },
+    }
+
+
 @router.post("/mobile")
 async def pay_mobile(
     data: MobilePayRequest,

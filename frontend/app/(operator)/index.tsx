@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers } from 'lucide-react-native';
+import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, X, Check, Plus } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -23,7 +23,9 @@ export default function OperatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [shiftActive, setShiftActive] = useState(false);
   const [entrepots, setEntrepots] = useState<Entrepot[]>([]);
+  const [loadingEntrepots, setLoadingEntrepots] = useState(false);
   const [showEntrepotModal, setShowEntrepotModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'reception' | null>(null);
   const [showLangModal, setShowLangModal] = useState(false);
 
   const isAdmin = user?.role === 'admin';
@@ -31,14 +33,24 @@ export default function OperatorDashboard() {
 
   useEffect(() => {
     fetchData();
-    entrepotsApi.list().then(list => {
-      const origin = list.filter(e => e.type === 'origin');
-      setEntrepots(origin);
-      if (!user?.active_entrepot_id && origin.length > 0) {
-        setShowEntrepotModal(true);
-      }
-    }).catch(() => {});
+    fetchEntrepots();
   }, []);
+
+  const fetchEntrepots = async () => {
+    setLoadingEntrepots(true);
+    try {
+      const list = await entrepotsApi.list();
+      const origin = (list || []).filter(e => e.type === 'origin');
+      const available = origin.length > 0 ? origin : (list || []);
+      setEntrepots(available);
+      return available;
+    } catch (e) {
+      console.log('Error fetching entrepots', e);
+      return [];
+    } finally {
+      setLoadingEntrepots(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -58,12 +70,28 @@ export default function OperatorDashboard() {
 
   const onSelectEntrepot = async (e: Entrepot) => {
     try {
-      await setActiveEntrepot(e.id || e._id!);
+      const targetId = e.id || e._id!;
+      await setActiveEntrepot(targetId);
       setShowEntrepotModal(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (pendingAction === 'reception') {
+        setPendingAction(null);
+        router.push('/(operator)/reception');
+      }
     } catch {
       Alert.alert(t('errors.server'), t('operator.warehouse_select_error'));
     }
+  };
+
+  const openEntrepotPicker = (action?: 'reception') => {
+    setPendingAction(action || null);
+    fetchEntrepots();
+    setShowEntrepotModal(true);
+  };
+
+  const closeEntrepotModal = () => {
+    setPendingAction(null);
+    setShowEntrepotModal(false);
   };
 
   const onLogout = async () => {
@@ -82,8 +110,7 @@ export default function OperatorDashboard() {
 
   const goReception = () => {
     if (!user?.active_entrepot_id) {
-      Alert.alert('', t('operator.warehouse_required'));
-      setShowEntrepotModal(true);
+      openEntrepotPicker('reception');
       return;
     }
     router.push('/(operator)/reception');
@@ -136,7 +163,7 @@ export default function OperatorDashboard() {
             {isAdmin ? 'MODE ADMIN' : t('operator.mode')}
           </Text>
           <Text style={styles.userName}>{user?.full_name || 'Agent'}</Text>
-          <TouchableOpacity style={styles.warehouseChip} onPress={() => setShowEntrepotModal(true)}>
+          <TouchableOpacity style={styles.warehouseChip} onPress={() => openEntrepotPicker()}>
             <Building2 size={14} color={colors.primary} />
             <Text style={styles.warehouseText}>{activeEntrepotName || t('operator.no_warehouse')}</Text>
           </TouchableOpacity>
@@ -326,48 +353,123 @@ export default function OperatorDashboard() {
         ))}
       </ScrollView>
 
-      <Modal visible={showEntrepotModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>{t('operator.select_warehouse')}</Text>
-            <Text style={styles.modalDesc}>{t('operator.select_warehouse_desc')}</Text>
-            <FlatList
-              data={entrepots}
-              keyExtractor={item => item.id || item._id!}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.entrepotItem} onPress={() => onSelectEntrepot(item)}>
-                  <Building2 size={20} color={colors.primary} />
-                  <View>
-                    <Text style={styles.entrepotName}>{item.name}</Text>
-                    <Text style={styles.entrepotCity}>{item.city}, {item.country}</Text>
-                  </View>
+      <Modal
+        visible={showEntrepotModal}
+        animationType="slide"
+        transparent
+        onRequestClose={closeEntrepotModal}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={closeEntrepotModal}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBox}
+            onPress={e => e.stopPropagation?.()}
+          >
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>{t('operator.select_warehouse')}</Text>
+                <Text style={styles.modalDesc}>{t('operator.select_warehouse_desc')}</Text>
+              </View>
+              {isAdmin && (
+                <TouchableOpacity
+                  onPress={() => {
+                    closeEntrepotModal();
+                    router.push({
+                      pathname: '/(operator)/warehouses',
+                      params: { tab: 'entrepots', create: '1' },
+                    } as any);
+                  }}
+                  style={styles.addWhHeaderBtn}
+                >
+                  <Plus size={14} color="#fff" />
+                  <Text style={styles.addWhHeaderBtnText}>Nouveau</Text>
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={<Text style={styles.modalDesc}>Aucun entrepôt d'origine configuré.</Text>}
-            />
-            {user?.active_entrepot_id && (
-              <TouchableOpacity onPress={() => setShowEntrepotModal(false)}>
-                <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 12 }}>{t('common.close')}</Text>
+              <TouchableOpacity
+                onPress={closeEntrepotModal}
+                style={styles.closeIconBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
+            </View>
+
+            {loadingEntrepots ? (
+              <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : (
+              <FlatList
+                data={entrepots}
+                keyExtractor={item => item.id || item._id!}
+                renderItem={({ item }) => {
+                  const itemId = item.id || item._id;
+                  const isSelected = itemId === user?.active_entrepot_id;
+                  return (
+                    <TouchableOpacity
+                      style={[styles.entrepotItem, isSelected && styles.entrepotItemActive]}
+                      onPress={() => onSelectEntrepot(item)}
+                    >
+                      <Building2 size={20} color={isSelected ? colors.primary : colors.textSecondary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.entrepotName, isSelected && { color: colors.primary }]}>{item.name}</Text>
+                        <Text style={styles.entrepotCity}>
+                          {item.city}, {item.country} {item.type ? `(${item.type === 'origin' ? 'Origine' : 'Destination'})` : ''}
+                        </Text>
+                      </View>
+                      {isSelected && <Check size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={{ paddingVertical: spacing.md, alignItems: 'center' }}>
+                    <Text style={[styles.modalDesc, { textAlign: 'center', marginBottom: 12 }]}>
+                      Aucun entrepôt configuré.
+                    </Text>
+                    {isAdmin && (
+                      <TouchableOpacity
+                        style={styles.manageWhBtn}
+                        onPress={() => {
+                          closeEntrepotModal();
+                          router.push({
+                            pathname: '/(operator)/warehouses',
+                            params: { tab: 'entrepots', create: '1' },
+                          } as any);
+                        }}
+                      >
+                        <Text style={styles.manageWhBtnText}>Gérer / Créer des entrepôts</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                }
+              />
             )}
-          </View>
-        </View>
+
+            <TouchableOpacity onPress={closeEntrepotModal} style={styles.modalCancelBtn}>
+              <Text style={styles.modalCancelBtnText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
-      <Modal visible={showLangModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
+      <Modal visible={showLangModal} animationType="fade" transparent onRequestClose={() => setShowLangModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowLangModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalBox} onPress={e => e.stopPropagation?.()}>
             <Text style={styles.modalTitle}>{t('operator.language')}</Text>
             {SUPPORTED_LANGS.map(lang => (
               <TouchableOpacity key={lang} style={[styles.langItem, i18n.language === lang && styles.langActive]} onPress={() => changeLang(lang)}>
                 <Text style={styles.langText}>{t(`operator.lang_${lang}`)}</Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity onPress={() => setShowLangModal(false)} style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>{t('common.close')}</Text>
+            <TouchableOpacity onPress={() => setShowLangModal(false)} style={styles.modalCancelBtn}>
+              <Text style={styles.modalCancelBtnText}>{t('common.close')}</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -434,11 +536,20 @@ const styles = StyleSheet.create({
   undoText: { color: colors.danger, fontSize: 12, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.xl, maxHeight: '70%' },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 8 },
-  modalDesc: { fontSize: 14, color: colors.textSecondary, marginBottom: spacing.lg },
-  entrepotItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  addWhHeaderBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.button, marginRight: 6 },
+  addWhHeaderBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  closeIconBtn: { padding: 4, backgroundColor: colors.background, borderRadius: 20, marginLeft: 4 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  modalDesc: { fontSize: 14, color: colors.textSecondary, marginBottom: spacing.md },
+  entrepotItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border, borderRadius: radii.button },
+  entrepotItemActive: { backgroundColor: `${colors.primary}15` },
   entrepotName: { fontSize: 15, fontWeight: '700', color: colors.text },
   entrepotCity: { fontSize: 12, color: colors.textSecondary },
+  manageWhBtn: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radii.button, marginTop: 8 },
+  manageWhBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  modalCancelBtn: { marginTop: spacing.md, paddingVertical: 12, alignItems: 'center' },
+  modalCancelBtnText: { color: colors.textSecondary, textAlign: 'center', fontWeight: '600' },
   langItem: { padding: 14, borderRadius: radii.button, marginBottom: 8, backgroundColor: colors.background },
   langActive: { backgroundColor: `${colors.primary}25`, borderWidth: 1, borderColor: colors.primary },
   langText: { fontSize: 16, fontWeight: '700', color: colors.text, textAlign: 'center' },

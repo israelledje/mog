@@ -43,6 +43,7 @@ import { useSettingsStore } from '../../src/store/settingsStore';
 import { colisApi } from '../../src/api/colis';
 import { paymentsApi } from '../../src/api/payments';
 import { formatErr } from '../../src/api/client';
+import PaymentMethodSelector, { PaymentMethodKey } from '../../src/components/PaymentMethodSelector';
 import { parseDeclaredValue } from '../../src/utils/format';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 
@@ -536,31 +537,18 @@ export default function NewColisScreen() {
                   </Text>
 
                   {/* Choix mode de paiement */}
-                  <View style={styles.paymentMethodsRow}>
-                    {([
-                      { k: 'om' as const, label: 'Orange Money', icon: Smartphone, color: '#FF7900' },
-                      { k: 'momo' as const, label: 'MTN MoMo', icon: Smartphone, color: '#FFCC00' },
-                      { k: 'bank' as const, label: 'Virement', icon: Building2, color: '#3B82F6' },
-                    ]).map((m) => (
-                      <TouchableOpacity
-                        key={m.k}
-                        style={[styles.paymentMethodBtn, insuranceMethod === m.k && styles.paymentMethodBtnActive]}
-                        onPress={() => {
-                          Haptics.selectionAsync();
-                          setInsuranceMethod(m.k);
-                        }}
-                      >
-                        <m.icon size={18} color={insuranceMethod === m.k ? '#2563EB' : '#64748B'} />
-                        <Text style={[styles.paymentMethodText, insuranceMethod === m.k && styles.paymentMethodTextActive]}>
-                          {m.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <PaymentMethodSelector
+                    selectedMethod={insuranceMethod}
+                    onSelectMethod={(m) => setInsuranceMethod(m)}
+                    phone={insurancePhone}
+                    onSuggestMethod={(m) => setInsuranceMethod(m)}
+                  />
 
                   {(insuranceMethod === 'om' || insuranceMethod === 'momo') && (
                     <View style={styles.phoneInputWrap}>
-                      <Text style={styles.phoneLabel}>Numéro Mobile Money :</Text>
+                      <Text style={styles.phoneLabel}>
+                        Numéro {insuranceMethod === 'om' ? 'Orange Money' : 'MTN MoMo'} pour validation :
+                      </Text>
                       <TextInput
                         style={styles.phoneInput}
                         value={insurancePhone}

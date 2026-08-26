@@ -57,4 +57,8 @@ export const paymentsApi = {
     const { data } = await api.post('/payments/bank', payload);
     return data;
   },
+  async methods() {
+    const { data } = await api.get('/payments/methods');
+    return data;
+  },
 };

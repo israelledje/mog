@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Plus, Check } from 'lucide-react-native';
+import { ChevronLeft, Plus, Check, Handshake, X, Sparkles, User, Mail, Phone, Tag, Percent } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { growthApi } from '../../src/api/growth';
 import { formatErr } from '../../src/api/client';
@@ -277,23 +277,162 @@ export default function OperatorGrowthScreen() {
         />
       )}
 
-      <Modal visible={showAgent} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <ScrollView contentContainerStyle={styles.modalBox}>
-            <Text style={styles.modalTitle}>Nouveau partenaire</Text>
-            <TextInput style={styles.input} placeholder="Nom complet" placeholderTextColor={colors.textSecondary} value={agentForm.full_name} onChangeText={(v) => setAgentForm({ ...agentForm, full_name: v })} />
-            <TextInput style={styles.input} placeholder="Email" placeholderTextColor={colors.textSecondary} autoCapitalize="none" keyboardType="email-address" value={agentForm.email} onChangeText={(v) => setAgentForm({ ...agentForm, email: v })} />
-            <TextInput style={styles.input} placeholder="Téléphone" placeholderTextColor={colors.textSecondary} value={agentForm.phone} onChangeText={(v) => setAgentForm({ ...agentForm, phone: v })} />
-            <TextInput style={styles.input} placeholder="Code (auto si vide)" placeholderTextColor={colors.textSecondary} autoCapitalize="characters" value={agentForm.referral_code} onChangeText={(v) => setAgentForm({ ...agentForm, referral_code: v })} />
-            <TextInput style={styles.input} placeholder="% commission" placeholderTextColor={colors.textSecondary} keyboardType="numeric" value={agentForm.commission_rate_percent} onChangeText={(v) => setAgentForm({ ...agentForm, commission_rate_percent: v })} />
-            <TouchableOpacity style={styles.cta} onPress={createAgent} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.ctaText}>Créer</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowAgent(false)} style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.textSecondary, textAlign: 'center', fontWeight: '700' }}>Annuler</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
+      <Modal
+        visible={showAgent}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAgent(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAgent(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBox}
+            onPress={(e) => e.stopPropagation?.()}
+          >
+            {/* Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderIconBadge}>
+                <Handshake size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Nouveau Partenaire</Text>
+                <Text style={styles.modalSubtitle}>Affiliation, apporteur d'affaires & commissions</Text>
+              </View>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowAgent(false)}>
+                <X size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+              {/* Presets taux de commission */}
+              <View style={styles.presetSection}>
+                <View style={styles.presetHeader}>
+                  <Sparkles size={14} color={colors.primary} />
+                  <Text style={styles.presetLabel}>Taux de commission recommandés :</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScroll}>
+                  {[
+                    { label: 'Standard (5%)', val: '5' },
+                    { label: 'Argent (8%)', val: '8' },
+                    { label: 'Or (10%)', val: '10' },
+                    { label: 'Premium VIP (15%)', val: '15' },
+                  ].map((p) => (
+                    <TouchableOpacity
+                      key={p.val}
+                      style={[
+                        styles.presetChip,
+                        agentForm.commission_rate_percent === p.val && styles.presetChipActive,
+                      ]}
+                      onPress={() => setAgentForm({ ...agentForm, commission_rate_percent: p.val })}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          agentForm.commission_rate_percent === p.val && { color: '#fff' },
+                        ]}
+                      >
+                        {p.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Coordonnées */}
+              <Text style={styles.formSectionLabel}>1. Identité du partenaire</Text>
+              <View style={styles.inputWrapper}>
+                <User size={18} color={colors.primary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Nom complet du partenaire *"
+                  placeholderTextColor={colors.textSecondary}
+                  value={agentForm.full_name}
+                  onChangeText={(v) => setAgentForm({ ...agentForm, full_name: v })}
+                />
+              </View>
+
+              <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+                <Mail size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Email de contact"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={agentForm.email}
+                  onChangeText={(v) => setAgentForm({ ...agentForm, email: v })}
+                />
+              </View>
+
+              <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+                <Phone size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Téléphone / WhatsApp *"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                  value={agentForm.phone}
+                  onChangeText={(v) => setAgentForm({ ...agentForm, phone: v })}
+                />
+              </View>
+
+              {/* Code & Taux */}
+              <Text style={styles.formSectionLabel}>2. Code de parrainage & rémunération</Text>
+              <View style={styles.inputWrapper}>
+                <Tag size={18} color={colors.primary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Code de parrainage (auto si vide)"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="characters"
+                  value={agentForm.referral_code}
+                  onChangeText={(v) => setAgentForm({ ...agentForm, referral_code: v.toUpperCase() })}
+                />
+              </View>
+
+              <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+                <Percent size={18} color={colors.primary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Taux de commission (ex: 5 pour 5%)"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={agentForm.commission_rate_percent}
+                  onChangeText={(v) => setAgentForm({ ...agentForm, commission_rate_percent: v })}
+                />
+              </View>
+
+              {/* Footer */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.submitBtn}
+                  onPress={createAgent}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Check size={18} color="#fff" />
+                      <Text style={styles.submitBtnText}>Créer le partenaire</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dismissBtn}
+                  onPress={() => setShowAgent(false)}
+                >
+                  <Text style={styles.dismissBtnText}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -311,13 +450,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabs: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.lg, marginBottom: 8 },
-  tab: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.card },
+  tab: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: colors.card },
   tabOn: { backgroundColor: colors.primary },
   tabText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   tabTextOn: { color: '#fff' },
-  card: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 10 },
+  card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  cardTitle: { fontWeight: '800', color: colors.text, flex: 1 },
+  cardTitle: { fontWeight: '800', color: colors.text, flex: 1, fontSize: 15 },
   meta: { marginTop: 4, fontSize: 12, color: colors.textSecondary },
   statsLine: { marginTop: 6, fontSize: 12, fontWeight: '700', color: colors.text },
   pendingLine: { marginTop: 4, fontSize: 12, fontWeight: '800', color: '#FBBF24' },
@@ -339,7 +478,102 @@ const styles = StyleSheet.create({
   cta: { backgroundColor: colors.primary, borderRadius: radii.button, paddingVertical: 14, alignItems: 'center', marginTop: 8 },
   ctaText: { color: '#fff', fontWeight: '800' },
   hint: { marginTop: 12, color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 40 },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, marginBottom: 16 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalBox: {
+    backgroundColor: '#161B26',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    maxHeight: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  modalHeaderIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: `${colors.primary}20`,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, letterSpacing: -0.3 },
+  modalSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScroll: { maxHeight: 460 },
+
+  presetSection: {
+    marginBottom: 14,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  presetHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  presetLabel: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  presetScroll: { gap: 8 },
+  presetChip: {
+    backgroundColor: colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  presetChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  presetChipText: { fontSize: 12, fontWeight: '600', color: colors.text },
+
+  formSectionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+  },
+  inputIcon: { marginRight: 10 },
+  fieldInput: { flex: 1, paddingVertical: 12, color: colors.text, fontSize: 14, fontWeight: '600' },
+
+  modalFooter: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', gap: 8 },
+  submitBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  dismissBtn: { paddingVertical: 10, alignItems: 'center' },
+  dismissBtnText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
 });

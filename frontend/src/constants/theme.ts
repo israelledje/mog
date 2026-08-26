@@ -61,6 +61,12 @@ export const radii = {
   input: 8,
   button: 8,
   pill: 999,
+  full: 999,
+  sm: 6,
+  md: 10,
+  lg: 16,
+  xl: 20,
+  xxl: 28,
 };
 
 export const spacing = {
@@ -76,6 +82,9 @@ export const fonts = {
   body: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) as string,
   heading: Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' }) as string,
   mono: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }) as string,
+  regular: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) as string,
+  medium: Platform.select({ ios: 'System', android: 'sans-serif-medium', default: 'System' }) as string,
+  bold: Platform.select({ ios: 'System', android: 'sans-serif', default: 'System' }) as string,
 };
 
 export const shadow = {
@@ -85,6 +94,13 @@ export const shadow = {
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 1,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   card: {
     shadowColor: '#000',

@@ -13,7 +13,9 @@ import { formatErr } from '../../src/api/client';
 import { resolveMediaUrl } from '../../src/utils/mediaUrl';
 import { colors, radii, spacing } from '../../src/constants/theme';
 
-type Method = 'om' | 'momo' | 'bank';
+import PaymentMethodSelector, { PaymentMethodKey } from '../../src/components/PaymentMethodSelector';
+
+type Method = PaymentMethodKey;
 
 export default function MarketplaceCheckoutScreen() {
   const { t, i18n } = useTranslation();
@@ -122,22 +124,12 @@ export default function MarketplaceCheckoutScreen() {
         </Text>
 
         <Text style={styles.label}>{t('marketplace.method')}</Text>
-        <View style={styles.methods}>
-          {([
-            { k: 'om' as Method, label: t('marketplace.orange_money'), Icon: Smartphone },
-            { k: 'momo' as Method, label: t('marketplace.mtn_momo'), Icon: Smartphone },
-            { k: 'bank' as Method, label: t('marketplace.bank_transfer'), Icon: Building2 },
-          ]).map((m) => (
-            <TouchableOpacity
-              key={m.k}
-              style={[styles.methodBtn, method === m.k && styles.methodActive]}
-              onPress={() => setMethod(m.k)}
-            >
-              <m.Icon size={18} color={method === m.k ? '#fff' : colors.primary} />
-              <Text style={[styles.methodTxt, method === m.k && { color: '#fff' }]}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <PaymentMethodSelector
+          selectedMethod={method}
+          onSelectMethod={setMethod}
+          phone={phone}
+          onSuggestMethod={setMethod}
+        />
 
         {(method === 'om' || method === 'momo') && (
           <>

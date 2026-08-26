@@ -12,7 +12,9 @@ import { colisApi } from '../../src/api/colis';
 import { formatErr } from '../../src/api/client';
 import { colors, radii, spacing } from '../../src/constants/theme';
 
-type Method = 'om' | 'momo' | 'bank';
+import PaymentMethodSelector, { PaymentMethodKey } from '../../src/components/PaymentMethodSelector';
+
+type Method = PaymentMethodKey;
 
 export default function PaymentScreen() {
   const { id, type, amount: initialAmount } = useLocalSearchParams<{ id: string; type?: string; amount?: string }>();
@@ -122,23 +124,13 @@ export default function PaymentScreen() {
           </View>
         </View>
 
-        <Text style={styles.label}>Méthode</Text>
-        <View style={styles.methods}>
-          {([
-            { k: 'om' as Method, label: 'Orange Money', Icon: Smartphone },
-            { k: 'momo' as Method, label: 'MTN MoMo', Icon: Smartphone },
-            { k: 'bank' as Method, label: 'Virement', Icon: Building2 },
-          ]).map((m) => (
-            <TouchableOpacity
-              key={m.k}
-              style={[styles.methodBtn, method === m.k && styles.methodActive]}
-              onPress={() => setMethod(m.k)}
-            >
-              <m.Icon size={18} color={method === m.k ? '#fff' : colors.primary} />
-              <Text style={[styles.methodTxt, method === m.k && { color: '#fff' }]}>{m.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Text style={styles.label}>Mode de paiement</Text>
+        <PaymentMethodSelector
+          selectedMethod={method}
+          onSelectMethod={setMethod}
+          phone={phone}
+          onSuggestMethod={setMethod}
+        />
 
         <Text style={styles.label}>Montant (FCFA)</Text>
         <TextInput style={styles.input} keyboardType="numeric" value={amount} onChangeText={setAmount} />
