@@ -78,12 +78,23 @@ async function waitForConnectedState(waClient) {
     initError = 'Session authentifiée mais connexion non établie. Cliquez sur « Déconnecter » ou redémarrez le service.';
 }
 
+function removeSessionDir() {
+    try {
+        if (fs.existsSync(sessionPath)) {
+            fs.rmSync(sessionPath, { recursive: true, force: true });
+            console.log('Session directory wiped for clean restart');
+        }
+    } catch (e) {
+        console.warn('Failed to delete session directory:', e.message);
+    }
+}
+
 function buildClient() {
     return new Client({
         authStrategy: new LocalAuth({ dataPath: sessionPath }),
         webVersionCache: {
             type: 'remote',
-            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1018944883-alpha.html',
         },
         puppeteer: {
             executablePath: CHROMIUM_PATH,
@@ -97,6 +108,7 @@ function buildClient() {
                 '--disable-gpu',
                 '--disable-software-rasterizer',
                 '--disable-extensions',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             ],
         },
     });
@@ -353,6 +365,7 @@ app.post('/logout', async (req, res) => {
     }
 
     client = null;
+    removeSessionDir();
     setTimeout(() => initializeClient(true), 2000);
     res.json({ success: true });
 });
@@ -371,6 +384,7 @@ app.post('/restart', async (req, res) => {
     }
 
     client = null;
+    removeSessionDir();
     await initializeClient(true);
     res.json({ success: true, initState, initError });
 });
