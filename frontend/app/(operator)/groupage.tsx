@@ -272,8 +272,13 @@ export default function GroupageScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('operator.groupage_title')}</Text>
         {canCreate ? (
-          <TouchableOpacity onPress={() => setShowCreate(true)} style={styles.back}>
-            <Plus size={22} color={colors.primary} />
+          <TouchableOpacity
+            onPress={() => setShowCreate(true)}
+            style={styles.headerNewBtn}
+            activeOpacity={0.8}
+          >
+            <Plus size={16} color="#fff" />
+            <Text style={styles.headerNewBtnText}>Nouveau</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity onPress={loadData} style={styles.back}>
@@ -444,7 +449,20 @@ export default function GroupageScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.stepLabel}>2. {t('operator.groupage_select')}</Text>
+          <View style={styles.stepHeaderRow}>
+            <Text style={styles.stepLabel}>2. {t('operator.groupage_select')}</Text>
+            {canCreate && (
+              <TouchableOpacity
+                style={styles.stepNewBtn}
+                onPress={() => setShowCreate(true)}
+                activeOpacity={0.8}
+              >
+                <Plus size={14} color={colors.primary} />
+                <Text style={styles.stepNewBtnText}>Nouveau conteneur</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {!hasSelection && (
             <View style={styles.warnBanner}>
               <Text style={styles.warnText}>
@@ -457,7 +475,23 @@ export default function GroupageScreen() {
           )}
 
           {containers.length === 0 ? (
-            <Text style={styles.emptyHint}>Aucun conteneur ouvert. Créez-en un avec +</Text>
+            <View style={styles.emptyContainerCard}>
+              <Box size={32} color={colors.textSecondary} />
+              <Text style={styles.emptyContainerTitle}>Aucun conteneur ouvert</Text>
+              <Text style={styles.emptyContainerDesc}>
+                Créez un nouveau groupage maritime ou aérien pour y charger vos colis.
+              </Text>
+              {canCreate && (
+                <TouchableOpacity
+                  style={styles.emptyCreateBtn}
+                  onPress={() => setShowCreate(true)}
+                  activeOpacity={0.8}
+                >
+                  <Plus size={16} color="#fff" />
+                  <Text style={styles.emptyCreateBtnText}>Créer un nouveau groupage</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ) : (
             containers.map((item) => {
               const cid = containerId(item);
@@ -677,6 +711,17 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.card, borderBottomWidth: 1, borderColor: colors.border },
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   back: { padding: 4, minWidth: 40 },
+  headerNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  headerNewBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+
   modeTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   modeTab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -685,7 +730,43 @@ const styles = StyleSheet.create({
   modeTabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   modeTabText: { fontWeight: '800', fontSize: 12, color: colors.textSecondary },
   section: { padding: spacing.lg, paddingBottom: 0 },
-  stepLabel: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  stepHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  stepLabel: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
+  stepNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${colors.primary}18`,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  stepNewBtnText: { color: colors.primary, fontWeight: '800', fontSize: 11 },
+
+  emptyContainerCard: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    marginVertical: 8,
+  },
+  emptyContainerTitle: { fontSize: 15, fontWeight: '800', color: colors.text, marginTop: 4 },
+  emptyContainerDesc: { fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 16, paddingHorizontal: 20 },
+  emptyCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  emptyCreateBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, borderRadius: radii.input, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, height: 48, color: colors.text, fontSize: 14 },
   searchBtn: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radii.button },

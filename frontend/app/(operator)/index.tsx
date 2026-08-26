@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, X, Check, Plus } from 'lucide-react-native';
+import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, X, Check, Plus, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -180,12 +180,24 @@ export default function OperatorDashboard() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {isAdmin && (
-          <TouchableOpacity style={styles.switchClientBtn} onPress={switchToClientApp} activeOpacity={0.85}>
-            <Smartphone size={20} color="#fff" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchClientTitle}>Voir l’app client</Text>
-              <Text style={styles.switchClientSub}>Basculer vers M.O.G CONNECT+ (vue client)</Text>
+          <TouchableOpacity
+            style={styles.switchClientBtn}
+            onPress={switchToClientApp}
+            activeOpacity={0.75}
+          >
+            <View style={styles.switchClientIconWrap}>
+              <Smartphone size={16} color="#38BDF8" />
             </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.switchClientTitleRow}>
+                <Text style={styles.switchClientTitle}>Aperçu Application Client</Text>
+                <View style={styles.switchClientTag}>
+                  <Text style={styles.switchClientTagText}>M.O.G CONNECT+</Text>
+                </View>
+              </View>
+              <Text style={styles.switchClientSub}>Basculer vers l’espace client en 1 clic</Text>
+            </View>
+            <ChevronRight size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
 
@@ -483,15 +495,37 @@ const styles = StyleSheet.create({
   switchClientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#1D4ED8',
-    borderRadius: radii.card,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    ...shadow.card,
+    gap: 10,
+    backgroundColor: 'rgba(56,189,248,0.06)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(56,189,248,0.18)',
   },
-  switchClientTitle: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  switchClientSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },
+  switchClientIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(56,189,248,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchClientTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  switchClientTitle: { color: colors.text, fontWeight: '700', fontSize: 13 },
+  switchClientTag: {
+    backgroundColor: 'rgba(56,189,248,0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  switchClientTagText: { color: '#38BDF8', fontSize: 9, fontWeight: '800' },
+  switchClientSub: { color: colors.textSecondary, fontSize: 11, marginTop: 1 },
   adminHint: {
     flexDirection: 'row',
     alignItems: 'center',

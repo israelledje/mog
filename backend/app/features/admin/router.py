@@ -30,103 +30,104 @@ async def get_global_stats(db = Depends(get_database)):
     active_clients = await db.users.count_documents({"role": "client"})
 
     # Revenu réel : somme des total_price des colis payés
-    revenue_pipeline = [
-        {"$match": {"payment_status": "paid"}},
-        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$total_price", 0]}}}},
-    ]
-    rev_cursor = db.packages.aggregate(revenue_pipeline)
-    rev_data = await rev_cursor.to_list(length=1)
-    total_revenue = rev_data[0]["total"] if rev_data else 0
+    total_revenue = 0
+    try:
+        revenue_pipeline = [
+            {"$match": {"payment_status": "paid"}},
+            {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$total_price", 0]}}}},
+        ]
+        rev_cursor = db.packages.aggregate(revenue_pipeline)
+        rev_data = await rev_cursor.to_list(length=1)
+        total_revenue = rev_data[0]["total"] if rev_data else 0
+    except Exception:
+        total_revenue = 0
 
     # Volume CBM total (dimensions en cm)
-    volume_pipeline = [
-        {
-            "$project": {
-                "cbm": {
-                    "$divide": [
-                        {
-                            "$multiply": [
-                                {"$ifNull": ["$dimensions.l", 0]},
-                                {"$ifNull": ["$dimensions.w", 0]},
-                                {"$ifNull": ["$dimensions.h", 0]},
-                            ]
-                        },
-                        1_000_000,
-                    ]
+    total_volume_cbm = 0.0
+    try:
+        volume_pipeline = [
+            {
+                "$project": {
+                    "cbm": {
+                        "$divide": [
+                            {
+                                "$multiply": [
+                                    {"$ifNull": ["$dimensions.l", 0]},
+                                    {"$ifNull": ["$dimensions.w", 0]},
+                                    {"$ifNull": ["$dimensions.h", 0]},
+                                ]
+                            },
+                            1_000_000,
+                        ]
+                    }
+                }
+            },
+            {"$group": {"_id": None, "total_cbm": {"$sum": "$cbm"}}},
+        ]
+        vol_cursor = db.packages.aggregate(volume_pipeline)
+        vol_data = await vol_cursor.to_list(length=1)
+        total_volume_cbm = round(vol_data[0]["total_cbm"], 2) if vol_data else 0.0
+    except Exception:
+        total_volume_cbm = 0.0
+
+    # Conteneurs : agrégation côté MongoDB
+    sea_count = 0
+    air_count = 0
+    open_containers = 0
+    total_containers = 0
+    try:
+        containers_pipeline = [
+            {
+                "$group": {
+                    "_id": {
+                        "$ifNull": [
+                            "$transport_mode",
+                            {"$ifNull": ["$mode", "sea"]}
+                        ]
+                    },
+                    "total": {"$sum": 1},
+                    "open": {"$sum": {"$cond": [{"$eq": ["$status", "open"]}, 1, 0]}},
                 }
             }
-        },
-        {"$group": {"_id": None, "total_cbm": {"$sum": "$cbm"}}},
-    ]
-    vol_cursor = db.packages.aggregate(volume_pipeline)
-    vol_data = await vol_cursor.to_list(length=1)
-    total_volume_cbm = round(vol_data[0]["total_cbm"], 2) if vol_data else 0
-
-    # Conteneurs : agrégation côté MongoDB (évite de charger 5000 docs en RAM)
-    containers_pipeline = [
-        {
-            "$group": {
-                "_id": {
-                    "$ifNull": [
-                        "$transport_mode",
-                        {"$ifNull": ["$mode", "sea"]}
-                    ]
-                },
-                "total": {"$sum": 1},
-                "open": {"$sum": {"$cond": [{"$eq": ["$status", "open"]}, 1, 0]}},
-            }
-        }
-    ]
-    containers_agg = await db.containers.aggregate(containers_pipeline).to_list(length=10)
-    sea_count = sum(g["total"] for g in containers_agg if g["_id"] == "sea")
-    air_count = sum(g["total"] for g in containers_agg if g["_id"] in ("air", "air_express"))
-    open_containers = sum(g["open"] for g in containers_agg)
+        ]
+        containers_agg = await db.containers.aggregate(containers_pipeline).to_list(length=20)
+        sea_count = sum(g["total"] for g in containers_agg if str(g.get("_id", "")).lower() == "sea")
+        air_count = sum(g["total"] for g in containers_agg if str(g.get("_id", "")).lower() in ("air", "air_express"))
+        open_containers = sum(g.get("open", 0) for g in containers_agg)
+        total_containers = sum(g.get("total", 0) for g in containers_agg)
+    except Exception:
+        pass
 
     # Tendances journalières (7 derniers jours)
-    daily_pipeline = [
-        {"$match": {"created_at": {"$gte": seven_days_ago}}},
-        {
-            "$project": {
-                "created_at": 1,
-                "cbm": {
-                    "$divide": [
-                        {
-                            "$multiply": [
-                                {"$ifNull": ["$dimensions.l", 0]},
-                                {"$ifNull": ["$dimensions.w", 0]},
-                                {"$ifNull": ["$dimensions.h", 0]},
-                            ]
-                        },
-                        1_000_000,
-                    ]
-                },
-            }
-        },
-        {
-            "$group": {
-                "_id": {
-                    "year": {"$year": "$created_at"},
-                    "month": {"$month": "$created_at"},
-                    "day": {"$dayOfMonth": "$created_at"},
-                },
-                "count": {"$sum": 1},
-                "volume_cbm": {"$sum": "$cbm"},
-            }
-        },
-        {"$sort": {"_id": 1}},
-    ]
-    daily_cursor = db.packages.aggregate(daily_pipeline)
-    daily_raw = await daily_cursor.to_list(length=7)
-
-    daily_map: dict = {}
-    for item in daily_raw:
-        date_str = f"{item['_id']['year']}-{item['_id']['month']:02d}-{item['_id']['day']:02d}"
-        daily_map[date_str] = {
-            "count": item["count"],
-            "volume_cbm": round(item.get("volume_cbm", 0), 2),
-        }
-
     daily_stats = []
+    daily_map: dict = {}
+    try:
+        # Charger les colis des 7 derniers jours
+        pkgs_cursor = db.packages.find({"created_at": {"$gte": seven_days_ago}})
+        async for p in pkgs_cursor:
+            dt = p.get("created_at")
+            if isinstance(dt, datetime):
+                d_str = dt.strftime("%Y-%m-%d")
+            elif isinstance(dt, str) and len(dt) >= 10:
+                d_str = dt[:10]
+            else:
+                d_str = datetime.now().strftime("%Y-%m-%d")
+
+            dims = p.get("dimensions") or {}
+            cbm = 0.0
+            if isinstance(dims, dict):
+                l = float(dims.get("l") or 0)
+                w = float(dims.get("w") or 0)
+                h = float(dims.get("h") or 0)
+                cbm = (l * w * h) / 1_000_000.0
+
+            if d_str not in daily_map:
+                daily_map[d_str] = {"count": 0, "volume_cbm": 0.0}
+            daily_map[d_str]["count"] += 1
+            daily_map[d_str]["volume_cbm"] = round(daily_map[d_str]["volume_cbm"] + cbm, 2)
+    except Exception:
+        pass
+
     for i in range(6, -1, -1):
         day = datetime.now() - timedelta(days=i)
         date_str = day.strftime("%Y-%m-%d")
@@ -134,10 +135,15 @@ async def get_global_stats(db = Depends(get_database)):
         daily_stats.append({"date": date_str, **entry})
 
     # Colis créés cette semaine vs semaine précédente
-    packages_this_week = await db.packages.count_documents({"created_at": {"$gte": seven_days_ago}})
-    packages_last_week = await db.packages.count_documents({
-        "created_at": {"$gte": fourteen_days_ago, "$lt": seven_days_ago}
-    })
+    packages_this_week = 0
+    packages_last_week = 0
+    try:
+        packages_this_week = await db.packages.count_documents({"created_at": {"$gte": seven_days_ago}})
+        packages_last_week = await db.packages.count_documents({
+            "created_at": {"$gte": fourteen_days_ago, "$lt": seven_days_ago}
+        })
+    except Exception:
+        pass
 
     def pct_change(current: int, previous: int):
         if previous == 0:
@@ -152,7 +158,7 @@ async def get_global_stats(db = Depends(get_database)):
         "active_clients": active_clients,
         "pending_payments": pending_payments,
         "open_containers": open_containers,
-        "logistics_split": {"sea": sea_count, "air": air_count, "total": len(all_containers)},
+        "logistics_split": {"sea": sea_count, "air": air_count, "total": total_containers},
         "daily_trends": daily_stats,
         "packages_this_week": packages_this_week,
         "packages_week_change_pct": pct_change(packages_this_week, packages_last_week),
