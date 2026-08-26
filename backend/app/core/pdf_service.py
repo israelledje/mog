@@ -2,7 +2,7 @@ from fpdf import FPDF
 import qrcode
 from io import BytesIO
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Optional, Dict
 from datetime import datetime
 
 # Couleurs marque M.O.G (papier à en-tête)
