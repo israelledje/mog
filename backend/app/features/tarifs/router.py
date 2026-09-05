@@ -254,17 +254,25 @@ async def refresh_default_tarifs(
     return {"message": "Grille tarifaire mise à jour", "count": len(DEFAULT_TARIFS)}
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_tarifs(db=Depends(get_database)):
-    await seed_tarifs(db, force_refresh=True)
     tarifs = []
     async for t in db.tarifs.find():
         t["id"] = str(t["_id"])
         t.pop("_id", None)
         tarifs.append(t)
+    # Si la collection est vide (premier démarrage), on initialise une fois
+    if not tarifs:
+        await seed_tarifs(db, force_refresh=False)
+        async for t in db.tarifs.find():
+            t["id"] = str(t["_id"])
+            t.pop("_id", None)
+            tarifs.append(t)
     return tarifs
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 async def create_tarif(
     data: TarifCreate,
@@ -315,8 +323,6 @@ async def calculate_price(
     - Unités (téléphones, laptops…) : quantité
     """
     import math
-
-    await seed_tarifs(db, force_refresh=True)
 
     aliases = {
         "normal": "standard",

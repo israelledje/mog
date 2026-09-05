@@ -16,6 +16,7 @@ def generate_invoice_number():
     rand = random.randint(1000, 9999)
     return f"FAC N°_MOG{year}/{month}/{rand}"
 
+@router.post("", response_model=InvoiceInDB, include_in_schema=False)
 @router.post("/", response_model=InvoiceInDB)
 async def create_invoice(
     invoice_in: InvoiceCreate,
@@ -104,6 +105,7 @@ async def get_customer_summary(
     }
 
 
+@router.get("", response_model=List[InvoiceInDB], include_in_schema=False)
 @router.get("/", response_model=List[InvoiceInDB])
 async def list_invoices(
     customer_id: Optional[str] = None,
@@ -117,16 +119,21 @@ async def list_invoices(
         query["customer_id"] = customer_id
         
     cursor = db.invoices.find(query).sort("created_at", -1)
-    invoices = []
-    async for doc in cursor:
+    invoices = await cursor.to_list(length=500)
+    
+    # Batch-fetch customer details to avoid N+1 queries
+    customer_emails = list({doc["customer_id"] for doc in invoices if doc.get("customer_id")})
+    user_map = {}
+    if customer_emails:
+        users_cursor = db.users.find({"email": {"$in": customer_emails}}, {"email": 1, "full_name": 1})
+        async for u in users_cursor:
+            user_map[u["email"]] = u.get("full_name")
+
+    for doc in invoices:
         doc["id"] = doc["_id"]
-        # Récupérer les informations du client pour l'affichage admin
-        customer = await db.users.find_one({"email": doc["customer_id"]})
-        if customer:
-            doc["customer_name"] = customer.get("full_name")
-        else:
-            doc["customer_name"] = doc["customer_id"]
-        invoices.append(doc)
+        cid = doc.get("customer_id")
+        doc["customer_name"] = user_map.get(cid) or cid
+        
     return invoices
 
 @router.get("/{invoice_id}", response_model=InvoiceInDB)

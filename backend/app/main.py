@@ -52,6 +52,13 @@ async def lifespan(app: FastAPI):
                     await db_manager.db.users.update_one({"_id": u["_id"]}, {"$set": {"client_code": new_c}})
         except Exception:
             pass
+        # Initialisation idempotente de la grille tarifaire au démarrage
+        try:
+            from app.features.tarifs.router import seed_tarifs
+            await seed_tarifs(db_manager.db, force_refresh=False)
+        except Exception:
+            pass
+
         print("Global settings seeded successfully.")
 
     yield
@@ -104,6 +111,7 @@ from fastapi import APIRouter
 notifs_router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
 @notifs_router.get("")
+@notifs_router.get("/", include_in_schema=False)
 async def get_notifications():
     return []
 

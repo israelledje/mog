@@ -97,6 +97,7 @@ async def get_next_info(db = Depends(get_database)):
                 
     return result
 
+@router.post("", response_model=ContainerInDB, include_in_schema=False)
 @router.post("/", response_model=ContainerInDB)
 async def create_container(
     container_in: ContainerCreate, 
@@ -116,6 +117,7 @@ async def create_container(
     container_dict["id"] = container_dict["_id"]
     return container_dict
 
+@router.get("", response_model=List[ContainerInDB], include_in_schema=False)
 @router.get("/", response_model=List[ContainerInDB])
 async def list_containers(
     db = Depends(get_database)

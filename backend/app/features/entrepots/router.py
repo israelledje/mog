@@ -29,6 +29,7 @@ class EntrepotUpdate(BaseModel):
     type: Optional[str] = None
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_entrepots(db=Depends(get_database)):
     result = []

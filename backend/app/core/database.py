@@ -14,6 +14,10 @@ async def connect_to_mongo():
     logger.info("Connecting to MongoDB...")
     db_manager.client = AsyncIOMotorClient(
         settings.MONGO_URI,
+        minPoolSize=10,
+        maxPoolSize=50,
+        maxIdleTimeMS=60000,
+        waitQueueTimeoutMS=5000,
         serverSelectionTimeoutMS=5000,
         connectTimeoutMS=5000,
         socketTimeoutMS=30000,

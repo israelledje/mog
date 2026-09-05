@@ -63,7 +63,30 @@ async def create_indexes(db: AsyncIOMotorDatabase):
     # ── entrepots ──────────────────────────────────────────────────────────
     await db.entrepots.create_index("type", name="idx_entrepots_type")
 
+    # ── invoices ───────────────────────────────────────────────────────────
+    await db.invoices.create_index("customer_id", name="idx_invoices_customer_id")
+    await db.invoices.create_index("status", name="idx_invoices_status")
+    await db.invoices.create_index("created_at", name="idx_invoices_created_at")
+    await db.invoices.create_index(
+        [("customer_id", 1), ("created_at", -1)],
+        name="idx_invoices_customer_created",
+    )
+
+    # ── promo_codes & growth ───────────────────────────────────────────────
+    await db.promo_codes.create_index("code", unique=True, name="idx_promo_codes_code_unique")
+    await db.promo_codes.create_index("active", name="idx_promo_codes_active")
+    await db.sales_agents.create_index("code", sparse=True, name="idx_sales_agents_code")
+    await db.sales_agents.create_index("referral_code", sparse=True, name="idx_sales_agents_referral")
+    await db.commissions.create_index("agent_id", name="idx_commissions_agent_id")
+    await db.commissions.create_index("status", name="idx_commissions_status")
+
+    # ── tarifs & notifications ─────────────────────────────────────────────
+    await db.tarifs.create_index([("mode", 1), ("category_key", 1)], name="idx_tarifs_mode_cat")
+    await db.notifications.create_index("user_id", name="idx_notifs_user")
+    await db.notifications.create_index([("user_id", 1), ("read", 1)], name="idx_notifs_user_read")
+
     # ── counters (codes client atomiques) ──────────────────────────────────
     # _id est déjà indexé par défaut dans MongoDB — rien à faire
 
     logger.info("✅ Index MongoDB prêts.")
+
