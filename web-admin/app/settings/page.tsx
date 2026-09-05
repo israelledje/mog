@@ -160,7 +160,15 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-              <p className="text-sm font-medium text-slate-500">Ces taux s'appliqueront en fonction du montant total du paiement fournisseur.</p>
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs font-medium text-slate-500">Ces taux s'appliquent en fonction du montant total du paiement fournisseur.</p>
+                <a 
+                  href="/taux" 
+                  className="text-xs font-black text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 shrink-0"
+                >
+                  Simulateur & Taux dédiés →
+                </a>
+              </div>
             </div>
           </div>
         </div>

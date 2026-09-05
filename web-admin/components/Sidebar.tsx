@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   Percent,
   Handshake,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -29,6 +30,7 @@ const menuItems = [
   { name: 'M.O.G PARTNERS', href: '/commerciaux', icon: Handshake },
   { name: 'Codes promo', href: '/promos', icon: Percent },
   { name: 'Paiements & Factures', href: '/payments', icon: CreditCard },
+  { name: 'Taux de Change (CNY)', href: '/taux', icon: ArrowLeftRight },
   { name: 'Grille Tarifaire', href: '/tarifs', icon: Tag },
   { name: 'Clients', href: '/customers', icon: Users },
   { name: 'Équipe', href: '/team', icon: ShieldCheck },
