@@ -76,6 +76,16 @@ function computeDaysFromToday(dateStr: string): number {
   return Math.max(0, diff);
 }
 
+function formatPrettyDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00Z'));
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const day = d.getDate();
+  const month = MONTH_NAMES[d.getMonth()] || '';
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
 type MainTab = 'containers' | 'assign';
 type PickMode = 'tracking' | 'client';
 

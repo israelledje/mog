@@ -136,12 +136,6 @@ export const saveTokens = async (access: string, refresh: string) => {
   await storage.setItem(REFRESH_KEY, refresh);
 };
 
-import { useAuthStore } from '../store/authStore';
-import { useColisStore } from '../store/colisStore';
-import { useSettingsStore } from '../store/settingsStore';
-import { useSyncStore } from '../store/syncStore';
-import { useTarifsStore } from '../store/tarifsStore';
-
 /**
  * Supprime les tokens du stockage local (ex: lors d'une déconnexion).
  */
@@ -149,12 +143,20 @@ export const clearTokens = async () => {
   await storage.deleteItem(TOKEN_KEY);
   await storage.deleteItem(REFRESH_KEY);
 
-  // Purge complète de l'état en mémoire
-  useAuthStore.getState().reset?.();
-  useColisStore.getState().reset?.();
-  useSettingsStore.getState().reset?.();
-  useSyncStore.getState().reset?.();
-  useTarifsStore.getState().reset?.();
+  // Purge complète de l'état en mémoire via require dynamique pour éviter les cycles de dépendances
+  try {
+    const { useAuthStore } = require('../store/authStore');
+    const { useColisStore } = require('../store/colisStore');
+    const { useSettingsStore } = require('../store/settingsStore');
+    const { useSyncStore } = require('../store/syncStore');
+    const { useTarifsStore } = require('../store/tarifsStore');
+
+    useAuthStore.getState().reset?.();
+    useColisStore.getState().reset?.();
+    useSettingsStore.getState().reset?.();
+    useSyncStore.getState().reset?.();
+    useTarifsStore.getState().reset?.();
+  } catch {}
 };
 
 export const getAccessToken = async () => {
