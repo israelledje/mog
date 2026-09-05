@@ -18,10 +18,10 @@ COPY . .
 EXPOSE 8000
 
 # Start server — Gunicorn (process manager) + Uvicorn workers (async)
-# 4 workers = bonne valeur pour 2-4 vCPU ; ajuster selon l'infra
+# 2 workers = configuration optimale pour les VPS 1-2 vCPU / 1-2 Go RAM
 CMD ["gunicorn", "app.main:app", \
      "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--workers", "4", \
+     "--workers", "2", \
      "--bind", "0.0.0.0:8000", \
      "--timeout", "120", \
      "--graceful-timeout", "30", \

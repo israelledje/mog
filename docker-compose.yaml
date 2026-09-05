@@ -4,7 +4,7 @@ services:
     container_name: cargo-tracker-db
     # --replSet : active les transactions ACID et la HA future
     # --auth : authentification obligatoire
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile"]
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile", "--wiredTigerCacheSizeGB", "0.25"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: mogadmin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
@@ -15,9 +15,9 @@ services:
       - app-network
     healthcheck:
       test: ["CMD", "mongosh", "-u", "mogadmin", "-p", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
     restart: always
 
   # Conteneur éphémère pour configurer automatiquement le Replica Set et l'utilisateur
@@ -84,7 +84,7 @@ services:
       - app-network
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 30s
+      interval: 45s
       timeout: 5s
       retries: 3
       start_period: 15s
@@ -125,16 +125,18 @@ services:
   whatsapp-service:
     build: ./whatsapp-service
     container_name: cargo-tracker-whatsapp
-    shm_size: '512mb'
+    shm_size: '256mb'
+    cpus: 0.35
+    mem_limit: 300m
     volumes:
       - whatsapp_session:/app/session
     networks:
       - app-network
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
-      interval: 15s
+      interval: 45s
       timeout: 10s
-      retries: 5
+      retries: 3
       start_period: 60s
     restart: always
 
