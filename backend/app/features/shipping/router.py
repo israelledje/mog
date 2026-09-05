@@ -822,6 +822,8 @@ async def get_package_insurance_invoice(
     )
 
 
+@router.get("/{package_id}/label-pdf", include_in_schema=False)
+@router.get("/{package_id}/label-pdf/")
 @router.get("/{package_id}/label-pdf")
 async def get_package_label_pdf(
     package_id: str,

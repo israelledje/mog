@@ -295,6 +295,8 @@ async def get_client_packing_list(
     )
 
 
+@router.get("/{container_id}/labels-pdf", include_in_schema=False)
+@router.get("/{container_id}/labels-pdf/")
 @router.get("/{container_id}/labels-pdf")
 async def get_container_labels_pdf(
     container_id: str,
