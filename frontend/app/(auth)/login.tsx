@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,24 +17,22 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useForm, Controller } from 'react-hook-form';
-import { z } from 'zod';
-import { MaterialCommunityIcons, MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { Mail, Lock, Eye, EyeOff, Fingerprint, Copy, ExternalLink, X, CheckSquare, Square } from 'lucide-react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Mail, Lock, Eye, EyeOff, Fingerprint, Copy, ExternalLink, X, CheckSquare, Square, Phone } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import LanguageSelector from '../../src/components/LanguageSelector';
+import PhoneInput from '../../src/components/PhoneInput';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatErr, saveTokens } from '../../src/api/client';
-import { zodResolver } from '../../src/utils/zodResolver';
 import { biometricService } from '../../src/api/biometrics';
+import { buildFullPhone, parsePhone } from '../../src/utils/phone';
 import { colors, fonts, radii, shadow, spacing } from '../../src/constants/theme';
 import { CHINA_WAREHOUSE_ADDRESS } from '../../src/constants/warehouse';
-
-type LoginForm = { email: string; password: string };
 
 type AddressItem = {
   id: string;
@@ -104,36 +102,56 @@ export default function LoginScreen() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
-  const [error, setError] = useState<string | null>(null);
-  const [bioEnabled, setBioEnabled] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('phone');
+  const [email, setEmail] = useState('');
+  const [dialCode, setDialCode] = useState(parsePhone().country.dial);
+  const [nationalNumber, setNationalNumber] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; phone?: string; password?: string }>({});
+  const [bioEnabled, setBioEnabled] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<AddressItem | null>(null);
 
-  const schema = z.object({
-    email: z.string().min(1, t('errors.required')).refine((val) => {
-      const cleanVal = val.trim();
-      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanVal);
-      const isPhone = /^[0-9+\s-]{6,15}$/.test(cleanVal);
-      return isEmail || isPhone;
-    }, { message: t('errors.invalid_email') }),
-    password: z.string().min(6, t('errors.password_min')),
-  });
-
-  const { control, handleSubmit, formState: { errors } } = useForm<LoginForm>({
-    resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '' },
-    mode: 'onTouched',
-  });
-
-  React.useEffect(() => {
+  useEffect(() => {
     (async () => {
-      const enabled = await biometricService.isEnabled();
-      setBioEnabled(enabled);
+      try {
+        const enabled = await biometricService.isEnabled();
+        setBioEnabled(enabled);
+
+        const savedMode = await AsyncStorage.getItem('@mog_last_login_mode');
+        if (savedMode === 'email' || savedMode === 'phone') {
+          setLoginMethod(savedMode);
+        }
+        const savedDial = await AsyncStorage.getItem('@mog_last_dial_code');
+        if (savedDial) {
+          setDialCode(savedDial);
+        }
+        const isRemembered = await AsyncStorage.getItem('@mog_remember_me');
+        if (isRemembered === 'true') {
+          setRememberMe(true);
+          const savedEmail = await AsyncStorage.getItem('@mog_last_email');
+          if (savedEmail) setEmail(savedEmail);
+          const savedPhone = await AsyncStorage.getItem('@mog_last_phone');
+          if (savedPhone) setNationalNumber(savedPhone);
+        }
+      } catch (e) {
+        console.error(e);
+      }
     })();
   }, []);
+
+  const handleMethodChange = (mode: 'email' | 'phone') => {
+    Haptics.selectionAsync();
+    setLoginMethod(mode);
+    setFieldErrors({});
+    setError(null);
+    AsyncStorage.setItem('@mog_last_login_mode', mode).catch(() => {});
+  };
 
   const handleBiometric = async () => {
     try {
@@ -160,13 +178,62 @@ export default function LoginScreen() {
     }
   };
 
-  const onSubmit = handleSubmit(async ({ email, password }) => {
+  const onSubmit = async () => {
     Keyboard.dismiss();
     setError(null);
+    const errs: { email?: string; phone?: string; password?: string } = {};
+
+    if (loginMethod === 'email') {
+      const cleanEmail = email.trim();
+      if (!cleanEmail) {
+        errs.email = t('errors.required');
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        errs.email = t('errors.invalid_email');
+      }
+    } else {
+      const cleanPhone = nationalNumber.replace(/\D/g, '');
+      if (!cleanPhone) {
+        errs.phone = t('errors.required');
+      } else if (cleanPhone.length < 6) {
+        errs.phone = t('errors.invalid_phone', 'Numéro de téléphone invalide (6 chiffres min)');
+      }
+    }
+
+    if (!password) {
+      errs.password = t('errors.required');
+    } else if (password.length < 6) {
+      errs.password = t('errors.password_min');
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    setFieldErrors({});
+    const identifier = loginMethod === 'email'
+      ? email.trim()
+      : buildFullPhone(dialCode, nationalNumber);
+
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const user = await login(email.trim(), password);
+      
+      // Mémorisation rapide du choix de connexion
+      if (rememberMe) {
+        AsyncStorage.setItem('@mog_remember_me', 'true').catch(() => {});
+        AsyncStorage.setItem('@mog_last_login_mode', loginMethod).catch(() => {});
+        if (loginMethod === 'email') {
+          AsyncStorage.setItem('@mog_last_email', email.trim()).catch(() => {});
+        } else {
+          AsyncStorage.setItem('@mog_last_phone', nationalNumber.trim()).catch(() => {});
+          AsyncStorage.setItem('@mog_last_dial_code', dialCode).catch(() => {});
+        }
+      }
+
+      const user = await login(identifier, password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
       if (user.role === 'operator') {
         router.replace('/(operator)');
       } else if (user.role === 'admin') {
@@ -181,7 +248,7 @@ export default function LoginScreen() {
       setError(msg.includes('Invalid') ? t('errors.invalid_credentials') : msg);
       Toast.show({ type: 'error', text1: t('errors.invalid_credentials') });
     }
-  });
+  };
 
   const handleTabChange = (tab: 'login' | 'register') => {
     Haptics.selectionAsync();
@@ -248,7 +315,7 @@ export default function LoginScreen() {
             <View style={styles.cardContainer}>
               <View style={styles.authCard}>
 
-                {/* Switcher Log In / Sign Up */}
+                {/* Switcher Principal Log In / Sign Up */}
                 <View style={styles.tabSwitcher}>
                   <TouchableOpacity
                     style={[styles.tabBtn, activeTab === 'login' && styles.tabBtnActive]}
@@ -264,58 +331,100 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* Champ Identifiant (Email ou Phone) */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>Email ou N° Téléphone</Text>
-                  <Controller
-                    control={control}
-                    name="email"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <View style={[styles.inputBox, errors.email && styles.inputError]}>
-                        <Mail size={18} color="#94A3B8" style={{ marginRight: 10 }} />
-                        <TextInput
-                          testID="login-email"
-                          style={styles.input}
-                          placeholder="ex: client@mog.com ou 698321187"
-                          placeholderTextColor="#94A3B8"
-                          autoCapitalize="none"
-                          keyboardType="email-address"
-                          value={value}
-                          onChangeText={onChange}
-                          onBlur={onBlur}
-                        />
-                      </View>
-                    )}
-                  />
-                  {errors.email && <Text style={styles.fieldError} testID="login-email-error">{errors.email.message}</Text>}
+                {/* Sélecteur de méthode rapide : Téléphone vs Email */}
+                <View style={styles.methodSwitcherWrap}>
+                  <TouchableOpacity
+                    style={[styles.methodBtn, loginMethod === 'phone' && styles.methodBtnActive]}
+                    onPress={() => handleMethodChange('phone')}
+                    testID="login-method-phone"
+                    activeOpacity={0.8}
+                  >
+                    <Phone size={15} color={loginMethod === 'phone' ? '#2563EB' : '#64748B'} />
+                    <Text style={[styles.methodBtnText, loginMethod === 'phone' && styles.methodBtnTextActive]}>
+                      {t('auth.phone', 'Téléphone')}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.methodBtn, loginMethod === 'email' && styles.methodBtnActive]}
+                    onPress={() => handleMethodChange('email')}
+                    testID="login-method-email"
+                    activeOpacity={0.8}
+                  >
+                    <Mail size={15} color={loginMethod === 'email' ? '#2563EB' : '#64748B'} />
+                    <Text style={[styles.methodBtnText, loginMethod === 'email' && styles.methodBtnTextActive]}>
+                      {t('auth.email', 'Email')}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
+
+                {/* Saisie Téléphone avec Indicatif & Drapeau */}
+                {loginMethod === 'phone' ? (
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>{t('auth.phone', 'Numéro de téléphone')}</Text>
+                    <PhoneInput
+                      dialCode={dialCode}
+                      nationalNumber={nationalNumber}
+                      onDialCodeChange={(dial) => {
+                        setDialCode(dial);
+                        AsyncStorage.setItem('@mog_last_dial_code', dial).catch(() => {});
+                      }}
+                      onNationalNumberChange={(v) => {
+                        setNationalNumber(v);
+                        if (fieldErrors.phone) setFieldErrors((e) => ({ ...e, phone: undefined }));
+                      }}
+                      placeholder="698 32 11 87"
+                      testID="login-phone"
+                      error={!!fieldErrors.phone}
+                    />
+                    {fieldErrors.phone && <Text style={styles.fieldError} testID="login-phone-error">{fieldErrors.phone}</Text>}
+                  </View>
+                ) : (
+                  /* Saisie Email */
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>{t('auth.email', 'Email')}</Text>
+                    <View style={[styles.inputBox, fieldErrors.email && styles.inputError]}>
+                      <Mail size={18} color="#94A3B8" style={{ marginRight: 10 }} />
+                      <TextInput
+                        testID="login-email"
+                        style={styles.input}
+                        placeholder="exemple@email.com"
+                        placeholderTextColor="#94A3B8"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        value={email}
+                        onChangeText={(v) => {
+                          setEmail(v);
+                          if (fieldErrors.email) setFieldErrors((e) => ({ ...e, email: undefined }));
+                        }}
+                      />
+                    </View>
+                    {fieldErrors.email && <Text style={styles.fieldError} testID="login-email-error">{fieldErrors.email}</Text>}
+                  </View>
+                )}
 
                 {/* Champ Mot de passe avec Toggle Œil */}
                 <View style={styles.fieldGroup}>
                   <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
-                  <Controller
-                    control={control}
-                    name="password"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                      <View style={[styles.inputBox, errors.password && styles.inputError]}>
-                        <Lock size={18} color="#94A3B8" style={{ marginRight: 10 }} />
-                        <TextInput
-                          testID="login-password"
-                          style={styles.input}
-                          placeholder="••••••••"
-                          placeholderTextColor="#94A3B8"
-                          secureTextEntry={!showPassword}
-                          value={value}
-                          onChangeText={onChange}
-                          onBlur={onBlur}
-                        />
-                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
-                          {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  />
-                  {errors.password && <Text style={styles.fieldError} testID="login-password-error">{errors.password.message}</Text>}
+                  <View style={[styles.inputBox, fieldErrors.password && styles.inputError]}>
+                    <Lock size={18} color="#94A3B8" style={{ marginRight: 10 }} />
+                    <TextInput
+                      testID="login-password"
+                      style={styles.input}
+                      placeholder="••••••••"
+                      placeholderTextColor="#94A3B8"
+                      secureTextEntry={!showPassword}
+                      value={password}
+                      onChangeText={(v) => {
+                        setPassword(v);
+                        if (fieldErrors.password) setFieldErrors((e) => ({ ...e, password: undefined }));
+                      }}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+                      {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+                    </TouchableOpacity>
+                  </View>
+                  {fieldErrors.password && <Text style={styles.fieldError} testID="login-password-error">{fieldErrors.password}</Text>}
                 </View>
 
                 {/* Se souvenir de moi & Mot de passe oublié */}
@@ -616,7 +725,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     borderRadius: 12,
     padding: 4,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   tabBtn: {
     flex: 1,
@@ -635,6 +744,38 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#1E293B',
+    fontWeight: '800',
+  },
+
+  /* Sous-sélecteur de méthode (Téléphone / Email) */
+  methodSwitcherWrap: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: spacing.lg,
+  },
+  methodBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  methodBtnActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  methodBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  methodBtnTextActive: {
+    color: '#2563EB',
     fontWeight: '800',
   },
 

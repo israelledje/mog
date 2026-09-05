@@ -36,7 +36,10 @@ class TokenPayload(BaseModel):
     type: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    dial_code: Optional[str] = None
+    identifier: Optional[str] = None
     password: str
 
 class RefreshRequest(BaseModel):

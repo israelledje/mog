@@ -89,18 +89,38 @@ async def register(user_in: UserCreate, response: Response, db = Depends(get_dat
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 async def login(request: Request, login_data: LoginRequest, response: Response, db = Depends(get_database)):
-    # Simuler la récupération utilisateur (En attendant Story 1.2)
-    identifier = login_data.email.strip()
-    escaped = re.escape(identifier)
-    
-    # Nettoyage du numéro de téléphone s'il s'agit d'un téléphone (ex: supprimer espaces)
-    clean_phone = re.sub(r'\D', '', identifier)
+    # Extraction de l'identifiant (email, téléphone composé, ou identifier direct)
+    raw_identifier = (
+        login_data.identifier
+        or (f"{login_data.dial_code or ''}{login_data.phone or ''}".strip() if login_data.phone else None)
+        or login_data.email
+        or ""
+    ).strip()
+
+    if not raw_identifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Veuillez fournir un email ou un numéro de téléphone",
+        )
+
+    escaped = re.escape(raw_identifier)
+    clean_digits = re.sub(r'\D', '', raw_identifier)
     
     query_conditions = [
-        {"email": {"$regex": f"^{escaped}$", "$options": "i"}}
+        {"email": {"$regex": f"^{escaped}$", "$options": "i"}},
+        {"client_code": {"$regex": f"^{escaped}$", "$options": "i"}},
     ]
-    if clean_phone and len(clean_phone) >= 6:
-        query_conditions.append({"phone": {"$regex": f"{clean_phone}$"}})
+
+    if clean_digits:
+        norm_phone = normalize_phone(raw_identifier)
+        query_conditions.append({"phone": norm_phone})
+        query_conditions.append({"phone": raw_identifier})
+        if len(clean_digits) >= 6:
+            query_conditions.append({"phone": {"$regex": f"{clean_digits}$"}})
+            # Si le numéro contient plus de 8 chiffres, chercher aussi par les 8 ou 9 derniers chiffres (numéro national)
+            if len(clean_digits) >= 8:
+                query_conditions.append({"phone": {"$regex": f"{clean_digits[-8:]}$"}})
+                query_conditions.append({"phone": {"$regex": f"{clean_digits[-9:]}$"}})
 
     user = await db.users.find_one({"$or": query_conditions})
     

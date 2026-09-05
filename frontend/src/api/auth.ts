@@ -2,10 +2,15 @@ import { api, saveTokens, clearTokens } from './client';
 import type { User, SupportedLang } from '../types';
 
 export const authApi = {
-  async login(email: string, password: string) {
-    const cleanEmail = email.trim().toLowerCase();
+  async login(identifier: string, password: string) {
+    const cleanIdentifier = identifier.trim();
+    const cleanEmail = cleanIdentifier.includes('@') ? cleanIdentifier.toLowerCase() : cleanIdentifier;
     const cleanPassword = password.trim();
-    const { data } = await api.post('/auth/login', { email: cleanEmail, password: cleanPassword });
+    const { data } = await api.post('/auth/login', { 
+      email: cleanEmail,
+      identifier: cleanIdentifier,
+      password: cleanPassword 
+    });
     await saveTokens(data.access_token || data.access, data.refresh_token || data.refresh);
     return data.user as User;
   },

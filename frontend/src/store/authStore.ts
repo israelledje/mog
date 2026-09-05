@@ -9,7 +9,7 @@ interface AuthState {
   loading: boolean;
   lastPassword: string | null;
   bootstrap: () => Promise<void>;
-  login: (email: string, password: string) => Promise<User>;
+  login: (identifier: string, password: string) => Promise<User>;
   loginWithQR: (token: string) => Promise<{ email: string }>;
   loginManualOTP: (email: string, password: string) => Promise<{ email: string }>;
   confirmQRLogin: (email: string, otp: string) => Promise<User>;

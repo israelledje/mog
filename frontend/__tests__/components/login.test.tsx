@@ -37,8 +37,9 @@ import LoginScreen from '../../app/(auth)/login';
 describe('LoginScreen', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("affiche une erreur inline quand l'email est invalide et n'appelle pas login", async () => {
+  it("affiche une erreur inline quand l'email est invalide en mode email", async () => {
     await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-email'));
     await fireEvent.changeText(screen.getByTestId('login-email'), 'pas-un-email');
     await fireEvent.changeText(screen.getByTestId('login-password'), '123456');
     await fireEvent.press(screen.getByTestId('login-submit-button'));
@@ -49,8 +50,22 @@ describe('LoginScreen', () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
+  it('affiche une erreur quand le numéro de téléphone est trop court en mode téléphone', async () => {
+    await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-phone'));
+    await fireEvent.changeText(screen.getByTestId('login-phone'), '123');
+    await fireEvent.changeText(screen.getByTestId('login-password'), '123456');
+    await fireEvent.press(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('login-phone-error')).toBeTruthy();
+    });
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
   it('exige un mot de passe de 6 caractères minimum', async () => {
     await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-email'));
     await fireEvent.changeText(screen.getByTestId('login-email'), 'client@mog.com');
     await fireEvent.changeText(screen.getByTestId('login-password'), '123');
     await fireEvent.press(screen.getByTestId('login-submit-button'));
@@ -61,9 +76,10 @@ describe('LoginScreen', () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
-  it('connecte un client et redirige vers les onglets', async () => {
+  it('connecte un client avec son email et redirige vers les onglets', async () => {
     mockLogin.mockResolvedValue({ role: 'client' });
     await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-email'));
     await fireEvent.changeText(screen.getByTestId('login-email'), 'client@mog.com');
     await fireEvent.changeText(screen.getByTestId('login-password'), 'secret123');
     await fireEvent.press(screen.getByTestId('login-submit-button'));
@@ -74,9 +90,24 @@ describe('LoginScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
   });
 
+  it('connecte un client avec son numéro de téléphone et indicatif', async () => {
+    mockLogin.mockResolvedValue({ role: 'client' });
+    await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-phone'));
+    await fireEvent.changeText(screen.getByTestId('login-phone'), '698321187');
+    await fireEvent.changeText(screen.getByTestId('login-password'), 'secret123');
+    await fireEvent.press(screen.getByTestId('login-submit-button'));
+
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith('+237698321187', 'secret123');
+    });
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+  });
+
   it("redirige un opérateur vers l'espace opérateur", async () => {
     mockLogin.mockResolvedValue({ role: 'operator' });
     await render(<LoginScreen />);
+    await fireEvent.press(screen.getByTestId('login-method-email'));
     await fireEvent.changeText(screen.getByTestId('login-email'), 'op@mog.com');
     await fireEvent.changeText(screen.getByTestId('login-password'), 'secret123');
     await fireEvent.press(screen.getByTestId('login-submit-button'));

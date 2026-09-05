@@ -11,6 +11,7 @@ type Props = {
   onNationalNumberChange: (value: string) => void;
   placeholder?: string;
   testID?: string;
+  error?: boolean;
 };
 
 export default function PhoneInput({
@@ -20,6 +21,7 @@ export default function PhoneInput({
   onNationalNumberChange,
   placeholder,
   testID,
+  error,
 }: Props) {
   const [showCountries, setShowCountries] = useState(false);
   const selected = COUNTRY_CODES.find((c) => c.dial === dialCode) || COUNTRY_CODES[0];
@@ -33,7 +35,7 @@ export default function PhoneInput({
     <View>
       <View style={styles.row}>
         <TouchableOpacity
-          style={styles.countryBtn}
+          style={[styles.countryBtn, error && styles.inputError]}
           onPress={() => setShowCountries((s) => !s)}
           activeOpacity={0.7}
           testID={testID ? `${testID}-country` : undefined}
@@ -42,7 +44,7 @@ export default function PhoneInput({
           <ChevronDown size={14} color={colors.textSecondary} />
         </TouchableOpacity>
         <TextInput
-          style={styles.input}
+          style={[styles.input, error && styles.inputError]}
           value={nationalNumber}
           onChangeText={(v) => onNationalNumberChange(v.replace(/[^\d\s]/g, ''))}
           keyboardType="phone-pad"
@@ -76,28 +78,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.background,
-    borderRadius: radii.input,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.input + 2,
     paddingHorizontal: spacing.md,
     height: 50,
     minWidth: 108,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
   countryText: { fontSize: 14, fontWeight: '600', color: colors.text },
   input: {
     flex: 1,
-    backgroundColor: colors.background,
-    borderRadius: radii.input,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.input + 2,
     paddingHorizontal: spacing.md,
     height: 50,
-    fontSize: 15,
-    color: colors.text,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '500',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  inputError: {
+    borderColor: colors.danger,
   },
   dropdown: {
     backgroundColor: '#fff',
     borderRadius: radii.input,
     marginTop: 4,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
   },
   dropItem: { padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight },
