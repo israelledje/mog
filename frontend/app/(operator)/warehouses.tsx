@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  ChevronLeft, Plus, Pencil, Trash2, Building2, Package, Search, UserPlus, Ship, Plane,
+  ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Building2, Package, Search, UserPlus, Ship, Plane,
   Camera, ImagePlus, MapPin, Globe, Phone, Navigation, X, Check, Sparkles,
   Scale, Maximize, Layers, ArrowRightLeft, Eye, Tag, SlidersHorizontal, RefreshCw, Box as BoxIcon,
 } from 'lucide-react-native';
@@ -54,6 +54,7 @@ export default function WarehousesAdminScreen() {
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search');
   const [clientQ, setClientQ] = useState('');
   const [clientResults, setClientResults] = useState<any[]>([]);
+  const [searchingClients, setSearchingClients] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [newClient, setNewClient] = useState({ full_name: '', phone: '', city: 'Douala', email: '' });
   const [pkgForm, setPkgForm] = useState({
@@ -77,6 +78,73 @@ export default function WarehousesAdminScreen() {
   const [assignEntrepotId, setAssignEntrepotId] = useState('');
   const [assignNotes, setAssignNotes] = useState('');
   const [unassigned, setUnassigned] = useState<any[]>([]);
+
+  // Modal de modification d'un colis en stock
+  const [editPkgModalVisible, setEditPkgModalVisible] = useState(false);
+  const [editingPkg, setEditingPkg] = useState<Colis | null>(null);
+  const [editPkgForm, setEditPkgForm] = useState({
+    description: '',
+    transport_mode: 'sea' as 'sea' | 'air',
+    category_key: 'standard',
+    weight: '',
+    l: '', w: '', h: '',
+    entrepot_id: '',
+    supplier_tracking: '',
+  });
+  const [savingEditPkg, setSavingEditPkg] = useState(false);
+
+  const openEditPkgModal = (pkg: Colis) => {
+    setEditingPkg(pkg);
+    setEditPkgForm({
+      description: pkg.description || pkg.nature || '',
+      transport_mode: (pkg.transport_mode === 'air' ? 'air' : 'sea') as 'sea' | 'air',
+      category_key: pkg.category_key || 'standard',
+      weight: pkg.weight_real ? String(pkg.weight_real) : '',
+      l: pkg.dimensions?.l ? String(pkg.dimensions.l) : '',
+      w: pkg.dimensions?.w ? String(pkg.dimensions.w) : '',
+      h: pkg.dimensions?.h ? String(pkg.dimensions.h) : '',
+      entrepot_id: pkg.current_entrepot_id || pkg.warehouse_location || '',
+      supplier_tracking: pkg.supplier_tracking || '',
+    });
+    setEditPkgModalVisible(true);
+  };
+
+  const submitEditPkg = async () => {
+    const pkgId = editingPkg?.id || (editingPkg as any)?._id;
+    if (!pkgId) return;
+
+    if (!editPkgForm.description.trim()) {
+      Toast.show({ type: 'error', text1: 'Description / nature requise' });
+      return;
+    }
+
+    setSavingEditPkg(true);
+    try {
+      const dims = {
+        l: Number(editPkgForm.l) || 0,
+        w: Number(editPkgForm.w) || 0,
+        h: Number(editPkgForm.h) || 0,
+      };
+
+      await colisApi.updateAudit(pkgId, {
+        weight_real: Number(editPkgForm.weight) || 0,
+        dimensions: dims,
+        nature: editPkgForm.description.trim(),
+        transport_mode: editPkgForm.transport_mode,
+        category_key: editPkgForm.category_key,
+        entrepot_id: editPkgForm.entrepot_id || undefined,
+      });
+
+      Toast.show({ type: 'success', text1: 'Colis mis à jour avec succès' });
+      setEditPkgModalVisible(false);
+      setEditingPkg(null);
+      loadStock();
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: formatErr(e, 'Mise à jour impossible') });
+    } finally {
+      setSavingEditPkg(false);
+    }
+  };
 
   const loadStock = useCallback(async () => {
     setLoadingStock(true);
@@ -139,7 +207,10 @@ export default function WarehousesAdminScreen() {
   useEffect(() => {
     if (tab === 'affecter') loadUnassigned();
     if (tab === 'stock') loadStock();
-  }, [tab, loadUnassigned, loadStock]);
+    if (tab === 'saisie' && clientMode === 'search' && !selectedClient && clientResults.length === 0) {
+      searchClients('');
+    }
+  }, [tab, loadUnassigned, loadStock, clientMode]);
 
   const openCreate = () => {
     setEditId(null);
@@ -276,16 +347,14 @@ export default function WarehousesAdminScreen() {
 
   const searchClients = async (q: string) => {
     setClientQ(q);
-    setSelectedClient(null);
-    if (q.trim().length < 2) {
-      setClientResults([]);
-      return;
-    }
+    setSearchingClients(true);
     try {
       const res = await colisApi.searchUsers(q.trim());
       setClientResults(Array.isArray(res) ? res : []);
     } catch {
       setClientResults([]);
+    } finally {
+      setSearchingClients(false);
     }
   };
 
@@ -780,6 +849,14 @@ export default function WarehousesAdminScreen() {
                     {/* Actions sur le colis */}
                     <View style={styles.stockActionsRow}>
                       <TouchableOpacity
+                        style={[styles.stockActionBtn, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` }]}
+                        onPress={() => openEditPkgModal(pkg)}
+                      >
+                        <Pencil size={14} color={colors.primary} />
+                        <Text style={[styles.stockActionBtnText, { color: colors.primary }]}>Modifier</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
                         style={styles.stockActionBtn}
                         onPress={() => {
                           setSelectedPkg(pkg);
@@ -787,7 +864,7 @@ export default function WarehousesAdminScreen() {
                         }}
                       >
                         <ArrowRightLeft size={14} color={colors.primary} />
-                        <Text style={styles.stockActionBtnText}>Transférer / Affecter</Text>
+                        <Text style={styles.stockActionBtnText}>Affecter</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -855,31 +932,111 @@ export default function WarehousesAdminScreen() {
           </View>
 
           {clientMode === 'search' ? (
-            <>
-              <TextInput
-                style={styles.input}
-                placeholder="Nom, téléphone, email, code client…"
-                placeholderTextColor={colors.textSecondary}
-                value={clientQ}
-                onChangeText={searchClients}
-              />
-              {clientResults.map((c) => (
-                <TouchableOpacity
-                  key={c.id || c.email}
-                  style={[styles.pickRow, selectedClient?.email === c.email && styles.pickOn]}
-                  onPress={() => { setSelectedClient(c); setClientResults([]); }}
-                >
-                  <Text style={styles.cardTitle}>{c.full_name || c.email}</Text>
-                  <Text style={styles.meta}>{c.phone || '—'} · {c.email}</Text>
-                </TouchableOpacity>
-              ))}
-              {selectedClient && (
-                <View style={styles.selectedBox}>
-                  <Text style={styles.cardTitle}>✓ {selectedClient.full_name}</Text>
-                  <Text style={styles.meta}>{selectedClient.email}</Text>
+            <View style={{ marginBottom: 16 }}>
+              {selectedClient ? (
+                <View style={styles.selectedClientCard}>
+                  <View style={styles.selectedClientHeader}>
+                    <View style={styles.checkIconCircle}>
+                      <Check size={16} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={styles.selectedClientName}>{selectedClient.full_name || selectedClient.email}</Text>
+                        {selectedClient.client_code && (
+                          <View style={styles.clientCodeBadge}>
+                            <Text style={styles.clientCodeText}>{selectedClient.client_code}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.selectedClientMeta}>
+                        {selectedClient.phone ? `📱 ${selectedClient.phone}  ` : ''}{selectedClient.email ? `✉️ ${selectedClient.email}` : ''}
+                      </Text>
+                      {selectedClient.city && (
+                        <Text style={[styles.selectedClientMeta, { marginTop: 2 }]}>
+                          📍 {selectedClient.city}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.changeClientBtn}
+                      onPress={() => {
+                        setSelectedClient(null);
+                        searchClients(clientQ || '');
+                      }}
+                    >
+                      <Text style={styles.changeClientBtnText}>Changer</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+              ) : (
+                <>
+                  <View style={styles.clientSearchContainer}>
+                    <Search size={18} color={colors.primary} style={{ marginRight: 10 }} />
+                    <TextInput
+                      style={styles.clientSearchInput}
+                      placeholder="Tapez le nom, code MOG, tél ou email…"
+                      placeholderTextColor={colors.textSecondary}
+                      value={clientQ}
+                      onChangeText={searchClients}
+                      autoCapitalize="none"
+                    />
+                    {searchingClients && <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />}
+                    {clientQ.length > 0 && !searchingClients && (
+                      <TouchableOpacity onPress={() => searchClients('')} style={{ padding: 4 }}>
+                        <X size={16} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {clientResults.length > 0 ? (
+                    <View style={styles.clientResultsContainer}>
+                      <Text style={styles.clientResultsHint}>
+                        {clientQ.trim().length > 0 ? `${clientResults.length} client(s) trouvé(s) :` : 'Clients suggérés :'}
+                      </Text>
+                      {clientResults.map((c) => (
+                        <TouchableOpacity
+                          key={c.id || c.email}
+                          style={styles.clientItemCard}
+                          onPress={() => {
+                            setSelectedClient(c);
+                            setClientResults([]);
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
+                              <Text style={styles.clientCardTitle}>{c.full_name || c.email}</Text>
+                              {c.client_code && (
+                                <View style={styles.clientCodeBadge}>
+                                  <Text style={styles.clientCodeText}>{c.client_code}</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.clientCardMeta}>
+                              {c.phone ? `📱 ${c.phone}  ` : ''}{c.email ? `✉️ ${c.email}` : ''}
+                            </Text>
+                          </View>
+                          <ChevronRight size={18} color={colors.primary} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : clientQ.trim().length > 0 && !searchingClients ? (
+                    <View style={styles.emptyClientBox}>
+                      <Text style={styles.emptyClientText}>Aucun client trouvé pour « {clientQ} »</Text>
+                      <TouchableOpacity
+                        style={styles.switchNewClientBtn}
+                        onPress={() => {
+                          setClientMode('new');
+                          setNewClient((prev) => ({ ...prev, full_name: clientQ }));
+                        }}
+                      >
+                        <UserPlus size={14} color="#fff" />
+                        <Text style={styles.switchNewClientText}>Créer comme client sans compte</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </>
               )}
-            </>
+            </View>
           ) : (
             <>
               <View style={styles.infoBanner}>
@@ -1338,6 +1495,221 @@ export default function WarehousesAdminScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* MODAL MODIFIER UN COLIS EN STOCK */}
+      <Modal
+        visible={editPkgModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditPkgModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setEditPkgModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBox}
+            onPress={(e) => e.stopPropagation?.()}
+          >
+            {/* Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderIconBadge}>
+                <Pencil size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Modifier le colis en stock</Text>
+                <Text style={styles.modalSubtitle}>
+                  {editingPkg?.tracking_number ? `Réf: ${editingPkg.tracking_number}` : 'Correction des informations'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setEditPkgModalVisible(false)}
+              >
+                <X size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+              {/* Section 1: Mode de transport */}
+              <Text style={styles.formSectionLabel}>1. Mode de transport</Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 8 }}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeChip,
+                    editPkgForm.transport_mode === 'sea' && styles.modeChipOn,
+                    { flex: 1, paddingVertical: 12 },
+                  ]}
+                  onPress={() => {
+                    const keys = freightCategoriesForMode('sea').map((c) => c.key);
+                    setEditPkgForm((f) => ({
+                      ...f,
+                      transport_mode: 'sea',
+                      category_key: keys.includes(f.category_key) ? f.category_key : 'standard',
+                    }));
+                  }}
+                >
+                  <Ship size={18} color={editPkgForm.transport_mode === 'sea' ? '#fff' : colors.textSecondary} />
+                  <Text style={[styles.modeChipText, editPkgForm.transport_mode === 'sea' && { color: '#fff' }]}>
+                    🚢 Fret Maritime
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modeChip,
+                    editPkgForm.transport_mode === 'air' && styles.modeChipOn,
+                    { flex: 1, paddingVertical: 12 },
+                  ]}
+                  onPress={() => {
+                    const keys = freightCategoriesForMode('air').map((c) => c.key);
+                    setEditPkgForm((f) => ({
+                      ...f,
+                      transport_mode: 'air',
+                      category_key: keys.includes(f.category_key) ? f.category_key : 'standard',
+                    }));
+                  }}
+                >
+                  <Plane size={18} color={editPkgForm.transport_mode === 'air' ? '#fff' : colors.textSecondary} />
+                  <Text style={[styles.modeChipText, editPkgForm.transport_mode === 'air' && { color: '#fff' }]}>
+                    ✈️ Fret Aérien
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Section 2: Catégorie tarifaire */}
+              <Text style={styles.formSectionLabel}>2. Catégorie tarifaire</Text>
+              <CategoryChips
+                items={freightCategoriesForMode(editPkgForm.transport_mode)}
+                activeKey={editPkgForm.category_key}
+                onSelect={(k) => setEditPkgForm((f) => ({ ...f, category_key: k }))}
+              />
+
+              {/* Section 3: Description / Nature */}
+              <Text style={styles.formSectionLabel}>3. Description / Nature du colis *</Text>
+              <View style={styles.inputWrapper}>
+                <Package size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="ex: Chaussures de sport, Vêtements, Électronique..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={editPkgForm.description}
+                  onChangeText={(v) => setEditPkgForm((f) => ({ ...f, description: v }))}
+                />
+              </View>
+
+              {/* Section 4: Poids et Dimensions */}
+              <Text style={styles.formSectionLabel}>4. Poids & Dimensions</Text>
+              <View style={styles.inputWrapper}>
+                <Scale size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="Poids réel en kg (ex: 4.5)"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                  value={editPkgForm.weight}
+                  onChangeText={(v) => setEditPkgForm((f) => ({ ...f, weight: v }))}
+                />
+              </View>
+
+              <Text style={[styles.formSectionLabel, { marginTop: 10 }]}>Dimensions L × l × H (cm)</Text>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <TextInput
+                    style={[styles.fieldInput, { textAlign: 'center' }]}
+                    placeholder="L (cm)"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                    value={editPkgForm.l}
+                    onChangeText={(v) => setEditPkgForm((f) => ({ ...f, l: v }))}
+                  />
+                </View>
+                <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>×</Text>
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <TextInput
+                    style={[styles.fieldInput, { textAlign: 'center' }]}
+                    placeholder="l (cm)"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                    value={editPkgForm.w}
+                    onChangeText={(v) => setEditPkgForm((f) => ({ ...f, w: v }))}
+                  />
+                </View>
+                <Text style={{ color: colors.textSecondary, fontWeight: '700' }}>×</Text>
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <TextInput
+                    style={[styles.fieldInput, { textAlign: 'center' }]}
+                    placeholder="H (cm)"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="numeric"
+                    value={editPkgForm.h}
+                    onChangeText={(v) => setEditPkgForm((f) => ({ ...f, h: v }))}
+                  />
+                </View>
+              </View>
+
+              {/* Indicateur CBM en direct */}
+              {Number(editPkgForm.l) > 0 && Number(editPkgForm.w) > 0 && Number(editPkgForm.h) > 0 && (
+                <View style={[styles.infoBanner, { marginTop: 10, marginBottom: 4 }]}>
+                  <Maximize size={16} color={colors.primary} />
+                  <Text style={styles.infoBannerText}>
+                    Volume calculé : {((Number(editPkgForm.l) * Number(editPkgForm.w) * Number(editPkgForm.h)) / 1000000).toFixed(4)} m³ (CBM)
+                  </Text>
+                </View>
+              )}
+
+              {/* Section 5: Entrepôt de stockage */}
+              <Text style={styles.formSectionLabel}>5. Entrepôt actuel</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+                {items.map((wh) => {
+                  const id = wh.id || wh._id || '';
+                  const isSel = editPkgForm.entrepot_id === id;
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      style={[styles.whFilterChip, isSel && styles.whFilterChipActive]}
+                      onPress={() => setEditPkgForm((f) => ({ ...f, entrepot_id: id }))}
+                    >
+                      <Building2 size={13} color={isSel ? '#fff' : colors.primary} />
+                      <Text style={[styles.whFilterChipText, isSel && styles.whFilterChipTextActive]}>
+                        {wh.name} ({wh.city})
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </ScrollView>
+
+            {/* Footer Action Buttons */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.submitBtn}
+                onPress={submitEditPkg}
+                disabled={savingEditPkg}
+                activeOpacity={0.85}
+              >
+                {savingEditPkg ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Check size={18} color="#fff" />
+                    <Text style={styles.submitBtnText}>Enregistrer les modifications</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dismissBtn}
+                onPress={() => setEditPkgModalVisible(false)}
+                disabled={savingEditPkg}
+              >
+                <Text style={styles.dismissBtnText}>Annuler</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1691,4 +2063,138 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   dismissBtn: { paddingVertical: 10, alignItems: 'center' },
   dismissBtnText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+
+  clientSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 2,
+    marginBottom: 8,
+  },
+  clientSearchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  clientResultsContainer: {
+    marginTop: 4,
+    gap: 8,
+  },
+  clientResultsHint: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  clientItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  clientCardTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  clientCardMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  clientCodeBadge: {
+    backgroundColor: 'rgba(59,130,246,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(59,130,246,0.4)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  clientCodeText: {
+    color: '#60A5FA',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  selectedClientCard: {
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(16,185,129,0.35)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 8,
+  },
+  selectedClientHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  checkIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedClientName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  selectedClientMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  changeClientBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  changeClientBtnText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyClientBox: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  emptyClientText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  switchNewClientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  switchNewClientText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });

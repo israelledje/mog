@@ -16,12 +16,22 @@ class InvoiceCreate(BaseModel):
     total_price: float
     include_vat: bool = False
     discount: float = 0.0
+    promo_code: Optional[str] = None
+    promo_discount: float = 0.0
+    points_used: int = 0
+    points_discount: float = 0.0
+    manual_discount: float = 0.0
     
 class InvoiceUpdate(BaseModel):
     packages: Optional[List[InvoicePackageItem]] = None
     total_price: Optional[float] = None
     include_vat: Optional[bool] = None
     discount: Optional[float] = None
+    promo_code: Optional[str] = None
+    promo_discount: Optional[float] = None
+    points_used: Optional[int] = None
+    points_discount: Optional[float] = None
+    manual_discount: Optional[float] = None
     status: Optional[str] = None
 
 class InvoiceInDB(BaseModel):
@@ -32,8 +42,14 @@ class InvoiceInDB(BaseModel):
     total_price: float
     include_vat: bool
     discount: float = 0.0
+    promo_code: Optional[str] = None
+    promo_discount: float = 0.0
+    points_used: int = 0
+    points_discount: float = 0.0
+    manual_discount: float = 0.0
     status: str # "draft" or "final"
     payment_status: str # "pending", "paid"
     payment_proof_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+

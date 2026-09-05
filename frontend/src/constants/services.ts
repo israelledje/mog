@@ -21,6 +21,7 @@ export type ServiceDef = {
   subtitle: string;
   color: string;
   Icon: any;
+  icon3d?: any;
   href: string;
   intro: string[];
   /** Image de fond pour la carte d'en-tête du formulaire */
@@ -36,6 +37,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Accompagnement en Chine',
     color: '#2563EB',
     Icon: Headphones,
+    icon3d: require('../../assets/images/3d/headphones.jpg'),
     href: '/services/assistance',
     heroImage: require('../../assets/images/portrait-beautiful-young-asian-woman-happy-smile-relax-around-neary-beach-sea.jpg'),
     intro: [
@@ -69,6 +71,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Prise en charge à l’arrivée',
     color: '#0EA5E9',
     Icon: Plane,
+    icon3d: require('../../assets/images/3d/airplane.jpg'),
     href: '/services/airport',
     heroImage: require('../../assets/images/man-preparing-travel.jpg'),
     intro: [
@@ -100,6 +103,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Dossier & universités',
     color: '#7C3AED',
     Icon: GraduationCap,
+    icon3d: require('../../assets/images/3d/student.jpg'),
     href: '/services/student',
     heroImage: require('../../assets/images/business-women-signature-document.jpg'),
     intro: [
@@ -134,6 +138,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Hôtels partenaires',
     color: '#D97706',
     Icon: Hotel,
+    icon3d: require('../../assets/images/3d/hotel.jpg'),
     href: '/services/hotel',
     heroImage: require('../../assets/images/type-entertainment-complex-popular-resort-with-pools-water-parks-turkey-with-more-than-5-million-visitors-year-amara-dolce-vita-luxury-hotel-resort-tekirova-kemer.jpg'),
     intro: [
@@ -168,6 +173,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'FR / EN / ZH',
     color: '#059669',
     Icon: Languages,
+    icon3d: require('../../assets/images/3d/translator.jpg'),
     href: '/services/translator',
     heroImage: require('../../assets/images/flag-countries-foreign-word-translation-concept.jpg'),
     intro: [
@@ -206,6 +212,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Afrique centrale & CI',
     color: '#DC2626',
     Icon: Car,
+    icon3d: require('../../assets/images/3d/car.jpg'),
     href: '/(tabs)/marketplace',
     heroImage: require('../../assets/images/stylish-black-woman-car-salon.jpg'),
     intro: [
@@ -250,6 +257,7 @@ export const SERVICES: ServiceDef[] = [
     subtitle: 'Partenaire groupage & expédition',
     color: '#0F766E',
     Icon: Container,
+    icon3d: require('../../assets/images/3d/container.jpg'),
     href: '/services/container',
     heroImage: require('../../assets/images/logistics-transportation-container-cargo-ship-cargo-plane-with-working-crane-bridge-shipyard-sunrise-logistic-import-export-transport-industry-background-ai-generative.jpg'),
     intro: [

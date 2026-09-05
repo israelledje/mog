@@ -50,24 +50,30 @@ async def get_kpi(
 
 @router.get("/users/search")
 async def search_users(
-    q: str = Query(..., min_length=2),
+    q: str = Query(default="", min_length=0),
     current_user: dict = Depends(check_role(["admin", "operator"])),
     db = Depends(get_database)
 ):
-    query = {
-        "$or": [
-            {"full_name": {"$regex": q, "$options": "i"}},
-            {"email": {"$regex": q, "$options": "i"}},
-            {"phone": {"$regex": q, "$options": "i"}},
-            {"client_code": {"$regex": q, "$options": "i"}},
-        ],
-        "role": "client"
+    query: dict = {
+        "role": {"$nin": ["admin", "operator"]}
     }
-    cursor = db.users.find(query, {"password": 0, "hashed_password": 0}).limit(10)
+    q_clean = q.strip()
+    if q_clean:
+        query["$or"] = [
+            {"full_name": {"$regex": q_clean, "$options": "i"}},
+            {"email": {"$regex": q_clean, "$options": "i"}},
+            {"phone": {"$regex": q_clean, "$options": "i"}},
+            {"client_code": {"$regex": q_clean, "$options": "i"}},
+        ]
+    cursor = db.users.find(query, {"password": 0, "hashed_password": 0}).limit(20)
     users = []
     async for u in cursor:
         u["id"] = str(u["_id"])
         del u["_id"]
+        # Normaliser le code client vers le préfixe MOG
+        code = u.get("client_code")
+        if code and str(code).startswith("CM"):
+            u["client_code"] = "MOG" + str(code)[2:]
         users.append(u)
     return users
 
@@ -622,8 +628,8 @@ async def receive_package(
         )
     
     # Calculer le poids volumétrique
-    dims = receive_data.dimensions
-    weight_volumetric = (dims.get("l", 0) * dims.get("w", 0) * dims.get("h", 0)) / 6000 # Formule standard Air
+    dims = receive_data.dimensions or {"l": 0, "w": 0, "h": 0}
+    weight_volumetric = (float(dims.get("l") or 0) * float(dims.get("w") or 0) * float(dims.get("h") or 0)) / 6000 # Formule standard Air
     
     final_status = receive_data.status if receive_data.status else "received"
     

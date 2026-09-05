@@ -426,18 +426,53 @@ def generate_customer_invoice_pdf(invoice: dict, packages: List[dict], customer:
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(*MOG_TEXT)
 
-    base_price = invoice.get("total_price", 0) or 0
-    discount = invoice.get("discount", 0.0) or 0.0
+    # Calcul et cohérence financière
+    invoice_total_field = float(invoice.get("total_price", 0) or 0)
+    discount = float(invoice.get("discount", 0.0) or 0.0)
+    promo_code = invoice.get("promo_code")
+    promo_discount = float(invoice.get("promo_discount", 0.0) or 0.0)
+    points_used = int(invoice.get("points_used", 0) or 0)
+    points_discount = float(invoice.get("points_discount", 0.0) or 0.0)
+    manual_discount = float(invoice.get("manual_discount", 0.0) or 0.0)
     include_vat = invoice.get("include_vat", False)
 
-    pdf.cell(140, 7, "Sous-total Hors Taxes", align="R")
-    pdf.cell(50, 7, f"{base_price:,.0f} FCFA", ln=True, align="R")
+    # Calcul du sous-total brut à partir des lignes
+    calculated_items_sum = 0.0
+    for item in invoice.get("packages", []):
+        unit_price = item.get("manual_unit_price")
+        if unit_price is None:
+            unit_price = item.get("calculated_unit_price", 0) or 0
+        qte_val = item.get("weight_or_volume", 0) or 0
+        calculated_items_sum += float(unit_price) * float(qte_val)
 
-    net_ht = base_price
-    if discount > 0:
+    if calculated_items_sum > invoice_total_field:
+        gross_subtotal = calculated_items_sum
+    else:
+        gross_subtotal = invoice_total_field + discount
+
+    net_ht = max(0.0, gross_subtotal - discount)
+    if invoice_total_field > 0 and not include_vat:
+        net_ht = invoice_total_field
+
+    pdf.cell(140, 7, "Sous-total Brut HT", align="R")
+    pdf.cell(50, 7, f"{gross_subtotal:,.0f} FCFA", ln=True, align="R")
+
+    if promo_discount > 0:
+        label = f"Remise Code Promo ({promo_code})" if promo_code else "Remise Code Promo"
+        pdf.cell(140, 7, label, align="R")
+        pdf.cell(50, 7, f"- {promo_discount:,.0f} FCFA", ln=True, align="R")
+
+    if points_discount > 0:
+        label = f"Points M.O.G CLUB ({points_used} pts)" if points_used > 0 else "Remise Points Fidelite"
+        pdf.cell(140, 7, label, align="R")
+        pdf.cell(50, 7, f"- {points_discount:,.0f} FCFA", ln=True, align="R")
+
+    if manual_discount > 0:
+        pdf.cell(140, 7, "Remise commerciale", align="R")
+        pdf.cell(50, 7, f"- {manual_discount:,.0f} FCFA", ln=True, align="R")
+    elif discount > 0 and promo_discount == 0 and points_discount == 0:
         pdf.cell(140, 7, "Remise", align="R")
         pdf.cell(50, 7, f"- {discount:,.0f} FCFA", ln=True, align="R")
-        net_ht -= discount
 
     if include_vat:
         vat_amount = net_ht * 0.1925
@@ -451,9 +486,11 @@ def generate_customer_invoice_pdf(invoice: dict, packages: List[dict], customer:
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_fill_color(*MOG_BLUE)
     pdf.set_text_color(255)
-    pdf.cell(0, 12, f" TOTAL À PAYER : {total_price:,.0f} FCFA ", ln=True, align="R", fill=True)
+    pdf.cell(0, 12, f" TOTAL NET À PAYER : {total_price:,.0f} FCFA ", ln=True, align="R", fill=True)
 
     return _pdf_bytes(pdf)
+
+
 
 
 def generate_client_packing_list_pdf(container_data: dict, packages: List[dict], customer: dict) -> BytesIO:

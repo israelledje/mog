@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus, Users,
-  X, Sparkles, MapPin, Navigation, Check,
+  X, Sparkles, MapPin, Navigation, Check, Zap, Calendar,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -20,6 +20,37 @@ import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/c
 
 const containerId = (c: Groupage) => c.id || (c as any)._id;
 const colisIdOf = (c: Colis) => c.id || (c as any)._id;
+
+const MONTH_NAMES = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+const DAY_SHORT_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+function getInitialDepartureDate(offsetDays = 5): string {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return d.toISOString().split('T')[0];
+}
+
+function computeDaysFromToday(dateStr: string): number {
+  if (!dateStr) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00Z'));
+  target.setHours(0, 0, 0, 0);
+  const diff = Math.ceil((target.getTime() - today.getTime()) / 86400000);
+  return Math.max(0, diff);
+}
+
+function formatPrettyDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00Z'));
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const day = d.getDate();
+  const month = MONTH_NAMES[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
 
 type PickMode = 'tracking' | 'client';
 
@@ -43,9 +74,40 @@ export default function GroupageScreen() {
     container_number: '',
     destination_city: 'Douala',
     mode: 'sea',
+    is_express: false,
     origin_port: 'Guangzhou',
     vessel_name: '',
+    departure_date: getInitialDepartureDate(5),
   });
+
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  const [calendarOpen, setCalendarOpen] = useState(true);
+
+  const remainingDays = useMemo(() => computeDaysFromToday(form.departure_date), [form.departure_date]);
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+    const totalDays = lastDay.getDate();
+    let startIdx = firstDay.getDay() - 1;
+    if (startIdx < 0) startIdx = 6;
+
+    const days: Array<{ day: number; dateStr: string; isPast: boolean; isToday: boolean; isSelected: boolean } | null> = [];
+    for (let i = 0; i < startIdx; i++) days.push(null);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (let d = 1; d <= totalDays; d++) {
+      const mStr = String(calendarMonth + 1).padStart(2, '0');
+      const dStr = String(d).padStart(2, '0');
+      const dateStr = `${calendarYear}-${mStr}-${dStr}`;
+      const isPast = dateStr < todayStr;
+      const isToday = dateStr === todayStr;
+      const isSelected = form.departure_date === dateStr;
+      days.push({ day: d, dateStr, isPast, isToday, isSelected });
+    }
+    return days;
+  }, [calendarYear, calendarMonth, form.departure_date]);
 
   // Mode client
   const [clientQ, setClientQ] = useState('');
@@ -117,10 +179,6 @@ export default function GroupageScreen() {
     setSelectedClient(null);
     setClientPackages([]);
     setSelectedIds(new Set());
-    if (q.trim().length < 2) {
-      setClientResults([]);
-      return;
-    }
     try {
       const res = await colisApi.searchUsers(q.trim());
       setClientResults(Array.isArray(res) ? res : []);
@@ -200,14 +258,16 @@ export default function GroupageScreen() {
                 Alert.alert('Partiel', `${ok} ajouté(s), échec : ${errors.join(', ')}`);
               } else {
                 Alert.alert('OK', `${ok} colis ajouté(s) au groupage`, [
-                  { text: 'OK', onPress: () => {
-                    setSelectedColis(null);
-                    setSelectedIds(new Set());
-                    setSelectedClient(null);
-                    setClientPackages([]);
-                    setSearch('');
-                    loadData();
-                  } },
+                  {
+                    text: 'OK', onPress: () => {
+                      setSelectedColis(null);
+                      setSelectedIds(new Set());
+                      setSelectedClient(null);
+                      setClientPackages([]);
+                      setSearch('');
+                      loadData();
+                    }
+                  },
                 ]);
               }
             } catch (e: any) {
@@ -229,23 +289,33 @@ export default function GroupageScreen() {
     }
     setCreating(true);
     try {
+      const days = parseInt(form.departure_days || '5', 10);
+      const depDate = new Date(Date.now() + days * 86400000).toISOString();
+      const estDays = form.mode === 'sea' ? days + 30 : (form.is_express ? days + 3 : days + 7);
+      const estArrival = new Date(Date.now() + estDays * 86400000).toISOString();
+
       await groupagesApi.create({
         container_number: form.container_number.trim(),
         destination_city: form.destination_city.trim() || 'Douala',
         mode: form.mode,
+        is_express: form.mode === 'air' ? form.is_express : false,
         origin_port: form.origin_port.trim() || 'Guangzhou',
         vessel_name: form.vessel_name.trim() || undefined,
+        departure_date: depDate,
+        estimated_arrival: estArrival,
       });
       setShowCreate(false);
       setForm({
         container_number: '',
         destination_city: 'Douala',
         mode: 'sea',
+        is_express: false,
         origin_port: 'Guangzhou',
         vessel_name: '',
+        departure_days: '5',
       });
       loadData();
-      Toast.show({ type: 'success', text1: 'Groupage créé' });
+      Toast.show({ type: 'success', text1: 'Groupage créé avec succès' });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: formatErr(e, 'Création impossible') });
     } finally {
@@ -570,21 +640,31 @@ export default function GroupageScreen() {
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScroll}>
                   {[
-                    { label: '🇨🇳 TC 40\' Guangzhou → Douala', mode: 'sea', origin: 'Guangzhou', dest: 'Douala', num: `TC40-GZ-${Date.now().toString().slice(-4)}` },
-                    { label: '🇨🇳 TC 20\' Yiwu → Douala', mode: 'sea', origin: 'Yiwu', dest: 'Douala', num: `TC20-YW-${Date.now().toString().slice(-4)}` },
-                    { label: '✈️ Cargo Guangzhou → Douala', mode: 'air', origin: 'Guangzhou', dest: 'Douala', num: `AIR-GZ-${Date.now().toString().slice(-4)}` },
-                    { label: '🇦🇪 Cargo Dubaï → Douala', mode: 'air', origin: 'Dubaï', dest: 'Douala', num: `AIR-DXB-${Date.now().toString().slice(-4)}` },
+                    { label: '🚢 TC 40\' GZ → Douala', mode: 'sea', is_express: false, origin: 'Guangzhou', dest: 'Douala', num: `TC40-GZ-${Date.now().toString().slice(-4)}`, days: '10' },
+                    { label: '🚢 TC 20\' Yiwu → Douala', mode: 'sea', is_express: false, origin: 'Yiwu', dest: 'Douala', num: `TC20-YW-${Date.now().toString().slice(-4)}`, days: '15' },
+                    { label: '✈️ Cargo GZ → Douala', mode: 'air', is_express: false, origin: 'Guangzhou', dest: 'Douala', num: `AIR-GZ-${Date.now().toString().slice(-4)}`, days: '3' },
+                    { label: '⚡ Aérien Express GZ', mode: 'air', is_express: true, origin: 'Guangzhou', dest: 'Douala', num: `EXP-GZ-${Date.now().toString().slice(-4)}`, days: '1' },
+                    { label: '⚡ Aérien Express Dubaï', mode: 'air', is_express: true, origin: 'Dubaï', dest: 'Douala', num: `EXP-DXB-${Date.now().toString().slice(-4)}`, days: '1' },
                   ].map((p) => (
                     <TouchableOpacity
                       key={p.num}
                       style={styles.presetChip}
-                      onPress={() => setForm({
-                        container_number: p.num,
-                        destination_city: p.dest,
-                        origin_port: p.origin,
-                        mode: p.mode,
-                        vessel_name: '',
-                      })}
+                      onPress={() => {
+                        const offset = parseInt(p.days || '5', 10);
+                        const targetDate = getInitialDepartureDate(offset);
+                        const tObj = new Date(Date.now() + offset * 86400000);
+                        setCalendarMonth(tObj.getMonth());
+                        setCalendarYear(tObj.getFullYear());
+                        setForm({
+                          container_number: p.num,
+                          destination_city: p.dest,
+                          origin_port: p.origin,
+                          mode: p.mode,
+                          is_express: p.is_express,
+                          vessel_name: '',
+                          departure_date: targetDate,
+                        });
+                      }}
                     >
                       <Text style={styles.presetChipText}>{p.label}</Text>
                     </TouchableOpacity>
@@ -597,7 +677,7 @@ export default function GroupageScreen() {
               <View style={styles.modeSelectorRow}>
                 <TouchableOpacity
                   style={[styles.modeCard, form.mode === 'sea' && styles.modeCardSeaActive]}
-                  onPress={() => setForm({ ...form, mode: 'sea' })}
+                  onPress={() => setForm({ ...form, mode: 'sea', is_express: false })}
                 >
                   <Ship size={20} color={form.mode === 'sea' ? '#38BDF8' : colors.textSecondary} />
                   <View style={{ flex: 1 }}>
@@ -622,8 +702,204 @@ export default function GroupageScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Case à cocher élégante Fret Aérien Express */}
+              {form.mode === 'air' && (
+                <TouchableOpacity
+                  style={[
+                    styles.expressCheckboxCard,
+                    form.is_express && styles.expressCheckboxCardActive,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setForm((prev) => ({ ...prev, is_express: !prev.is_express }));
+                  }}
+                >
+                  <View style={styles.expressCheckboxLeft}>
+                    <View style={[styles.expressCheckboxIcon, form.is_express && styles.expressCheckboxIconActive]}>
+                      <Zap size={18} color={form.is_express ? '#F59E0B' : colors.textSecondary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.expressCheckboxTitle, form.is_express && styles.expressCheckboxTitleActive]}>
+                          ⚡ Option Aérien Express
+                        </Text>
+                        {form.is_express && (
+                          <View style={styles.expressBadgeTag}>
+                            <Text style={styles.expressBadgeTagText}>EXPRESS</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.expressCheckboxDesc}>
+                        Cocher pour expédition express (alimente la section Prochain départ Express sur l'accueil)
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.checkboxBox, form.is_express && styles.checkboxBoxActive]}>
+                    {form.is_express && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {/* Estimation départ avec Calendrier interactif & calcul dynamique */}
+              <View style={styles.calendarSectionWrapper}>
+                <View style={styles.calendarSectionHeader}>
+                  <Text style={styles.formSectionLabel}>2. Date de départ estimée (Calendrier interactif)</Text>
+                  <TouchableOpacity
+                    style={styles.calendarToggleBtn}
+                    onPress={() => setCalendarOpen((v) => !v)}
+                  >
+                    <Calendar size={13} color={colors.primary} />
+                    <Text style={styles.calendarToggleBtnText}>
+                      {calendarOpen ? 'Masquer' : 'Calendrier'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Card récapitulative dynamique de la date sélectionnée */}
+                <View style={styles.selectedDateBanner}>
+                  <View style={styles.selectedDateIconCircle}>
+                    <Calendar size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.selectedDateTitle}>
+                      {formatPrettyDate(form.departure_date)}
+                    </Text>
+                    <Text style={styles.selectedDateSub}>
+                      {remainingDays === 0
+                        ? "⚡ Départ aujourd'hui (J-0)"
+                        : `⚡ Dans ${remainingDays} jour${remainingDays > 1 ? 's' : ''} (J-${remainingDays})`}
+                    </Text>
+                  </View>
+                  <View style={[styles.daysCounterBadge, remainingDays <= 2 && styles.daysCounterBadgeUrgent]}>
+                    <Text style={styles.daysCounterBadgeText}>
+                      {remainingDays}j restants
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Vue Calendrier mensuel si ouvert */}
+                {calendarOpen && (
+                  <View style={styles.calendarCard}>
+                    {/* Header Mois & Navigation */}
+                    <View style={styles.calendarHeaderRow}>
+                      <TouchableOpacity
+                        style={styles.calendarNavBtn}
+                        onPress={() => {
+                          if (calendarMonth === 0) {
+                            setCalendarMonth(11);
+                            setCalendarYear((y) => y - 1);
+                          } else {
+                            setCalendarMonth((m) => m - 1);
+                          }
+                        }}
+                      >
+                        <ChevronLeft size={18} color={colors.text} />
+                      </TouchableOpacity>
+
+                      <Text style={styles.calendarMonthTitle}>
+                        {MONTH_NAMES[calendarMonth]} {calendarYear}
+                      </Text>
+
+                      <TouchableOpacity
+                        style={styles.calendarNavBtn}
+                        onPress={() => {
+                          if (calendarMonth === 11) {
+                            setCalendarMonth(0);
+                            setCalendarYear((y) => y + 1);
+                          } else {
+                            setCalendarMonth((m) => m + 1);
+                          }
+                        }}
+                      >
+                        <ChevronRight size={18} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Jours de la semaine Lun..Dim */}
+                    <View style={styles.calendarWeekdaysRow}>
+                      {DAY_SHORT_NAMES.map((d) => (
+                        <Text key={d} style={styles.calendarWeekdayText}>
+                          {d}
+                        </Text>
+                      ))}
+                    </View>
+
+                    {/* Grille des jours */}
+                    <View style={styles.calendarDaysGrid}>
+                      {calendarDays.map((item, idx) => {
+                        if (!item) {
+                          return <View key={`empty-${idx}`} style={styles.calendarDayCell} />;
+                        }
+                        const { day, dateStr, isPast, isToday, isSelected } = item;
+                        return (
+                          <TouchableOpacity
+                            key={dateStr}
+                            disabled={isPast}
+                            style={[
+                              styles.calendarDayCell,
+                              isSelected && styles.calendarDayCellSelected,
+                              isToday && !isSelected && styles.calendarDayCellToday,
+                              isPast && styles.calendarDayCellPast,
+                            ]}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setForm((f) => ({ ...f, departure_date: dateStr }));
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.calendarDayText,
+                                isSelected && styles.calendarDayTextSelected,
+                                isToday && !isSelected && styles.calendarDayTextToday,
+                                isPast && styles.calendarDayTextPast,
+                              ]}
+                            >
+                              {day}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {/* Raccourcis rapides de date */}
+                <Text style={styles.quickPresetTitle}>Raccourcis rapides :</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.delayChipsRow}>
+                  {[
+                    { label: '⚡ Demain (+1j)', offset: 1 },
+                    { label: '+2 jours', offset: 2 },
+                    { label: '+3 jours', offset: 3 },
+                    { label: '+5 jours', offset: 5 },
+                    { label: '+7 jours', offset: 7 },
+                    { label: '+10 jours', offset: 10 },
+                    { label: '+15 jours', offset: 15 },
+                    { label: '+30 jours', offset: 30 },
+                  ].map((preset) => {
+                    const presetDateStr = getInitialDepartureDate(preset.offset);
+                    const isActive = form.departure_date === presetDateStr;
+                    return (
+                      <TouchableOpacity
+                        key={preset.label}
+                        style={[styles.delayChip, isActive && styles.delayChipActive]}
+                        onPress={() => {
+                          const target = new Date(Date.now() + preset.offset * 86400000);
+                          setCalendarMonth(target.getMonth());
+                          setCalendarYear(target.getFullYear());
+                          setForm((f) => ({ ...f, departure_date: presetDateStr }));
+                        }}
+                      >
+                        <Text style={[styles.delayChipText, isActive && styles.delayChipTextActive]}>
+                          {preset.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
               {/* Référence et trajets */}
-              <Text style={styles.formSectionLabel}>2. Référence & itinéraire</Text>
+              <Text style={styles.formSectionLabel}>3. Référence & itinéraire</Text>
               <View style={styles.inputWrapper}>
                 <Box size={18} color={colors.primary} style={styles.inputIcon} />
                 <TextInput
@@ -883,6 +1159,189 @@ const styles = StyleSheet.create({
   modeCardAirActive: { borderColor: '#7DD3FC', backgroundColor: 'rgba(125,211,252,0.12)' },
   modeCardTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
   modeCardSubtitle: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+
+  expressCheckboxCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: 'rgba(245, 158, 11, 0.06)', borderRadius: 14, padding: 12,
+    borderWidth: 1.5, borderColor: 'rgba(245, 158, 11, 0.25)', marginTop: 4, marginBottom: 8,
+  },
+  expressCheckboxCardActive: { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: '#F59E0B' },
+  expressCheckboxLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 10 },
+  expressCheckboxIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(245, 158, 11, 0.12)', alignItems: 'center', justifyContent: 'center' },
+  expressCheckboxIconActive: { backgroundColor: '#F59E0B' },
+  expressCheckboxTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
+  expressCheckboxTitleActive: { color: '#F59E0B' },
+  expressBadgeTag: { backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  expressBadgeTagText: { color: '#000000', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.4 },
+  expressCheckboxDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 2, lineHeight: 14 },
+  checkboxBox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
+  checkboxBoxActive: { borderColor: '#F59E0B', backgroundColor: '#F59E0B' },
+  delayChipsRow: { gap: 8, paddingVertical: 2, marginBottom: 8 },
+  delayChip: { backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  delayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  delayChipText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  delayChipTextActive: { color: '#FFFFFF' },
+
+  calendarSectionWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  calendarSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  calendarToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: `${colors.primary}15`,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  calendarToggleBtnText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  selectedDateBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(235,94,40,0.08)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(235,94,40,0.25)',
+    marginBottom: 10,
+  },
+  selectedDateIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(235,94,40,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedDateTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  selectedDateSub: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  daysCounterBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  daysCounterBadgeUrgent: {
+    backgroundColor: '#EF4444',
+  },
+  daysCounterBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  calendarCard: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 10,
+  },
+  calendarHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  calendarNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarMonthTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  calendarWeekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 6,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  calendarWeekdayText: {
+    width: 34,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  calendarDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  calendarDayCell: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 2,
+  },
+  calendarDayCellSelected: {
+    backgroundColor: colors.primary,
+  },
+  calendarDayCellToday: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  calendarDayCellPast: {
+    opacity: 0.25,
+  },
+  calendarDayText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  calendarDayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  calendarDayTextToday: {
+    color: colors.primary,
+    fontWeight: '800',
+  },
+  calendarDayTextPast: {
+    color: colors.textSecondary,
+  },
+  quickPresetTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 6,
+  },
 
   inputWrapper: {
     flexDirection: 'row',

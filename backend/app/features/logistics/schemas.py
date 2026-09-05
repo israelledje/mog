@@ -13,6 +13,7 @@ class ContainerBase(BaseModel):
     total_price: float = 0.0
     include_vat: bool = False
     invoice_status: str = "none" # none, draft, final
+    is_express: bool = False
 
 class ContainerCreate(ContainerBase):
     pass
@@ -25,6 +26,7 @@ class ContainerUpdate(BaseModel):
     container_number: Optional[str] = None
     destination_city: Optional[str] = None
     mode: Optional[str] = None
+    is_express: Optional[bool] = None
 
 class ContainerInDB(ContainerBase):
     id: str

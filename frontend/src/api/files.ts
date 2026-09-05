@@ -87,6 +87,12 @@ export const fileService = {
     return pdf.uri;
   },
 
+  async fetchPdfBase64(endpoint: string): Promise<string> {
+    const pdf = await fileService.downloadPdf(endpoint, 'document.pdf');
+    return pdf.base64;
+  },
+
+
   async downloadAndShare(endpoint: string, filename: string) {
     const pdf = await fileService.downloadPdf(endpoint, filename);
 

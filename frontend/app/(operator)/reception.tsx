@@ -178,11 +178,12 @@ export default function ReceptionScreen() {
 
   const searchClients = async (q: string) => {
     setUserQuery(q);
-    if (q.length < 2) return;
     try {
-      const res = await colisApi.searchUsers(q);
-      setUserResults(res);
-    } catch (e) {}
+      const res = await colisApi.searchUsers(q.trim());
+      setUserResults(Array.isArray(res) ? res : []);
+    } catch (e) {
+      setUserResults([]);
+    }
   };
 
   const handleCreate = async () => {
@@ -284,12 +285,35 @@ export default function ReceptionScreen() {
 
   const onSubmit = async (statusVal: 'received' | 'damaged') => {
     if (!colisId) return;
-    if (!weight || !dims.l || !dims.w || !dims.h) {
-      Alert.alert(t('operator.required_fields'), t('operator.weight_dims_required'));
-      return;
+
+    const isAir = transportMode === 'air';
+    const isHeavySea = transportMode === 'sea' && categoryKey === 'heavy';
+
+    if (isAir) {
+      if (!weight || Number(weight) <= 0) {
+        Alert.alert(t('operator.required_fields'), 'Le poids réel (kg) est obligatoire pour le fret aérien.');
+        return;
+      }
+    } else if (isHeavySea) {
+      if (!weight || Number(weight) <= 0 || !dims.l || !dims.w || !dims.h) {
+        Alert.alert(t('operator.required_fields'), 'Le poids ET les dimensions sont obligatoires pour les colis lourds maritimes.');
+        return;
+      }
+    } else {
+      if (!dims.l || !dims.w || !dims.h) {
+        Alert.alert(t('operator.required_fields'), 'Les dimensions (L, l, H) sont obligatoires pour calculer le volume en fret maritime.');
+        return;
+      }
     }
 
     setLoading(true);
+
+    const parsedWeight = Number(weight) || 0;
+    const parsedDims = {
+      l: Number(dims.l) || 0,
+      w: Number(dims.w) || 0,
+      h: Number(dims.h) || 0,
+    };
 
     // Mode hors-ligne : on met en file d'attente, synchronisé au retour du réseau.
     const net = await NetInfo.fetch();
@@ -321,8 +345,8 @@ export default function ReceptionScreen() {
       // Vérifier le statut initial ou appeler audit si déjà réceptionné
       try {
         await colisApi.receive(colisId, {
-          weight_real: Number(weight),
-          dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
+          weight_real: parsedWeight,
+          dimensions: parsedDims,
           nature,
           status: statusVal,
           entrepot_id: user?.active_entrepot_id || undefined,
@@ -332,8 +356,8 @@ export default function ReceptionScreen() {
       } catch (receiveErr: any) {
         // Si le colis a déjà été réceptionné, on bascule sur l'endpoint de mise à jour audit
         await colisApi.updateAudit(colisId, {
-          weight_real: Number(weight),
-          dimensions: { l: Number(dims.l), w: Number(dims.w), h: Number(dims.h) },
+          weight_real: parsedWeight,
+          dimensions: parsedDims,
           nature,
           entrepot_id: user?.active_entrepot_id || undefined,
           transport_mode: transportMode,
@@ -578,32 +602,66 @@ export default function ReceptionScreen() {
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.label}>{t('operator.real_weight')}</Text>
+              <Text style={styles.label}>
+                {t('operator.real_weight')} {transportMode === 'air' ? '(Obligatoire *)' : (categoryKey === 'heavy' ? '(Obligatoire colis lourd *)' : '(Optionnel en maritime)')}
+              </Text>
               <View style={styles.inputIcon}>
                 <Scale size={18} color={colors.textSecondary} />
-                <TextInput style={styles.flexInput} value={weight} onChangeText={setWeight} keyboardType="numeric" placeholder="0.0" placeholderTextColor={colors.textSecondary} />
+                <TextInput
+                  style={styles.flexInput}
+                  value={weight}
+                  onChangeText={setWeight}
+                  keyboardType="numeric"
+                  placeholder={transportMode === 'air' ? "Poids en kg (ex: 2.5) *" : "Poids en kg (optionnel)"}
+                  placeholderTextColor={colors.textSecondary}
+                />
               </View>
             </View>
           </View>
 
-          <Text style={styles.label}>{t('operator.dimensions_lwh')}</Text>
+          <Text style={styles.label}>
+            {t('operator.dimensions_lwh')} {transportMode === 'air' ? '(Optionnel en aérien)' : '(Obligatoire pour CBM *)'}
+          </Text>
           <View style={styles.row}>
-            <TextInput style={styles.dimInput} value={dims.l} onChangeText={l => setDims({...dims, l})} placeholder="L" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.l} onChangeText={l => setDims({...dims, l})} placeholder="L (cm)" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
             <Text style={styles.x}>×</Text>
-            <TextInput style={styles.dimInput} value={dims.w} onChangeText={w => setDims({...dims, w})} placeholder="l" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.w} onChangeText={w => setDims({...dims, w})} placeholder="l (cm)" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
             <Text style={styles.x}>×</Text>
-            <TextInput style={styles.dimInput} value={dims.h} onChangeText={h => setDims({...dims, h})} placeholder="H" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
+            <TextInput style={styles.dimInput} value={dims.h} onChangeText={h => setDims({...dims, h})} placeholder="H (cm)" placeholderTextColor={colors.textSecondary} keyboardType="numeric" />
           </View>
 
           <View style={styles.cbmCard}>
             <Maximize size={20} color={colors.primary} />
             <View>
               <Text style={styles.cbmLabel}>{t('operator.total_volume_cbm')}</Text>
-              <Text style={styles.cbmValue}>{cbm.toFixed(3)} m³</Text>
+              <Text style={styles.cbmValue}>{cbm > 0 ? `${cbm.toFixed(3)} m³` : '0.000 m³'}</Text>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep('photos')}>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => {
+              const isAir = transportMode === 'air';
+              const isHeavySea = transportMode === 'sea' && categoryKey === 'heavy';
+              if (isAir) {
+                if (!weight || Number(weight) <= 0) {
+                  Alert.alert(t('operator.required_fields'), 'Le poids réel (kg) est obligatoire pour le fret aérien.');
+                  return;
+                }
+              } else if (isHeavySea) {
+                if (!weight || Number(weight) <= 0 || !dims.l || !dims.w || !dims.h) {
+                  Alert.alert(t('operator.required_fields'), 'Le poids ET les dimensions sont obligatoires pour les colis lourds maritimes.');
+                  return;
+                }
+              } else {
+                if (!dims.l || !dims.w || !dims.h) {
+                  Alert.alert(t('operator.required_fields'), 'Les dimensions (L, l, H en cm) sont obligatoires pour calculer le volume maritime.');
+                  return;
+                }
+              }
+              setStep('photos');
+            }}
+          >
             <Text style={styles.primaryBtnText}>{t('operator.goto_photo_audit')}</Text>
           </TouchableOpacity>
         </ScrollView>

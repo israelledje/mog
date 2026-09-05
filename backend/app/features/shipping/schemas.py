@@ -84,8 +84,8 @@ class InvoiceUpdate(BaseModel):
     include_vat: bool = False
 
 class PackageReceive(BaseModel):
-    weight_real: float
-    dimensions: dict # {"l": 0, "w": 0, "h": 0}
+    weight_real: Optional[float] = 0.0
+    dimensions: Optional[dict] = Field(default_factory=lambda: {"l": 0, "w": 0, "h": 0})
     nature: Optional[str] = None
     warehouse_location: Optional[str] = "Zone A"
     status: Optional[str] = "received" # received, damaged

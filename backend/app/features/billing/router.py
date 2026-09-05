@@ -23,6 +23,34 @@ async def create_invoice(
     db = Depends(get_database)
 ):
     invoice_dict = invoice_in.model_dump()
+    customer_id = invoice_dict.get("customer_id")
+    
+    # Déduction atomique des points de fidélité si demandée
+    points_used = int(invoice_dict.get("points_used") or 0)
+    if points_used > 0 and customer_id:
+        user = await db.users.find_one({"email": customer_id})
+        current_pts = int(user.get("loyalty_points", 0) or 0) if user else 0
+        actual_deduct = min(points_used, current_pts)
+        if actual_deduct > 0:
+            await db.users.update_one(
+                {"email": customer_id},
+                {"$inc": {"loyalty_points": -actual_deduct}}
+            )
+            invoice_dict["points_used"] = actual_deduct
+        else:
+            invoice_dict["points_used"] = 0
+            invoice_dict["points_discount"] = 0.0
+
+    # Enregistrement utilisation du code promo
+    promo_code = invoice_dict.get("promo_code")
+    if promo_code:
+        norm_code = str(promo_code).strip().upper()
+        await db.promo_codes.update_one(
+            {"code": norm_code},
+            {"$inc": {"used_count": 1}}
+        )
+        invoice_dict["promo_code"] = norm_code
+
     invoice_dict.update({
         "_id": str(uuid.uuid4()),
         "invoice_number": generate_invoice_number(),
@@ -55,6 +83,26 @@ async def create_invoice(
         
     invoice_dict["id"] = invoice_dict["_id"]
     return invoice_dict
+
+@router.get("/customer-summary/{email}")
+async def get_customer_summary(
+    email: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database)
+):
+    from app.features.payments.loyalty import build_loyalty_summary
+    clean_email = email.lower().strip()
+    user = await db.users.find_one({"email": clean_email})
+    if not user:
+        raise HTTPException(404, "Client introuvable")
+    loyalty = await build_loyalty_summary(db, user)
+    return {
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "client_code": user.get("client_code"),
+        "loyalty": loyalty,
+    }
+
 
 @router.get("/", response_model=List[InvoiceInDB])
 async def list_invoices(

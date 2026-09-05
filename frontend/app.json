@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mog.connect",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "CFBundleDisplayName": "M.O.G CONNECT+",
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour scanner les QR codes des colis et les badges opérateurs.",

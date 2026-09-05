@@ -191,6 +191,10 @@ async def list_customers(db = Depends(get_database)):
     async for user in cursor:
         user["id"] = str(user["_id"])
         del user["_id"]
+        # Normaliser le code client vers le préfixe MOG
+        code = user.get("client_code")
+        if code and str(code).startswith("CM"):
+            user["client_code"] = "MOG" + str(code)[2:]
         email = (user.get("email") or "").lower()
         app_enabled = user.get("app_enabled")
         if app_enabled is None:

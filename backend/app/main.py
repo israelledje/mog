@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
             }},
             upsert=True
         )
+        # Migration automatique des anciens codes clients CM vers MOG
+        try:
+            async for u in db_manager.db.users.find({"client_code": {"$regex": "^CM"}}):
+                old_c = u.get("client_code", "")
+                if old_c.startswith("CM"):
+                    new_c = "MOG" + old_c[2:]
+                    await db_manager.db.users.update_one({"_id": u["_id"]}, {"$set": {"client_code": new_c}})
+        except Exception:
+            pass
         print("Global settings seeded successfully.")
 
     yield

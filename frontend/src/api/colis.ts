@@ -107,7 +107,11 @@ export const groupagesApi = {
     const { data } = await api.get('/groupages/');
     return (Array.isArray(data) ? data : []).map(normalizeGroupage);
   },
-  async next(): Promise<{ sea?: Groupage | null; air?: Groupage | null }> {
+  async next(): Promise<{
+    sea?: (Groupage & { days_remaining?: number; active?: boolean }) | null;
+    air?: (Groupage & { days_remaining?: number; active?: boolean }) | null;
+    air_express?: (Groupage & { days_remaining?: number; active?: boolean }) | null;
+  }> {
     const { data } = await api.get('/groupages/next/info');
     return data;
   },
@@ -147,6 +151,7 @@ export const groupagesApi = {
     container_number: string;
     destination_city: string;
     mode?: string;
+    is_express?: boolean;
     vessel_name?: string;
     origin_port?: string;
     departure_date?: string | null;
@@ -177,6 +182,10 @@ export const invoicesApi = {
     });
     return data;
   },
+  async getCustomerSummary(email: string): Promise<any> {
+    const { data } = await api.get(`/invoices/customer-summary/${encodeURIComponent(email)}`);
+    return data;
+  },
   async create(payload: {
     customer_id: string;
     packages: Array<{
@@ -190,6 +199,11 @@ export const invoicesApi = {
     total_price: number;
     include_vat?: boolean;
     discount?: number;
+    promo_code?: string | null;
+    promo_discount?: number;
+    points_used?: number;
+    points_discount?: number;
+    manual_discount?: number;
   }) {
     const { data } = await api.post('/invoices/', payload);
     return data;
@@ -203,3 +217,4 @@ export const invoicesApi = {
     return data;
   },
 };
+

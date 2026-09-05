@@ -1,26 +1,36 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Grid3X3 } from 'lucide-react-native';
+import { Grid3X3 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { SERVICES } from '../../constants/services';
-import { colors, fonts, spacing } from '../../constants/theme';
+import { colors, fonts, spacing, shadow } from '../../constants/theme';
 
 export default function HomeServicesMenu() {
   const { t } = useTranslation();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const gap = 10;
-  const cardWidth = (width - spacing.lg * 2 - gap) / 2;
+  const gap = 12;
+  const itemWidth = (width - spacing.lg * 2 - gap * 2) / 3;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>
-          {t('services.assistants_title', { defaultValue: 'Assistants & Services' })}
-        </Text>
-        <TouchableOpacity onPress={() => router.push('/services')} style={styles.seeAll} activeOpacity={0.85}>
-          <Grid3X3 size={14} color={colors.primary} />
+        <View style={styles.titleWithBadge}>
+          <Text style={styles.title}>
+            {t('services.assistants_title', { defaultValue: 'Assistants & Services' })}
+          </Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/services');
+          }}
+          style={styles.seeAll}
+          activeOpacity={0.85}
+        >
+          <Grid3X3 size={13} color={colors.primary} />
           <Text style={styles.seeAllText}>{t('services.all', { defaultValue: 'Tous' })}</Text>
         </TouchableOpacity>
       </View>
@@ -32,25 +42,32 @@ export default function HomeServicesMenu() {
         {SERVICES.map((s) => (
           <TouchableOpacity
             key={s.slug}
-            style={[styles.card, { width: cardWidth, backgroundColor: `${s.color}12` }]}
+            style={[styles.itemContainer, { width: itemWidth }]}
             activeOpacity={0.85}
-            onPress={() => router.push(s.href as any)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push(s.href as any);
+            }}
           >
-            <View style={styles.cardTop}>
-              <View style={[styles.iconWrap, { backgroundColor: '#fff' }]}>
-                <s.Icon size={20} color={s.color} strokeWidth={2.1} />
-              </View>
-              <ChevronRight size={16} color={s.color} strokeWidth={2.2} />
+            {/* Card contenant uniquement l'icône 3D à 100% */}
+            <View style={styles.iconCard}>
+              {s.icon3d ? (
+                <Image
+                  source={s.icon3d}
+                  style={styles.icon3dImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.fallbackIconWrap, { backgroundColor: `${s.color}15` }]}>
+                  <s.Icon size={36} color={s.color} strokeWidth={2.2} />
+                </View>
+              )}
             </View>
 
-            <Text style={styles.cardTitle} numberOfLines={1}>
+            {/* Titre en dehors de la card, directement en bas */}
+            <Text style={styles.itemTitle} numberOfLines={2}>
               {t(`services.${s.slug}_short`, { defaultValue: s.shortTitle })}
             </Text>
-            <Text style={styles.cardSub} numberOfLines={2}>
-              {t(`services.${s.slug}_sub`, { defaultValue: s.subtitle })}
-            </Text>
-
-            <View style={[styles.accentBar, { backgroundColor: s.color }]} />
           </TouchableOpacity>
         ))}
       </View>
@@ -61,83 +78,87 @@ export default function HomeServicesMenu() {
 const styles = StyleSheet.create({
   wrap: {
     marginTop: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xs,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 4,
     gap: 12,
   },
-  title: {
+  titleWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     flex: 1,
+  },
+  title: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.text,
     fontFamily: fonts.heading,
+    letterSpacing: -0.3,
   },
   sub: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
     lineHeight: 18,
+    fontWeight: '500',
   },
   seeAll: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.15)',
   },
-  seeAllText: { color: colors.primary, fontWeight: '700', fontSize: 12 },
+  seeAllText: { color: colors.primary, fontWeight: '800', fontSize: 12 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
-  card: {
-    borderRadius: 16,
-    paddingTop: 14,
-    paddingLeft: 16,
-    paddingRight: 12,
-    paddingBottom: 14,
-    minHeight: 118,
-    overflow: 'hidden',
-  },
-  cardTop: {
-    flexDirection: 'row',
+  itemContainer: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+  iconCard: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.95)',
+    ...shadow.card,
+  },
+  icon3dImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
+  },
+  fallbackIconWrap: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 3,
-  },
-  cardSub: {
-    fontSize: 12,
-    color: colors.textSecondary,
+  itemTitle: {
+    marginTop: 8,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
     lineHeight: 16,
-  },
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 14,
-    bottom: 14,
-    width: 3,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
+    fontFamily: fonts.heading,
+    paddingHorizontal: 2,
   },
 });

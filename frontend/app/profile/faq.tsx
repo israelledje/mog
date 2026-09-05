@@ -18,7 +18,7 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
     { q: 'Quels articles sont interdits ?', a: 'Produits inflammables, batteries lithium non emballées, produits illégaux, médicaments sans ordonnance, armes, animaux vivants. Contactez-nous en cas de doute.' },
     { q: 'Comment payer ?', a: 'Paiement Mobile Money (MTN, Orange) ou virement bancaire à la livraison. Le devis est généré automatiquement après réception et pesée du colis à notre entrepôt.' },
     { q: 'Que faire si mon colis est endommagé ?', a: 'Contactez le support immédiatement avec photos. Si l\'assurance était activée (3.5% de la valeur déclarée), nous traitons l\'indemnisation sous 7 jours.' },
-    { q: 'Comment fonctionne le suivi ?', a: 'Chaque colis a un numéro de suivi unique (ex: SEA-CM00124-00347-25). Vous recevez une notification à chaque étape : reçu, devis, groupé, parti, en transit, arrivé, livré.' },
+    { q: 'Comment fonctionne le suivi ?', a: 'Chaque colis a un numéro de suivi unique (ex: SEA-MOG00124-00347-25). Vous recevez une notification à chaque étape : reçu, devis, groupé, parti, en transit, arrivé, livré.' },
     { q: 'Puis-je changer l\'adresse de livraison ?', a: 'Oui, dans Profil → Adresse de livraison par défaut. Vous pouvez aussi spécifier une adresse différente lors de la création du colis.' },
   ],
   en: [
@@ -28,7 +28,7 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
     { q: 'What items are prohibited?', a: 'Flammable goods, unpacked lithium batteries, illegal products, prescription drugs without script, weapons, live animals. Contact us if unsure.' },
     { q: 'How do I pay?', a: 'Mobile Money (MTN, Orange) or bank transfer on delivery. Quote is auto-generated after package is received and weighed at our warehouse.' },
     { q: 'What if my package is damaged?', a: 'Contact support immediately with photos. If insurance was enabled (3.5% of declared value), we process compensation within 7 days.' },
-    { q: 'How does tracking work?', a: 'Each package has a unique tracking number (e.g. SEA-CM00124-00347-25). You receive notifications at each stage: received, quoted, grouped, departed, in transit, arrived, delivered.' },
+    { q: 'How does tracking work?', a: 'Each package has a unique tracking number (e.g. SEA-MOG00124-00347-25). You receive notifications at each stage: received, quoted, grouped, departed, in transit, arrived, delivered.' },
     { q: 'Can I change my delivery address?', a: 'Yes, in Profile → Default delivery address. You can also specify a different address when creating a package.' },
   ],
   zh: [
@@ -38,7 +38,7 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
     { q: '哪些物品被禁止？', a: '易燃品、未包装锂电池、非法产品、无处方药、武器、活体动物。如有疑问请联系我们。' },
     { q: '如何付款？', a: '货到付款（MTN、Orange 移动支付）或银行转账。包裹到仓后自动生成报价。' },
     { q: '包裹损坏怎么办？', a: '请立即附照片联系客服。如启用了保险（申报价值的 3.5%），我们将在 7 天内处理赔偿。' },
-    { q: '追踪如何工作？', a: '每个包裹有唯一追踪号（例如 SEA-CM00124-00347-25）。每个阶段都会收到通知：到仓、报价、拼货、发出、运输、到达、送达。' },
+    { q: '追踪如何工作？', a: '每个包裹有唯一追踪号（例如 SEA-MOG00124-00347-25）。每个阶段都会收到通知：到仓、报价、拼货、发出、运输、到达、送达。' },
     { q: '可以更改送货地址吗？', a: '可以，在"我的"→"默认送货地址"中修改。也可在创建包裹时指定不同地址。' },
   ],
   es: [
@@ -48,7 +48,7 @@ const FAQ_ITEMS_BY_LANG: Record<string, { q: string; a: string }[]> = {
     { q: '¿Qué artículos están prohibidos?', a: 'Productos inflamables, baterías de litio sin embalar, productos ilegales, medicamentos sin receta, armas, animales vivos. Contáctanos si tienes dudas.' },
     { q: '¿Cómo pago?', a: 'Pago Mobile Money (MTN, Orange) ou virement bancaire à la livraison. Le devis est généré automatiquement après réception et pesée du colis à notre entrepôt.' },
     { q: '¿Qué hago si mi paquete está dañado?', a: 'Contacta al soporte de inmediato con fotos. Si el seguro estaba activado (3.5% del valor declarado), tramitamos la indemnización en 7 días.' },
-    { q: '¿Cómo funciona el seguimiento?', a: 'Cada paquete tiene un número único (ej.: SEA-CM00124-00347-25). Recibes una notificación en cada etapa: recibido, presupuesto, consolidado, partido, en tránsito, llegado, entregado.' },
+    { q: '¿Cómo funciona el seguimiento?', a: 'Cada paquete tiene un número único (ej.: SEA-MOG00124-00347-25). Recibes una notificación en cada etapa: recibido, presupuesto, consolidado, partido, en tránsito, llegado, entregado.' },
     { q: '¿Puedo cambiar la dirección de entrega?', a: 'Sí, en Perfil → Dirección de entrega por defecto. También puedes indicar otra dirección al crear el paquete.' },
   ],
 };

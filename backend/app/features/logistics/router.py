@@ -15,21 +15,87 @@ router = APIRouter(prefix="/groupages", tags=["Groupages"])
 
 @router.get("/next/info")
 async def get_next_info(db = Depends(get_database)):
-    # Simuler les prochaines dates de départ
-    return {
-        "sea": {
-            "departure_date": (datetime.now() + timedelta(days=5)).isoformat(),
-            "estimated_arrival": (datetime.now() + timedelta(days=35)).isoformat(),
-            "origin_port": "Guangzhou",
-            "destination_port": "Douala"
-        },
-        "air": {
-            "departure_date": (datetime.now() + timedelta(days=2)).isoformat(),
-            "estimated_arrival": (datetime.now() + timedelta(days=7)).isoformat(),
-            "origin_port": "Guangzhou",
-            "destination_port": "Douala"
-        }
+    cursor = db.containers.find({
+        "status": {"$in": ["open", "loading"]}
+    })
+    
+    now = datetime.now()
+    
+    candidates = {
+        "sea": [],
+        "air": [],
+        "air_express": []
     }
+    
+    async for doc in cursor:
+        doc_id = str(doc.get("_id", ""))
+        mode = (doc.get("mode") or doc.get("transport_mode") or "sea").lower()
+        is_express = bool(doc.get("is_express", False)) or mode == "air_express"
+        
+        # Parse departure_date
+        dep_date = doc.get("departure_date")
+        dep_dt = None
+        if isinstance(dep_date, datetime):
+            dep_dt = dep_date
+        elif isinstance(dep_date, str) and dep_date:
+            try:
+                dep_dt = datetime.fromisoformat(dep_date.replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                dep_dt = None
+                
+        if dep_dt is None:
+            created_at = doc.get("created_at")
+            if isinstance(created_at, datetime):
+                base_dt = created_at
+            else:
+                base_dt = now
+            offset_days = 1 if is_express else (3 if mode == "air" else 10)
+            dep_dt = base_dt + timedelta(days=offset_days)
+            
+        diff_seconds = (dep_dt - now).total_seconds()
+        days_remaining = max(0, int((diff_seconds + 86399) // 86400))
+        
+        est_arrival = doc.get("estimated_arrival")
+        est_arrival_str = est_arrival.isoformat() if isinstance(est_arrival, datetime) else est_arrival
+        
+        item = {
+            "id": doc_id,
+            "container_number": doc.get("container_number"),
+            "departure_date": dep_dt.isoformat(),
+            "estimated_arrival": est_arrival_str,
+            "days_remaining": days_remaining,
+            "destination_city": doc.get("destination_city") or "Douala",
+            "origin_port": doc.get("origin_port") or doc.get("origin_city") or "Guangzhou",
+            "vessel_name": doc.get("vessel_name"),
+            "mode": "air_express" if is_express else mode,
+            "is_express": is_express,
+            "active": True
+        }
+        
+        if is_express:
+            candidates["air_express"].append((dep_dt, item))
+        elif mode == "air":
+            candidates["air"].append((dep_dt, item))
+        else:
+            candidates["sea"].append((dep_dt, item))
+            
+    result = {
+        "sea": None,
+        "air": None,
+        "air_express": None
+    }
+    
+    for category in ["sea", "air", "air_express"]:
+        if candidates[category]:
+            # Trier par date de départ la plus proche
+            candidates[category].sort(key=lambda x: x[0])
+            future_candidates = [c for c in candidates[category] if c[0] >= now - timedelta(hours=12)]
+            if future_candidates:
+                result[category] = future_candidates[0][1]
+            else:
+                result[category] = candidates[category][-1][1]
+                
+    return result
 
 @router.post("/", response_model=ContainerInDB)
 async def create_container(

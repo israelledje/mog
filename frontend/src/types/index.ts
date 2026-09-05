@@ -127,6 +127,9 @@ export interface Groupage {
   total_price?: number;
   include_vat?: boolean;
   invoice_status?: string;
+  is_express?: boolean;
+  days_remaining?: number;
+  active?: boolean;
   status?: GroupageStatus | string;
   packages_ids?: string[];
   created_at?: string;

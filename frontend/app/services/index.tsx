@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { SERVICES } from '../../src/constants/services';
-import { colors, fonts, spacing } from '../../src/constants/theme';
+import { colors, fonts, spacing, shadow } from '../../src/constants/theme';
 
 export default function ServicesHubScreen() {
   const router = useRouter();
@@ -14,7 +15,12 @@ export default function ServicesHubScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back', { defaultValue: 'Retour' })}
+        >
           <ChevronLeft size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -39,11 +45,18 @@ export default function ServicesHubScreen() {
               key={s.slug}
               style={styles.card}
               activeOpacity={0.88}
-              onPress={() => router.push(s.href as any)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push(s.href as any);
+              }}
             >
               <View style={[styles.accent, { backgroundColor: s.color }]} />
-              <View style={[styles.icon, { backgroundColor: `${s.color}14` }]}>
-                <s.Icon size={22} color={s.color} />
+              <View style={[styles.icon, { backgroundColor: `${s.color}0D` }]}>
+                {s.icon3d ? (
+                  <Image source={s.icon3d} style={styles.icon3dImg} resizeMode="contain" />
+                ) : (
+                  <s.Icon size={24} color={s.color} />
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{s.title}</Text>
@@ -118,7 +131,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 3,
     borderBottomRightRadius: 3,
   },
-  icon: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  icon: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginLeft: 4, overflow: 'hidden' },
+  icon3dImg: { width: 44, height: 44, borderRadius: 8 },
   rowTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
   rowSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
 });
