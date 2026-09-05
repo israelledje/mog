@@ -1,32 +1,65 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Alert, ActivityIndicator, ScrollView, Modal,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus, Users,
-  X, Sparkles, MapPin, Navigation, Check, Zap, Calendar, Printer,
+  ChevronLeft,
+  Search,
+  Ship,
+  Plane,
+  Package,
+  CheckCircle2,
+  Box,
+  ChevronRight,
+  Plus,
+  Users,
+  X,
+  Sparkles,
+  MapPin,
+  Check,
+  Calendar,
+  Printer,
+  Trash2,
+  Scan,
+  RefreshCw,
+  Layers,
+  ArrowRight,
+  Eye,
+  AlertCircle,
+  FileText,
+  Phone,
+  User,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { colisApi, groupagesApi } from '../../src/api/colis';
+import { api } from '../../src/api/client';
 import type { Groupage, Colis } from '../../src/types';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatErr } from '../../src/api/client';
 import { printContainerThermalLabels, printPackageThermalLabel } from '../../src/utils/thermalPrinter';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
+import QRScanner from '../../src/components/QRScanner';
 
-const containerId = (c: Groupage) => c.id || (c as any)._id;
-const colisIdOf = (c: Colis) => c.id || (c as any)._id;
+const containerId = (c: Groupage | any) => c.id || c._id;
+const colisIdOf = (c: Colis | any) => c.id || c._id;
 
 const MONTH_NAMES = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
-const DAY_SHORT_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 function getInitialDepartureDate(offsetDays = 5): string {
   const d = new Date(Date.now() + offsetDays * 86400000);
@@ -43,16 +76,7 @@ function computeDaysFromToday(dateStr: string): number {
   return Math.max(0, diff);
 }
 
-function formatPrettyDate(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00Z'));
-  if (Number.isNaN(d.getTime())) return dateStr;
-  const day = d.getDate();
-  const month = MONTH_NAMES[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day} ${month} ${year}`;
-}
-
+type MainTab = 'containers' | 'assign';
 type PickMode = 'tracking' | 'client';
 
 export default function GroupageScreen() {
@@ -60,15 +84,36 @@ export default function GroupageScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const canCreate = user?.role === 'admin' || user?.role === 'operator';
+
+  // Navigation tabs
+  const [activeTab, setActiveTab] = useState<MainTab>('containers');
+
+  // Containers
+  const [containers, setContainers] = useState<Groupage[]>([]);
+  const [loadingContainers, setLoadingContainers] = useState(true);
+
+  // Inspector / Detail of a Container
+  const [inspectedContainer, setInspectedContainer] = useState<any | null>(null);
+  const [containerPackages, setContainerPackages] = useState<any[]>([]);
+  const [loadingPkgList, setLoadingPkgList] = useState(false);
+
+  // Assign flow
   const [pickMode, setPickMode] = useState<PickMode>('tracking');
   const [search, setSearch] = useState('');
   const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [recentColis, setRecentColis] = useState<Colis[]>([]);
-  const [containers, setContainers] = useState<Groupage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingRecent, setLoadingRecent] = useState(true);
+  const [loadingRecent, setLoadingRecent] = useState(false);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  // Mode Client
+  const [clientQ, setClientQ] = useState('');
+  const [clientResults, setClientResults] = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const [clientPackages, setClientPackages] = useState<Colis[]>([]);
+
+  // Create Container Modal
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
@@ -83,7 +128,6 @@ export default function GroupageScreen() {
 
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
-  const [calendarOpen, setCalendarOpen] = useState(true);
 
   const remainingDays = useMemo(() => computeDaysFromToday(form.departure_date), [form.departure_date]);
 
@@ -110,200 +154,184 @@ export default function GroupageScreen() {
     return days;
   }, [calendarYear, calendarMonth, form.departure_date]);
 
-  // Mode client
-  const [clientQ, setClientQ] = useState('');
-  const [clientResults, setClientResults] = useState<any[]>([]);
-  const [selectedClient, setSelectedClient] = useState<any | null>(null);
-  const [clientPackages, setClientPackages] = useState<Colis[]>([]);
+  const fetchContainers = useCallback(async () => {
+    setLoadingContainers(true);
+    try {
+      const res = await groupagesApi.list();
+      setContainers(res || []);
+    } catch (e) {
+      console.error('[FETCH_CONTAINERS_ERR]', e);
+    } finally {
+      setLoadingContainers(false);
+    }
+  }, []);
 
-  const loadData = useCallback(async () => {
+  const fetchRecentColis = useCallback(async () => {
     setLoadingRecent(true);
     try {
-      const [allPackages, allContainers] = await Promise.all([
-        colisApi.list({ limit: 100 }),
-        groupagesApi.list(),
-      ]);
-      const assignable = allPackages.filter(
-        (c) => ['received', 'damaged'].includes(c.status) && !c.container_id,
-      );
-      setRecentColis(assignable);
-      setContainers(allContainers.filter((c) => c.status === 'open'));
-    } catch {
-      Alert.alert(t('errors.server'), t('operator.load_error'));
+      const list = await colisApi.list({ status: 'received' });
+      setRecentColis(list.filter((c: any) => !c.container_id));
+    } catch (e) {
+      console.error('[FETCH_RECENT_COLIS_ERR]', e);
     } finally {
       setLoadingRecent(false);
     }
-  }, [t]);
+  }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    fetchContainers();
+    fetchRecentColis();
+  }, [fetchContainers, fetchRecentColis]);
 
-  const selectionCount = pickMode === 'client' ? selectedIds.size : (selectedColis ? 1 : 0);
-  const hasSelection = selectionCount > 0;
-
-  const packagesToAssign = useMemo(() => {
-    if (pickMode === 'tracking') {
-      return selectedColis ? [selectedColis] : [];
+  // Open Container Detail
+  const openContainerDetail = async (c: any) => {
+    setInspectedContainer(c);
+    setLoadingPkgList(true);
+    try {
+      const cid = containerId(c);
+      const res = await api.get(`/groupages/${cid}/colis`);
+      setContainerPackages(res.data || []);
+    } catch (err) {
+      console.error('[CONTAINER_PKGS_ERR]', err);
+      setContainerPackages([]);
+    } finally {
+      setLoadingPkgList(false);
     }
-    return clientPackages.filter((c) => selectedIds.has(String(colisIdOf(c))));
-  }, [pickMode, selectedColis, clientPackages, selectedIds]);
-
-  const selectColis = (c: Colis) => {
-    setSelectedColis(c);
-    setSearch(c.tracking_number);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  // Remove package from container
+  const handleRemovePackage = async (packageId: string, trackingNumber: string) => {
+    if (!inspectedContainer) return;
+    const cid = containerId(inspectedContainer);
+
+    Alert.alert(
+      'Retirer du groupage',
+      `Voulez-vous retirer le colis ${trackingNumber} de ce conteneur ?\nIl sera remis en stock entrepôt (statut 'reçu').`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Oui, Retirer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/groupages/${cid}/remove-package/${packageId}`);
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Toast.show({ type: 'success', text1: 'Colis retiré du conteneur', text2: trackingNumber });
+              // Refresh container packages list
+              setContainerPackages((prev) => prev.filter((p) => (p.id || p._id) !== packageId));
+              fetchContainers();
+              fetchRecentColis();
+            } catch (err: any) {
+              const msg = err.response?.data?.detail || 'Erreur lors du retrait';
+              Alert.alert('Erreur', msg);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Search & assign
   const onSearch = async () => {
     if (!search.trim()) return;
-    setLoading(true);
     try {
-      const res = await colisApi.list({ tracking_number: search.trim() });
-      const match = res.find((c) => !c.container_id) || res[0];
-      if (match) {
-        if (match.container_id) {
-          Alert.alert(t('operator.already_grouped'), t('operator.already_grouped_msg'));
-          return;
-        }
-        selectColis(match);
+      const list = await colisApi.list({ tracking_number: search.trim() });
+      if (list.length > 0) {
+        setSelectedColis(list[0]);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } else {
-        Alert.alert(t('operator.not_found'), t('operator.no_colis_found'));
+        Alert.alert('Introuvable', `Aucun colis trouvé avec le numéro "${search.trim()}".`);
       }
     } catch {
-      Alert.alert(t('errors.server'), t('operator.search_impossible'));
+      Alert.alert('Erreur', 'Impossible de récupérer ce colis.');
+    }
+  };
+
+  const onAssign = async (container: Groupage) => {
+    const cid = containerId(container);
+    setAssigning(cid);
+    try {
+      if (pickMode === 'tracking' && selectedColis) {
+        const pid = colisIdOf(selectedColis);
+        await groupagesApi.addPackage(cid, pid);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({
+          type: 'success',
+          text1: 'Colis affecté au groupage !',
+          text2: `${selectedColis.tracking_number} → ${container.container_number}`,
+        });
+        setSelectedColis(null);
+        setSearch('');
+      } else if (pickMode === 'client' && selectedIds.size > 0) {
+        const ids = Array.from(selectedIds);
+        let successCount = 0;
+        for (const pid of ids) {
+          try {
+            await groupagesApi.addPackage(cid, pid);
+            successCount++;
+          } catch {}
+        }
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Toast.show({
+          type: 'success',
+          text1: `${successCount} colis affectés !`,
+          text2: `Conteneur ${container.container_number}`,
+        });
+        setSelectedIds(new Set());
+        if (selectedClient) pickClient(selectedClient);
+      }
+      fetchContainers();
+      fetchRecentColis();
+    } catch (e: any) {
+      Alert.alert(t('errors.server'), formatErr(e, 'Impossible d\'affecter le colis.'));
     } finally {
-      setLoading(false);
+      setAssigning(null);
     }
   };
 
   const searchClients = async (q: string) => {
     setClientQ(q);
-    setSelectedClient(null);
-    setClientPackages([]);
-    setSelectedIds(new Set());
-    try {
-      const res = await colisApi.searchUsers(q.trim());
-      setClientResults(Array.isArray(res) ? res : []);
-    } catch {
+    if (!q.trim()) {
       setClientResults([]);
+      return;
     }
-  };
-
-  const pickClient = async (c: any) => {
-    setSelectedClient(c);
-    setClientResults([]);
-    setClientQ(c.full_name || c.email || '');
-    setLoading(true);
     try {
-      const pkgs = await colisApi.list({ owner_id: c.email, limit: 100 });
-      const assignable = (Array.isArray(pkgs) ? pkgs : []).filter(
-        (p) => ['received', 'damaged'].includes(p.status) && !p.container_id,
-      );
-      setClientPackages(assignable);
-      setSelectedIds(new Set(assignable.map((p) => String(colisIdOf(p)))));
-    } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Colis client') });
-      setClientPackages([]);
-    } finally {
-      setLoading(false);
-    }
+      const users = await colisApi.searchUsers(q.trim());
+      setClientResults(users);
+    } catch {}
   };
 
-  const togglePkg = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const pickClient = async (cust: any) => {
+    setSelectedClient(cust);
+    setClientResults([]);
+    try {
+      const list = await colisApi.list({ owner_id: cust.email, status: 'received' });
+      const unassigned = list.filter((c: any) => !c.container_id);
+      setClientPackages(unassigned);
+      setSelectedIds(new Set(unassigned.map((p: any) => String(colisIdOf(p)))));
+    } catch {}
   };
 
-  const onAssign = (container: Groupage) => {
-    if (!packagesToAssign.length) {
-      Alert.alert('', pickMode === 'client' ? 'Sélectionnez au moins un colis du client' : t('operator.groupage_scan'));
-      return;
-    }
-    const cid = containerId(container);
-    if (!cid) {
-      Alert.alert(t('errors.server'), t('operator.missing_id'));
-      return;
-    }
-
-    const label = packagesToAssign.length === 1
-      ? packagesToAssign[0].tracking_number
-      : `${packagesToAssign.length} colis`;
-
-    Alert.alert(
-      t('operator.groupage_assign'),
-      `${label} → ${container.container_number || cid.slice(0, 8)} ?`,
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.confirm'),
-          onPress: async () => {
-            setAssigning(cid);
-            try {
-              let ok = 0;
-              const errors: string[] = [];
-              for (const pkg of packagesToAssign) {
-                const pkgId = colisIdOf(pkg);
-                if (!pkgId) continue;
-                try {
-                  await groupagesApi.addPackage(cid, pkgId);
-                  ok += 1;
-                } catch (e: any) {
-                  errors.push(pkg.tracking_number || pkgId);
-                }
-              }
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              if (errors.length) {
-                Alert.alert('Partiel', `${ok} ajouté(s), échec : ${errors.join(', ')}`);
-              } else {
-                Alert.alert('OK', `${ok} colis ajouté(s) au groupage`, [
-                  {
-                    text: 'OK', onPress: () => {
-                      setSelectedColis(null);
-                      setSelectedIds(new Set());
-                      setSelectedClient(null);
-                      setClientPackages([]);
-                      setSearch('');
-                      loadData();
-                    }
-                  },
-                ]);
-              }
-            } catch (e: any) {
-              const msg = e?.response?.data?.detail || e?.message || t('operator.save_failed');
-              Alert.alert(t('errors.server'), String(msg));
-            } finally {
-              setAssigning(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const createGroupage = async () => {
+  const handleCreateContainer = async () => {
     if (!form.container_number.trim()) {
-      Toast.show({ type: 'error', text1: 'N° conteneur requis' });
-      return;
+      return Alert.alert('Information requise', 'Veuillez renseigner le numéro du conteneur.');
     }
     setCreating(true);
     try {
-      const days = parseInt(form.departure_days || '5', 10);
-      const depDate = new Date(Date.now() + days * 86400000).toISOString();
-      const estDays = form.mode === 'sea' ? days + 30 : (form.is_express ? days + 3 : days + 7);
-      const estArrival = new Date(Date.now() + estDays * 86400000).toISOString();
-
       await groupagesApi.create({
-        container_number: form.container_number.trim(),
-        destination_city: form.destination_city.trim() || 'Douala',
+        container_number: form.container_number.trim().toUpperCase(),
+        destination_city: form.destination_city,
         mode: form.mode,
-        is_express: form.mode === 'air' ? form.is_express : false,
-        origin_port: form.origin_port.trim() || 'Guangzhou',
+        is_express: form.is_express,
+        origin_port: form.origin_port,
         vessel_name: form.vessel_name.trim() || undefined,
-        departure_date: depDate,
-        estimated_arrival: estArrival,
+        departure_date: form.departure_date,
+      });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({
+        type: 'success',
+        text1: 'Groupage créé avec succès !',
+        text2: form.container_number.toUpperCase(),
       });
       setShowCreate(false);
       setForm({
@@ -313,1068 +341,1169 @@ export default function GroupageScreen() {
         is_express: false,
         origin_port: 'Guangzhou',
         vessel_name: '',
-        departure_days: '5',
+        departure_date: getInitialDepartureDate(5),
       });
-      loadData();
-      Toast.show({ type: 'success', text1: 'Groupage créé avec succès' });
+      fetchContainers();
     } catch (e: any) {
-      Toast.show({ type: 'error', text1: formatErr(e, 'Création impossible') });
+      Alert.alert(t('errors.server'), formatErr(e, 'Impossible de créer le conteneur.'));
     } finally {
       setCreating(false);
     }
   };
 
-  const switchMode = (m: PickMode) => {
-    setPickMode(m);
-    setSelectedColis(null);
-    setSelectedIds(new Set());
-    setSearch('');
-    setSelectedClient(null);
-    setClientPackages([]);
-    setClientQ('');
-    setClientResults([]);
-  };
+  const hasSelection = pickMode === 'tracking' ? !!selectedColis : selectedIds.size > 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
-          <ChevronLeft size={26} color={colors.text} />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <ChevronLeft size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('operator.groupage_title')}</Text>
-        {canCreate ? (
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle}>Expéditions & Groupages</Text>
+          <Text style={styles.headerSubtitle}>Lots, affectation des colis & étiquettes</Text>
+        </View>
+        {canCreate && (
           <TouchableOpacity
+            style={styles.newGroupageBtn}
             onPress={() => setShowCreate(true)}
-            style={styles.headerNewBtn}
             activeOpacity={0.8}
           >
             <Plus size={16} color="#fff" />
-            <Text style={styles.headerNewBtnText}>Nouveau</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity onPress={loadData} style={styles.back}>
-            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>{t('operator.refresh')}</Text>
+            <Text style={styles.newGroupageBtnText}>Nouveau</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        <View style={styles.modeTabs}>
-          <TouchableOpacity
-            style={[styles.modeTab, pickMode === 'tracking' && styles.modeTabOn]}
-            onPress={() => switchMode('tracking')}
-          >
-            <Package size={16} color={pickMode === 'tracking' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.modeTabText, pickMode === 'tracking' && { color: '#fff' }]}>Par tracking</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeTab, pickMode === 'client' && styles.modeTabOn]}
-            onPress={() => switchMode('client')}
-          >
-            <Users size={16} color={pickMode === 'client' ? '#fff' : colors.textSecondary} />
-            <Text style={[styles.modeTabText, pickMode === 'client' && { color: '#fff' }]}>Par client</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.stepLabel}>
-            1. {pickMode === 'client' ? 'Choisir un client et ses colis' : t('operator.groupage_scan')}
+      {/* Main Mode Tabs */}
+      <View style={styles.mainTabs}>
+        <TouchableOpacity
+          style={[styles.mainTab, activeTab === 'containers' && styles.mainTabActive]}
+          onPress={() => setActiveTab('containers')}
+        >
+          <Layers size={16} color={activeTab === 'containers' ? '#fff' : colors.textMuted} />
+          <Text style={[styles.mainTabText, activeTab === 'containers' && { color: '#fff' }]}>
+            Groupages Actifs ({containers.length})
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainTab, activeTab === 'assign' && styles.mainTabActive]}
+          onPress={() => setActiveTab('assign')}
+        >
+          <Package size={16} color={activeTab === 'assign' ? '#fff' : colors.textMuted} />
+          <Text style={[styles.mainTabText, activeTab === 'assign' && { color: '#fff' }]}>
+            Affecter des Colis
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* TAB 1: GROUPAGES ACTIFS */}
+      {activeTab === 'containers' && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: 60 }}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Conteneurs & Lots Ouverts</Text>
+            <TouchableOpacity onPress={fetchContainers} disabled={loadingContainers}>
+              <Text style={styles.refreshLink}>Actualiser</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingContainers ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          ) : containers.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Box size={44} color={colors.textMuted} style={{ opacity: 0.4, marginBottom: 12 }} />
+              <Text style={styles.emptyTitle}>Aucun groupage ouvert</Text>
+              <Text style={styles.emptySub}>
+                Créez votre premier lot maritime ou aérien pour y affecter des colis.
+              </Text>
+              {canCreate && (
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreate(true)}>
+                  <Plus size={16} color="#fff" />
+                  <Text style={styles.emptyBtnText}>Créer un groupage</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            containers.map((c) => {
+              const cid = containerId(c);
+              const isAir = c.mode === 'air' || (c as any).transport_mode === 'air' || c.is_express;
+              const count = c.packages_ids?.length || 0;
+
+              return (
+                <TouchableOpacity
+                  key={cid}
+                  style={styles.containerCard}
+                  onPress={() => openContainerDetail(c)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.containerCardTop}>
+                    <View style={[styles.modeIconBadge, isAir ? styles.modeAir : styles.modeSea]}>
+                      {isAir ? <Plane size={20} color="#0ea5e9" /> : <Ship size={20} color={colors.primary} />}
+                    </View>
+
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.containerNum}>{c.container_number}</Text>
+                        {c.is_express && (
+                          <View style={styles.expressBadge}>
+                            <Text style={styles.expressBadgeText}>EXPRESS</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.containerRoute}>
+                        {c.origin_port || (c as any).origin_city || 'Guangzhou'} → {c.destination_city || 'Douala'}
+                      </Text>
+                    </View>
+
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusPillText}>{c.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* Stats & Actions Row */}
+                  <View style={styles.containerCardBottom}>
+                    <View style={styles.statGroup}>
+                      <Package size={14} color={colors.primary} />
+                      <Text style={styles.statValue}>{count} colis chargés</Text>
+                    </View>
+
+                    {c.departure_date && (
+                      <View style={styles.statGroup}>
+                        <Calendar size={14} color={colors.textMuted} />
+                        <Text style={styles.statMuted}>Départ: {formatPrettyDate(c.departure_date)}</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.cardActionsRow}>
+                      <TouchableOpacity
+                        style={styles.printBatchBtn}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          printContainerThermalLabels(cid, c.container_number);
+                        }}
+                        title="Imprimer toutes les étiquettes QR du conteneur"
+                      >
+                        <Printer size={15} color="#fff" />
+                        <Text style={styles.printBatchText}>Étiquettes ({count})</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.detailsChevron}>
+                        <ChevronRight size={18} color={colors.textSecondary} />
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+
+      {/* TAB 2: AFFECTER DES COLIS */}
+      {activeTab === 'assign' && (
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: 60 }}>
+          {/* Sub-modes */}
+          <View style={styles.subTabs}>
+            <TouchableOpacity
+              style={[styles.subTab, pickMode === 'tracking' && styles.subTabActive]}
+              onPress={() => setPickMode('tracking')}
+            >
+              <Package size={14} color={pickMode === 'tracking' ? '#fff' : colors.textMuted} />
+              <Text style={[styles.subTabText, pickMode === 'tracking' && { color: '#fff' }]}>
+                Par N° Suivi / Colis
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.subTab, pickMode === 'client' && styles.subTabActive]}
+              onPress={() => setPickMode('client')}
+            >
+              <Users size={14} color={pickMode === 'client' ? '#fff' : colors.textMuted} />
+              <Text style={[styles.subTabText, pickMode === 'client' && { color: '#fff' }]}>
+                Par Compte Client
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* STEP 1: Choisir le colis */}
+          <Text style={styles.stepTitle}>1. Sélectionner le(s) colis</Text>
 
           {pickMode === 'tracking' ? (
-            <>
-              <View style={styles.searchRow}>
-                <Search size={18} color={colors.textSecondary} />
+            <View style={{ marginBottom: spacing.md }}>
+              <View style={styles.searchBar}>
+                <Search size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.searchInput}
+                  placeholder="Saisir tracking (ex: CL-DOU-...)"
+                  placeholderTextColor={colors.textMuted}
                   value={search}
                   onChangeText={setSearch}
-                  placeholder="Tracking / Shipping Mark"
-                  placeholderTextColor={colors.textSecondary}
                   onSubmitEditing={onSearch}
-                  returnKeyType="search"
+                  autoCapitalize="characters"
                 />
-                <TouchableOpacity style={styles.searchBtn} onPress={onSearch} disabled={loading}>
-                  {loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.searchBtnText}>OK</Text>}
+                <TouchableOpacity style={styles.scanActionBtn} onPress={() => setScannerOpen(true)}>
+                  <Scan size={18} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.okBtn} onPress={onSearch}>
+                  <Text style={styles.okBtnText}>OK</Text>
                 </TouchableOpacity>
               </View>
 
               {selectedColis && (
-                <View style={styles.selectedColis}>
-                  <CheckCircle2 size={18} color={colors.success} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.selectedText}>{selectedColis.tracking_number}</Text>
-                    <Text style={styles.selectedSub}>{selectedColis.description || selectedColis.nature || '—'}</Text>
+                <View style={styles.selectedColisCard}>
+                  <CheckCircle2 size={20} color="#10b981" />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.selectedColisTracking}>{selectedColis.tracking_number}</Text>
+                    <Text style={styles.selectedColisDesc}>
+                      {selectedColis.description || (selectedColis as any).nature || 'Marchandise'} · {selectedColis.weight_real || 0} kg
+                    </Text>
                   </View>
-                  <TouchableOpacity onPress={() => { setSelectedColis(null); setSearch(''); }}>
-                    <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>✕</Text>
+                  <TouchableOpacity onPress={() => setSelectedColis(null)}>
+                    <X size={18} color={colors.danger} />
                   </TouchableOpacity>
                 </View>
               )}
 
               {!selectedColis && (
-                <>
-                  <Text style={styles.hint}>Colis réceptionnés disponibles :</Text>
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.hintHeading}>Colis reçus prêts à être groupés :</Text>
                   {loadingRecent ? (
-                    <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
+                    <ActivityIndicator color={colors.primary} style={{ marginTop: 10 }} />
                   ) : recentColis.length === 0 ? (
-                    <Text style={styles.emptyHint}>Aucun colis reçu en attente de groupage.</Text>
+                    <Text style={styles.emptyHintText}>Aucun colis en attente de groupage.</Text>
                   ) : (
-                    recentColis.slice(0, 10).map((c) => (
-                      <TouchableOpacity key={colisIdOf(c)} style={styles.colisRow} onPress={() => selectColis(c)}>
+                    recentColis.slice(0, 8).map((c) => (
+                      <TouchableOpacity
+                        key={colisIdOf(c)}
+                        style={styles.colisItemRow}
+                        onPress={() => setSelectedColis(c)}
+                      >
                         <Box size={18} color={colors.primary} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.colisTracking}>{c.tracking_number}</Text>
-                          <Text style={styles.colisDesc} numberOfLines={1}>{c.description || c.nature}</Text>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.colisItemTracking}>{c.tracking_number}</Text>
+                          <Text style={styles.colisItemDesc} numberOfLines={1}>
+                            {c.description || (c as any).nature} {c.weight_real ? `· ${c.weight_real} kg` : ''}
+                          </Text>
                         </View>
-                        <ChevronRight size={18} color={colors.textSecondary} />
+                        <ChevronRight size={16} color={colors.textMuted} />
                       </TouchableOpacity>
                     ))
                   )}
-                </>
+                </View>
               )}
-            </>
+            </View>
           ) : (
-            <>
-              <View style={styles.searchRow}>
-                <Search size={18} color={colors.textSecondary} />
+            <View style={{ marginBottom: spacing.md }}>
+              <View style={styles.searchBar}>
+                <Search size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.searchInput}
+                  placeholder="Rechercher client (nom, email, code MOG...)"
+                  placeholderTextColor={colors.textMuted}
                   value={clientQ}
                   onChangeText={searchClients}
-                  placeholder="Nom, téléphone, code client…"
-                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
-              {clientResults.map((c) => (
-                <TouchableOpacity key={c.id || c.email} style={styles.colisRow} onPress={() => pickClient(c)}>
-                  <Users size={18} color={colors.secondary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.colisTracking}>{c.full_name || c.email}</Text>
-                    <Text style={styles.colisDesc}>{c.phone || c.email} · {c.client_code || ''}</Text>
+
+              {clientResults.map((cust) => (
+                <TouchableOpacity
+                  key={cust.id || cust.email}
+                  style={styles.colisItemRow}
+                  onPress={() => pickClient(cust)}
+                >
+                  <User size={18} color={colors.secondary} />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.colisItemTracking}>
+                      {cust.client_code ? `[${cust.client_code}] ` : ''}{cust.full_name || cust.email}
+                    </Text>
+                    <Text style={styles.colisItemDesc}>{cust.phone || cust.email}</Text>
                   </View>
+                  <ChevronRight size={16} color={colors.textMuted} />
                 </TouchableOpacity>
               ))}
 
               {selectedClient && (
-                <View style={[styles.selectedColis, { marginTop: 8 }]}>
-                  <CheckCircle2 size={18} color={colors.success} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.selectedText}>{selectedClient.full_name || selectedClient.email}</Text>
-                    <Text style={styles.selectedSub}>
-                      {selectedIds.size} / {clientPackages.length} colis sélectionné(s)
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={() => {
-                    setSelectedClient(null);
-                    setClientPackages([]);
-                    setSelectedIds(new Set());
-                    setClientQ('');
-                  }}>
-                    <Text style={{ color: colors.danger, fontWeight: '700', fontSize: 12 }}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {selectedClient && (
-                <>
-                  {loading ? (
-                    <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
-                  ) : clientPackages.length === 0 ? (
-                    <Text style={styles.emptyHint}>Aucun colis reçu en attente pour ce client.</Text>
-                  ) : (
-                    <>
-                      <View style={styles.bulkRow}>
-                        <TouchableOpacity onPress={() => setSelectedIds(new Set(clientPackages.map((p) => String(colisIdOf(p)))))}>
-                          <Text style={styles.bulkLink}>Tout sélectionner</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setSelectedIds(new Set())}>
-                          <Text style={styles.bulkLink}>Tout désélectionner</Text>
-                        </TouchableOpacity>
-                      </View>
-                      {clientPackages.map((c) => {
-                        const id = String(colisIdOf(c));
-                        const on = selectedIds.has(id);
-                        return (
-                          <TouchableOpacity
-                            key={id}
-                            style={[styles.colisRow, on && styles.colisRowOn]}
-                            onPress={() => togglePkg(id)}
-                          >
-                            <View style={[styles.check, on && styles.checkOn]}>
-                              {on && <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>✓</Text>}
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.colisTracking}>{c.tracking_number}</Text>
-                              <Text style={styles.colisDesc} numberOfLines={1}>{c.description || c.nature}</Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.stepHeaderRow}>
-            <Text style={styles.stepLabel}>2. {t('operator.groupage_select')}</Text>
-            {canCreate && (
-              <TouchableOpacity
-                style={styles.stepNewBtn}
-                onPress={() => setShowCreate(true)}
-                activeOpacity={0.8}
-              >
-                <Plus size={14} color={colors.primary} />
-                <Text style={styles.stepNewBtnText}>Nouveau conteneur</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {!hasSelection && (
-            <View style={styles.warnBanner}>
-              <Text style={styles.warnText}>
-                ↑ {pickMode === 'client' ? 'Sélectionnez un client et ses colis' : 'Sélectionnez d\'abord un colis ci-dessus'}
-              </Text>
-            </View>
-          )}
-          {hasSelection && selectionCount > 1 && (
-            <Text style={styles.hint}>{selectionCount} colis seront ajoutés au conteneur choisi</Text>
-          )}
-
-          {containers.length === 0 ? (
-            <View style={styles.emptyContainerCard}>
-              <Box size={32} color={colors.textSecondary} />
-              <Text style={styles.emptyContainerTitle}>Aucun conteneur ouvert</Text>
-              <Text style={styles.emptyContainerDesc}>
-                Créez un nouveau groupage maritime ou aérien pour y charger vos colis.
-              </Text>
-              {canCreate && (
-                <TouchableOpacity
-                  style={styles.emptyCreateBtn}
-                  onPress={() => setShowCreate(true)}
-                  activeOpacity={0.8}
-                >
-                  <Plus size={16} color="#fff" />
-                  <Text style={styles.emptyCreateBtnText}>Créer un nouveau groupage</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            containers.map((item) => {
-              const cid = containerId(item);
-              const isAssigning = assigning === cid;
-              const canTap = hasSelection && !isAssigning;
-              return (
-                <TouchableOpacity
-                  key={cid}
-                  style={[styles.card, !canTap && styles.cardMuted]}
-                  onPress={() => canTap && onAssign(item)}
-                  activeOpacity={canTap ? 0.7 : 1}
-                >
-                  <View style={styles.cardRow}>
-                    {item.mode === 'sea' || item.transport_mode === 'sea' ? (
-                      <Ship size={22} color={colors.secondary} />
-                    ) : (
-                      <Plane size={22} color={colors.accent} />
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.containerNum}>{item.container_number || cid?.slice(0, 8)}</Text>
-                      <Text style={styles.route}>
-                        {(item.origin_city || item.origin_port || 'Guangzhou')} → {item.destination_city || 'Douala'}
-                      </Text>
-                    </View>
-                    <View style={styles.badge}>
-                      <Package size={12} color={colors.primary} />
-                      <Text style={styles.badgeText}>{item.packages_ids?.length ?? 0}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={{ padding: 8, borderRadius: 8, backgroundColor: 'rgba(59, 130, 246, 0.15)', marginHorizontal: 4 }}
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        printContainerThermalLabels(cid, item.container_number);
-                      }}
-                    >
-                      <Printer size={16} color={colors.primary} />
-                    </TouchableOpacity>
-                    {canTap && <ChevronRight size={20} color={colors.primary} />}
-                  </View>
-                  {isAssigning && <ActivityIndicator color={colors.primary} style={{ marginTop: 8 }} />}
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-      </ScrollView>
-
-      {/* MODALE DE CRÉATION DE GROUPAGE MODERNE & PRO */}
-      <Modal
-        visible={showCreate}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowCreate(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCreate(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.modalBox}
-            onPress={(e) => e.stopPropagation?.()}
-          >
-            {/* Header */}
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderIconBadge}>
-                <Box size={22} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>Nouveau Groupage / Conteneur</Text>
-                <Text style={styles.modalSubtitle}>Expédition maritime LCL/FCL ou palette avion cargo</Text>
-              </View>
-              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowCreate(false)}>
-                <X size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
-              {/* Presets rapides */}
-              <View style={styles.presetSection}>
-                <View style={styles.presetHeader}>
-                  <Sparkles size={14} color={colors.primary} />
-                  <Text style={styles.presetLabel}>Modèles rapides :</Text>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetScroll}>
-                  {[
-                    { label: '🚢 TC 40\' GZ → Douala', mode: 'sea', is_express: false, origin: 'Guangzhou', dest: 'Douala', num: `TC40-GZ-${Date.now().toString().slice(-4)}`, days: '10' },
-                    { label: '🚢 TC 20\' Yiwu → Douala', mode: 'sea', is_express: false, origin: 'Yiwu', dest: 'Douala', num: `TC20-YW-${Date.now().toString().slice(-4)}`, days: '15' },
-                    { label: '✈️ Cargo GZ → Douala', mode: 'air', is_express: false, origin: 'Guangzhou', dest: 'Douala', num: `AIR-GZ-${Date.now().toString().slice(-4)}`, days: '3' },
-                    { label: '⚡ Aérien Express GZ', mode: 'air', is_express: true, origin: 'Guangzhou', dest: 'Douala', num: `EXP-GZ-${Date.now().toString().slice(-4)}`, days: '1' },
-                    { label: '⚡ Aérien Express Dubaï', mode: 'air', is_express: true, origin: 'Dubaï', dest: 'Douala', num: `EXP-DXB-${Date.now().toString().slice(-4)}`, days: '1' },
-                  ].map((p) => (
-                    <TouchableOpacity
-                      key={p.num}
-                      style={styles.presetChip}
-                      onPress={() => {
-                        const offset = parseInt(p.days || '5', 10);
-                        const targetDate = getInitialDepartureDate(offset);
-                        const tObj = new Date(Date.now() + offset * 86400000);
-                        setCalendarMonth(tObj.getMonth());
-                        setCalendarYear(tObj.getFullYear());
-                        setForm({
-                          container_number: p.num,
-                          destination_city: p.dest,
-                          origin_port: p.origin,
-                          mode: p.mode,
-                          is_express: p.is_express,
-                          vessel_name: '',
-                          departure_date: targetDate,
-                        });
-                      }}
-                    >
-                      <Text style={styles.presetChipText}>{p.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
-              {/* Mode de transport */}
-              <Text style={styles.formSectionLabel}>1. Mode de fret & type de groupage</Text>
-              <View style={styles.modeSelectorRow}>
-                <TouchableOpacity
-                  style={[styles.modeCard, form.mode === 'sea' && styles.modeCardSeaActive]}
-                  onPress={() => setForm({ ...form, mode: 'sea', is_express: false })}
-                >
-                  <Ship size={20} color={form.mode === 'sea' ? '#38BDF8' : colors.textSecondary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.modeCardTitle, form.mode === 'sea' && { color: '#38BDF8' }]}>
-                      🚢 Fret Maritime
-                    </Text>
-                    <Text style={styles.modeCardSubtitle}>Conteneur maritime (CBM), transit portuaire</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.modeCard, form.mode === 'air' && styles.modeCardAirActive]}
-                  onPress={() => setForm({ ...form, mode: 'air' })}
-                >
-                  <Plane size={20} color={form.mode === 'air' ? '#7DD3FC' : colors.textSecondary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.modeCardTitle, form.mode === 'air' && { color: '#7DD3FC' }]}>
-                      ✈️ Fret Aérien
-                    </Text>
-                    <Text style={styles.modeCardSubtitle}>Palette avion, vol cargo rapide</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              {/* Case à cocher élégante Fret Aérien Express */}
-              {form.mode === 'air' && (
-                <TouchableOpacity
-                  style={[
-                    styles.expressCheckboxCard,
-                    form.is_express && styles.expressCheckboxCardActive,
-                  ]}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    setForm((prev) => ({ ...prev, is_express: !prev.is_express }));
-                  }}
-                >
-                  <View style={styles.expressCheckboxLeft}>
-                    <View style={[styles.expressCheckboxIcon, form.is_express && styles.expressCheckboxIconActive]}>
-                      <Zap size={18} color={form.is_express ? '#F59E0B' : colors.textSecondary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={[styles.expressCheckboxTitle, form.is_express && styles.expressCheckboxTitleActive]}>
-                          ⚡ Option Aérien Express
-                        </Text>
-                        {form.is_express && (
-                          <View style={styles.expressBadgeTag}>
-                            <Text style={styles.expressBadgeTagText}>EXPRESS</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.expressCheckboxDesc}>
-                        Cocher pour expédition express (alimente la section Prochain départ Express sur l'accueil)
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.checkboxBox, form.is_express && styles.checkboxBoxActive]}>
-                    {form.is_express && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {/* Estimation départ avec Calendrier interactif & calcul dynamique */}
-              <View style={styles.calendarSectionWrapper}>
-                <View style={styles.calendarSectionHeader}>
-                  <Text style={styles.formSectionLabel}>2. Date de départ estimée (Calendrier interactif)</Text>
-                  <TouchableOpacity
-                    style={styles.calendarToggleBtn}
-                    onPress={() => setCalendarOpen((v) => !v)}
-                  >
-                    <Calendar size={13} color={colors.primary} />
-                    <Text style={styles.calendarToggleBtnText}>
-                      {calendarOpen ? 'Masquer' : 'Calendrier'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Card récapitulative dynamique de la date sélectionnée */}
-                <View style={styles.selectedDateBanner}>
-                  <View style={styles.selectedDateIconCircle}>
-                    <Calendar size={20} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.selectedDateTitle}>
-                      {formatPrettyDate(form.departure_date)}
-                    </Text>
-                    <Text style={styles.selectedDateSub}>
-                      {remainingDays === 0
-                        ? "⚡ Départ aujourd'hui (J-0)"
-                        : `⚡ Dans ${remainingDays} jour${remainingDays > 1 ? 's' : ''} (J-${remainingDays})`}
-                    </Text>
-                  </View>
-                  <View style={[styles.daysCounterBadge, remainingDays <= 2 && styles.daysCounterBadgeUrgent]}>
-                    <Text style={styles.daysCounterBadgeText}>
-                      {remainingDays}j restants
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Vue Calendrier mensuel si ouvert */}
-                {calendarOpen && (
-                  <View style={styles.calendarCard}>
-                    {/* Header Mois & Navigation */}
-                    <View style={styles.calendarHeaderRow}>
-                      <TouchableOpacity
-                        style={styles.calendarNavBtn}
-                        onPress={() => {
-                          if (calendarMonth === 0) {
-                            setCalendarMonth(11);
-                            setCalendarYear((y) => y - 1);
-                          } else {
-                            setCalendarMonth((m) => m - 1);
-                          }
-                        }}
-                      >
-                        <ChevronLeft size={18} color={colors.text} />
-                      </TouchableOpacity>
-
-                      <Text style={styles.calendarMonthTitle}>
-                        {MONTH_NAMES[calendarMonth]} {calendarYear}
-                      </Text>
-
-                      <TouchableOpacity
-                        style={styles.calendarNavBtn}
-                        onPress={() => {
-                          if (calendarMonth === 11) {
-                            setCalendarMonth(0);
-                            setCalendarYear((y) => y + 1);
-                          } else {
-                            setCalendarMonth((m) => m + 1);
-                          }
-                        }}
-                      >
-                        <ChevronRight size={18} color={colors.text} />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Jours de la semaine Lun..Dim */}
-                    <View style={styles.calendarWeekdaysRow}>
-                      {DAY_SHORT_NAMES.map((d) => (
-                        <Text key={d} style={styles.calendarWeekdayText}>
-                          {d}
-                        </Text>
-                      ))}
-                    </View>
-
-                    {/* Grille des jours */}
-                    <View style={styles.calendarDaysGrid}>
-                      {calendarDays.map((item, idx) => {
-                        if (!item) {
-                          return <View key={`empty-${idx}`} style={styles.calendarDayCell} />;
-                        }
-                        const { day, dateStr, isPast, isToday, isSelected } = item;
-                        return (
-                          <TouchableOpacity
-                            key={dateStr}
-                            disabled={isPast}
-                            style={[
-                              styles.calendarDayCell,
-                              isSelected && styles.calendarDayCellSelected,
-                              isToday && !isSelected && styles.calendarDayCellToday,
-                              isPast && styles.calendarDayCellPast,
-                            ]}
-                            onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              setForm((f) => ({ ...f, departure_date: dateStr }));
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.calendarDayText,
-                                isSelected && styles.calendarDayTextSelected,
-                                isToday && !isSelected && styles.calendarDayTextToday,
-                                isPast && styles.calendarDayTextPast,
-                              ]}
-                            >
-                              {day}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                )}
-
-                {/* Raccourcis rapides de date */}
-                <Text style={styles.quickPresetTitle}>Raccourcis rapides :</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.delayChipsRow}>
-                  {[
-                    { label: '⚡ Demain (+1j)', offset: 1 },
-                    { label: '+2 jours', offset: 2 },
-                    { label: '+3 jours', offset: 3 },
-                    { label: '+5 jours', offset: 5 },
-                    { label: '+7 jours', offset: 7 },
-                    { label: '+10 jours', offset: 10 },
-                    { label: '+15 jours', offset: 15 },
-                    { label: '+30 jours', offset: 30 },
-                  ].map((preset) => {
-                    const presetDateStr = getInitialDepartureDate(preset.offset);
-                    const isActive = form.departure_date === presetDateStr;
+                <View style={styles.selectedClientSection}>
+                  <Text style={styles.selectedClientTitle}>
+                    Colis de {selectedClient.full_name || selectedClient.email} ({clientPackages.length})
+                  </Text>
+                  {clientPackages.map((p) => {
+                    const pid = String(colisIdOf(p));
+                    const isSelected = selectedIds.has(pid);
                     return (
                       <TouchableOpacity
-                        key={preset.label}
-                        style={[styles.delayChip, isActive && styles.delayChipActive]}
+                        key={pid}
+                        style={[styles.colisItemRow, isSelected && styles.colisRowChecked]}
                         onPress={() => {
-                          const target = new Date(Date.now() + preset.offset * 86400000);
-                          setCalendarMonth(target.getMonth());
-                          setCalendarYear(target.getFullYear());
-                          setForm((f) => ({ ...f, departure_date: presetDateStr }));
+                          const next = new Set(selectedIds);
+                          if (isSelected) next.delete(pid);
+                          else next.add(pid);
+                          setSelectedIds(next);
                         }}
                       >
-                        <Text style={[styles.delayChipText, isActive && styles.delayChipTextActive]}>
-                          {preset.label}
-                        </Text>
+                        <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                          {isSelected && <Check size={12} color="#fff" />}
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.colisItemTracking}>{p.tracking_number}</Text>
+                          <Text style={styles.colisItemDesc}>
+                            {p.description} {p.weight_real ? `· ${p.weight_real} kg` : ''}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
-              </View>
-
-              {/* Référence et trajets */}
-              <Text style={styles.formSectionLabel}>3. Référence & itinéraire</Text>
-              <View style={styles.inputWrapper}>
-                <Box size={18} color={colors.primary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.fieldInput}
-                  placeholder="N° Conteneur / Référence de groupage *"
-                  placeholderTextColor={colors.textSecondary}
-                  value={form.container_number}
-                  onChangeText={(v) => setForm({ ...form, container_number: v })}
-                />
-              </View>
-
-              <View style={styles.twoColsRow}>
-                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                  <Navigation size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.fieldInput}
-                    placeholder="Port / Origine *"
-                    placeholderTextColor={colors.textSecondary}
-                    value={form.origin_port}
-                    onChangeText={(v) => setForm({ ...form, origin_port: v })}
-                  />
                 </View>
+              )}
+            </View>
+          )}
 
-                <View style={[styles.inputWrapper, { flex: 1 }]}>
-                  <MapPin size={16} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.fieldInput}
-                    placeholder="Destination *"
-                    placeholderTextColor={colors.textSecondary}
-                    value={form.destination_city}
-                    onChangeText={(v) => setForm({ ...form, destination_city: v })}
-                  />
+          {/* STEP 2: Choisir le conteneur de destination */}
+          <Text style={styles.stepTitle}>2. Choisir le groupage de destination</Text>
+
+          {!hasSelection && (
+            <View style={styles.warnBox}>
+              <AlertCircle size={16} color={colors.warning} />
+              <Text style={styles.warnBoxText}>
+                Sélectionnez d'abord un ou plusieurs colis à l'étape 1.
+              </Text>
+            </View>
+          )}
+
+          {containers.map((item) => {
+            const cid = containerId(item);
+            const isAssigning = assigning === cid;
+            const canTap = hasSelection && !isAssigning;
+            const isAir = item.mode === 'air' || (item as any).transport_mode === 'air';
+
+            return (
+              <TouchableOpacity
+                key={cid}
+                style={[styles.containerCard, !canTap && { opacity: 0.6 }]}
+                disabled={!canTap}
+                onPress={() => onAssign(item)}
+                activeOpacity={0.8}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={[styles.modeIconBadge, isAir ? styles.modeAir : styles.modeSea]}>
+                    {isAir ? <Plane size={20} color="#0ea5e9" /> : <Ship size={20} color={colors.primary} />}
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.containerNum}>{item.container_number}</Text>
+                    <Text style={styles.containerRoute}>
+                      {item.origin_port || 'Guangzhou'} → {item.destination_city || 'Douala'} · {item.packages_ids?.length || 0} colis
+                    </Text>
+                  </View>
+                  <View style={styles.assignActionBadge}>
+                    <Text style={styles.assignActionBadgeText}>Charger ici</Text>
+                    <ArrowRight size={12} color="#fff" style={{ marginLeft: 4 }} />
+                  </View>
                 </View>
-              </View>
+                {isAssigning && <ActivityIndicator color={colors.primary} style={{ marginTop: 8 }} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
-              <View style={[styles.inputWrapper, { marginTop: 8 }]}>
-                {form.mode === 'sea' ? (
-                  <Ship size={18} color={colors.textSecondary} style={styles.inputIcon} />
-                ) : (
-                  <Plane size={18} color={colors.textSecondary} style={styles.inputIcon} />
-                )}
-                <TextInput
-                  style={styles.fieldInput}
-                  placeholder={form.mode === 'sea' ? "Nom du navire / N° Booking (optionnel)" : "Compagnie aérienne / N° Vol (optionnel)"}
-                  placeholderTextColor={colors.textSecondary}
-                  value={form.vessel_name}
-                  onChangeText={(v) => setForm({ ...form, vessel_name: v })}
-                />
-              </View>
-
-              {/* Footer */}
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={styles.submitBtn}
-                  onPress={createGroupage}
-                  disabled={creating}
-                >
-                  {creating ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Check size={18} color="#fff" />
-                      <Text style={styles.submitBtnText}>Créer le groupage</Text>
+      {/* MODAL: INSPECTEUR & DÉTAIL D'UN GROUPAGE */}
+      <Modal visible={!!inspectedContainer} animationType="slide" transparent>
+        <View style={styles.modalBg}>
+          <View style={styles.inspectorCard}>
+            {/* Inspector Header */}
+            {inspectedContainer && (
+              <View style={styles.inspectorHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.inspectorTitle}>{inspectedContainer.container_number}</Text>
+                    <View style={styles.statusPill}>
+                      <Text style={styles.statusPillText}>{inspectedContainer.status}</Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-
+                  </View>
+                  <Text style={styles.inspectorRoute}>
+                    {inspectedContainer.origin_port || 'Guangzhou'} → {inspectedContainer.destination_city || 'Douala'}
+                  </Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.dismissBtn}
-                  onPress={() => setShowCreate(false)}
+                  style={styles.closeModalBtn}
+                  onPress={() => setInspectedContainer(null)}
                 >
-                  <Text style={styles.dismissBtnText}>Annuler</Text>
+                  <X size={20} color="#fff" />
                 </TouchableOpacity>
               </View>
+            )}
+
+            {/* Inspector Action Bar */}
+            {inspectedContainer && (
+              <View style={styles.inspectorActionBar}>
+                <TouchableOpacity
+                  style={styles.inspectorPrintAllBtn}
+                  onPress={() =>
+                    printContainerThermalLabels(
+                      containerId(inspectedContainer),
+                      inspectedContainer.container_number
+                    )
+                  }
+                >
+                  <Printer size={16} color="#fff" />
+                  <Text style={styles.inspectorPrintAllText}>
+                    Imprimer toutes les étiquettes ({containerPackages.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* List of packages in this container */}
+            <View style={styles.inspectorListWrap}>
+              <Text style={styles.inspectorListTitle}>
+                Colis dans ce groupage ({containerPackages.length}) :
+              </Text>
+
+              {loadingPkgList ? (
+                <ActivityIndicator color={colors.primary} style={{ marginTop: 30 }} />
+              ) : containerPackages.length === 0 ? (
+                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                  <Package size={36} color={colors.textMuted} style={{ opacity: 0.5, marginBottom: 8 }} />
+                  <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+                    Aucun colis affecté à ce conteneur
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={containerPackages}
+                  keyExtractor={(item) => item.id || item._id}
+                  renderItem={({ item }) => {
+                    const pid = item.id || item._id;
+                    return (
+                      <View style={styles.pkgRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pkgRowTracking}>{item.tracking_number}</Text>
+                          <Text style={styles.pkgRowDesc} numberOfLines={1}>
+                            {item.description || 'Marchandise'} · {item.weight_real || item.weight_estimated || 0} kg
+                          </Text>
+                          <Text style={styles.pkgRowCustomer} numberOfLines={1}>
+                            👤 {item.customer_code ? `[${item.customer_code}] ` : ''}{item.customer_name || item.owner_id}
+                          </Text>
+                        </View>
+
+                        {/* Action buttons */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <TouchableOpacity
+                            style={styles.pkgPrintBtn}
+                            onPress={() => printPackageThermalLabel(pid, item.tracking_number)}
+                            title="Imprimer ticket QR (80mm)"
+                          >
+                            <Printer size={15} color={colors.primary} />
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.pkgDeleteBtn}
+                            onPress={() => handleRemovePackage(pid, item.tracking_number)}
+                            title="Retirer du groupage"
+                          >
+                            <Trash2 size={15} color={colors.danger} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  }}
+                />
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: CRÉER UN NOUVEAU GROUPAGE */}
+      <Modal visible={showCreate} animationType="slide" transparent onRequestClose={() => setShowCreate(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.createCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Nouveau Groupage / Conteneur</Text>
+              <TouchableOpacity onPress={() => setShowCreate(false)}>
+                <X size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 500 }} keyboardShouldPersistTaps="handled">
+              {/* Mode Selection */}
+              <Text style={styles.fieldLabel}>Mode d'Expédition</Text>
+              <View style={styles.modeGrid}>
+                {[
+                  { mode: 'sea', label: 'Maritime (45j)', icon: Ship },
+                  { mode: 'air', label: 'Aérien (5-7j)', icon: Plane },
+                  { mode: 'air_express', label: 'Express (2-3j)', icon: Sparkles },
+                ].map((m) => {
+                  const Icon = m.icon;
+                  const isSelected = form.mode === m.mode;
+                  return (
+                    <TouchableOpacity
+                      key={m.mode}
+                      style={[styles.modeSelectBtn, isSelected && styles.modeSelectBtnActive]}
+                      onPress={() => setForm({ ...form, mode: m.mode, is_express: m.mode === 'air_express' })}
+                    >
+                      <Icon size={18} color={isSelected ? '#fff' : colors.textMuted} />
+                      <Text style={[styles.modeSelectText, isSelected && { color: '#fff' }]}>{m.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Number Input */}
+              <Text style={styles.fieldLabel}>Numéro du Conteneur / Lot</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Ex: CONT-2026-09-001"
+                placeholderTextColor={colors.textMuted}
+                value={form.container_number}
+                onChangeText={(t) => setForm({ ...form, container_number: t })}
+                autoCapitalize="characters"
+              />
+
+              {/* Route */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Port Départ</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={form.origin_port}
+                    onChangeText={(t) => setForm({ ...form, origin_port: t })}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Destination</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={form.destination_city}
+                    onChangeText={(t) => setForm({ ...form, destination_city: t })}
+                  />
+                </View>
+              </View>
+
+              {/* Departure Date */}
+              <Text style={styles.fieldLabel}>Date de Départ Estimée</Text>
+              <TextInput
+                style={styles.formInput}
+                value={form.departure_date}
+                onChangeText={(t) => setForm({ ...form, departure_date: t })}
+                placeholder="AAAA-MM-JJ"
+              />
+
+              <TouchableOpacity
+                style={styles.submitCreateBtn}
+                onPress={handleCreateContainer}
+                disabled={creating}
+              >
+                {creating ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitCreateText}>Créer le Groupage</Text>
+                )}
+              </TouchableOpacity>
             </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* QR Scanner Modal for Search */}
+      <Modal visible={scannerOpen} animationType="slide">
+        <QRScanner
+          onScan={(data) => {
+            setScannerOpen(false);
+            setSearch(data);
+            colisApi.list({ tracking_number: data.trim() }).then((list) => {
+              if (list.length > 0) setSelectedColis(list[0]);
+            });
+          }}
+          onClose={() => setScannerOpen(false)}
+          hint="Scannez le QR Code du colis"
+        />
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.card, borderBottomWidth: 1, borderColor: colors.border },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  back: { padding: 4, minWidth: 40 },
-  headerNewBtn: {
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backBtn: {
+    padding: 8,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  headerSubtitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  newGroupageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+  },
+  newGroupageBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mainTabs: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    padding: 4,
+    margin: spacing.md,
+    marginBottom: spacing.xs,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  mainTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+  },
+  mainTabActive: {
+    backgroundColor: colors.primary,
+  },
+  mainTabText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  sectionHeading: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  refreshLink: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  containerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  containerCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modeIconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: radii.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modeAir: {
+    backgroundColor: 'rgba(14, 165, 233, 0.15)',
+  },
+  modeSea: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+  },
+  containerNum: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  expressBadge: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  expressBadgeText: {
+    color: '#000',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  containerRoute: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  statusPillText: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  containerCardBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  statGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statMuted: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  cardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  printBatchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: radii.sm,
+  },
+  printBatchText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  detailsChevron: {
+    padding: 2,
+  },
+  subTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: spacing.md,
+  },
+  subTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  subTabActive: {
+    backgroundColor: colors.secondary,
+    borderColor: colors.secondary,
+  },
+  subTabText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  stepTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: 10,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scanActionBtn: {
+    padding: 6,
+  },
+  okBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    marginLeft: 4,
+  },
+  okBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  selectedColisCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: radii.md,
+    padding: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  selectedColisTracking: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: fonts.mono,
+  },
+  selectedColisDesc: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  hintHeading: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyHintText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  colisItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    padding: 10,
+    borderRadius: radii.md,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colisRowChecked: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  },
+  colisItemTracking: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  colisItemDesc: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  selectedClientSection: {
+    marginTop: 10,
+  },
+  selectedClientTitle: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  warnBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    padding: 10,
+    borderRadius: radii.md,
+    marginBottom: 10,
+  },
+  warnBoxText: {
+    color: '#f59e0b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  assignActionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+  },
+  assignActionBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  emptyCard: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  emptySub: {
+    color: colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  headerNewBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-
-  modeTabs: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  modeTab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10, borderRadius: radii.button, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-  },
-  modeTabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  modeTabText: { fontWeight: '800', fontSize: 12, color: colors.textSecondary },
-  section: { padding: spacing.lg, paddingBottom: 0 },
-  stepHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  stepLabel: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 },
-  stepNewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: `${colors.primary}18`,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  stepNewBtnText: { color: colors.primary, fontWeight: '800', fontSize: 11 },
-
-  emptyContainerCard: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    marginVertical: 8,
-  },
-  emptyContainerTitle: { fontSize: 15, fontWeight: '800', color: colors.text, marginTop: 4 },
-  emptyContainerDesc: { fontSize: 12, color: colors.textSecondary, textAlign: 'center', lineHeight: 16, paddingHorizontal: 20 },
-  emptyCreateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: radii.md,
   },
-  emptyCreateBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, borderRadius: radii.input, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
-  searchInput: { flex: 1, height: 48, color: colors.text, fontSize: 14 },
-  searchBtn: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: radii.button },
-  searchBtnText: { color: '#fff', fontWeight: '800' },
-  selectedColis: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, backgroundColor: `${colors.success}20`, padding: 14, borderRadius: radii.card, borderWidth: 1, borderColor: colors.success },
-  selectedText: { fontWeight: '800', color: colors.success, fontFamily: fonts.mono, fontSize: 15 },
-  selectedSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  hint: { fontSize: 13, color: colors.textSecondary, marginTop: 16, marginBottom: 8 },
-  emptyHint: { color: colors.textSecondary, fontStyle: 'italic', marginTop: 8 },
-  colisRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.card, padding: 14, borderRadius: radii.card, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
-  colisRowOn: { borderColor: colors.primary, backgroundColor: `${colors.primary}15` },
-  colisTracking: { fontWeight: '800', color: colors.text, fontFamily: fonts.mono, fontSize: 14 },
-  colisDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  check: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  bulkRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 },
-  bulkLink: { color: colors.primary, fontWeight: '700', fontSize: 12 },
-  warnBanner: { backgroundColor: `${colors.accent}20`, padding: 12, borderRadius: radii.card, marginBottom: 12 },
-  warnText: { color: colors.accent, fontWeight: '700', fontSize: 13, textAlign: 'center' },
-  card: { backgroundColor: colors.card, borderRadius: radii.card, padding: spacing.lg, marginBottom: spacing.sm, borderWidth: 2, borderColor: colors.primary, ...shadow.card },
-  cardMuted: { borderColor: colors.border, opacity: 0.65 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  containerNum: { fontSize: 16, fontWeight: '800', color: colors.text, fontFamily: fonts.mono },
-  route: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: `${colors.primary}20`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 12, fontWeight: '800', color: colors.primary },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  modalBox: {
-    backgroundColor: '#161B26',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    maxHeight: '90%',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  modalHeaderIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: `${colors.primary}20`,
-    borderWidth: 1,
-    borderColor: `${colors.primary}40`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.text, letterSpacing: -0.3 },
-  modalSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  modalCloseBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalScroll: { maxHeight: 460 },
-
-  presetSection: {
-    marginBottom: 14,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  presetHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  presetLabel: { fontSize: 12, fontWeight: '700', color: colors.primary },
-  presetScroll: { gap: 8 },
-  presetChip: {
-    backgroundColor: colors.card,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  presetChipText: { fontSize: 12, fontWeight: '600', color: colors.text },
-
-  formSectionLabel: {
+  emptyBtnText: {
+    color: '#fff',
     fontSize: 12,
     fontWeight: '800',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 10,
-    marginBottom: 8,
   },
-
-  modeSelectorRow: { gap: 8, marginBottom: 8 },
-  modeCard: {
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  inspectorCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  inspectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  inspectorTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  inspectorRoute: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  closeModalBtn: {
+    padding: 6,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  inspectorActionBar: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  inspectorPrintAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    paddingVertical: 10,
+    borderRadius: radii.md,
   },
-  modeCardSeaActive: { borderColor: '#38BDF8', backgroundColor: 'rgba(56,189,248,0.12)' },
-  modeCardAirActive: { borderColor: '#7DD3FC', backgroundColor: 'rgba(125,211,252,0.12)' },
-  modeCardTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
-  modeCardSubtitle: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
-
-  expressCheckboxCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'rgba(245, 158, 11, 0.06)', borderRadius: 14, padding: 12,
-    borderWidth: 1.5, borderColor: 'rgba(245, 158, 11, 0.25)', marginTop: 4, marginBottom: 8,
+  inspectorPrintAllText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
   },
-  expressCheckboxCardActive: { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: '#F59E0B' },
-  expressCheckboxLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 10 },
-  expressCheckboxIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: 'rgba(245, 158, 11, 0.12)', alignItems: 'center', justifyContent: 'center' },
-  expressCheckboxIconActive: { backgroundColor: '#F59E0B' },
-  expressCheckboxTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
-  expressCheckboxTitleActive: { color: '#F59E0B' },
-  expressBadgeTag: { backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  expressBadgeTagText: { color: '#000000', fontSize: 9.5, fontWeight: '900', letterSpacing: 0.4 },
-  expressCheckboxDesc: { fontSize: 11, color: colors.textSecondary, marginTop: 2, lineHeight: 14 },
-  checkboxBox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' },
-  checkboxBoxActive: { borderColor: '#F59E0B', backgroundColor: '#F59E0B' },
-  delayChipsRow: { gap: 8, paddingVertical: 2, marginBottom: 8 },
-  delayChip: { backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  delayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  delayChipText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
-  delayChipTextActive: { color: '#FFFFFF' },
-
-  calendarSectionWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-    marginTop: 4,
-    marginBottom: 10,
+  inspectorListWrap: {
+    flex: 1,
+    paddingTop: 10,
   },
-  calendarSectionHeader: {
+  inspectorListTitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  pkgRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    padding: 10,
+    borderRadius: radii.md,
     marginBottom: 8,
-  },
-  calendarToggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: `${colors.primary}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  calendarToggleBtnText: {
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  selectedDateBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(235,94,40,0.08)',
-    borderRadius: 14,
-    padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(235,94,40,0.25)',
-    marginBottom: 10,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
-  selectedDateIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: 'rgba(235,94,40,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedDateTitle: {
-    fontSize: 14,
+  pkgRowTracking: {
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '800',
-    color: colors.text,
+    fontFamily: fonts.mono,
   },
-  selectedDateSub: {
-    fontSize: 12,
+  pkgRowDesc: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  pkgRowCustomer: {
     color: colors.primary,
+    fontSize: 10,
     fontWeight: '700',
     marginTop: 2,
   },
-  daysCounterBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
+  pkgPrintBtn: {
+    padding: 8,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
   },
-  daysCounterBadgeUrgent: {
-    backgroundColor: '#EF4444',
+  pkgDeleteBtn: {
+    padding: 8,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
   },
-  daysCounterBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  calendarCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 14,
-    padding: 12,
+  createCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 10,
+    borderColor: colors.border,
   },
-  calendarHeaderRow: {
+  modalHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  calendarNavBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarMonthTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  calendarWeekdaysRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 6,
-    paddingBottom: 4,
+    marginBottom: 12,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: colors.border,
   },
-  calendarWeekdayText: {
-    width: 34,
-    textAlign: 'center',
+  modalTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  fieldLabel: {
+    color: colors.textMuted,
     fontSize: 11,
     fontWeight: '700',
-    color: colors.textSecondary,
+    marginBottom: 4,
+    marginTop: 8,
   },
-  calendarDaysGrid: {
+  modeGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+    gap: 6,
+    marginBottom: 8,
   },
-  calendarDayCell: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  modeSelectBtn: {
+    flex: 1,
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 2,
+    gap: 4,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  calendarDayCellSelected: {
+  modeSelectBtnActive: {
     backgroundColor: colors.primary,
-  },
-  calendarDayCellToday: {
-    borderWidth: 1.5,
     borderColor: colors.primary,
   },
-  calendarDayCellPast: {
-    opacity: 0.25,
-  },
-  calendarDayText: {
-    fontSize: 12,
+  modeSelectText: {
+    color: colors.textMuted,
+    fontSize: 10,
     fontWeight: '700',
-    color: colors.text,
+    textAlign: 'center',
   },
-  calendarDayTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-  },
-  calendarDayTextToday: {
-    color: colors.primary,
-    fontWeight: '800',
-  },
-  calendarDayTextPast: {
-    color: colors.textSecondary,
-  },
-  quickPresetTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
+  formInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
     marginBottom: 6,
   },
-
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 12,
-  },
-  inputIcon: { marginRight: 10 },
-  fieldInput: { flex: 1, paddingVertical: 12, color: colors.text, fontSize: 14, fontWeight: '600' },
-  twoColsRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-
-  modalFooter: { marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', gap: 8 },
-  submitBtn: {
+  submitCreateBtn: {
     backgroundColor: colors.primary,
-    borderRadius: 16,
-    paddingVertical: 15,
+    paddingVertical: 12,
+    borderRadius: radii.md,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 10,
   },
-  submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  dismissBtn: { paddingVertical: 10, alignItems: 'center' },
-  dismissBtnText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  submitCreateText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 });

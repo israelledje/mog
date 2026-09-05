@@ -248,8 +248,8 @@ export default function OperatorDashboard() {
 
         <View style={styles.grid}>
           <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/groupage')}>
-            <Box size={24} color={colors.secondary} />
-            <Text style={styles.subActionTitle}>{t('operator.groupage')}</Text>
+            <Layers size={24} color={colors.secondary} />
+            <Text style={styles.subActionTitle}>Groupages & Lots</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.subAction} onPress={goCloture}>
             <Lock size={24} color={isAdmin ? colors.danger : colors.textSecondary} />

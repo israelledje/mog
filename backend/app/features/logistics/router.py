@@ -224,6 +224,91 @@ async def add_package_to_container(
 
     return {"message": "Colis ajouté avec succès au conteneur"}
 
+
+@router.get("/{container_id}/colis")
+@router.get("/{container_id}/packages")
+async def get_container_packages(
+    container_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database),
+):
+    """Récupère la liste détaillée de tous les colis affectés à ce conteneur."""
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+
+    package_ids = list(container.get("packages_ids") or [])
+    async for p in db.packages.find({"container_id": container_id}):
+        pid = p.get("_id")
+        if pid and pid not in package_ids:
+            package_ids.append(pid)
+
+    packages = []
+    if package_ids:
+        # Récupérer les infos client
+        cursor = db.packages.find({"_id": {"$in": package_ids}})
+        async for pkg in cursor:
+            pkg["id"] = str(pkg.get("_id"))
+            # Récupérer nom client / code si dispo
+            customer = await db.users.find_one({"email": pkg.get("owner_id")})
+            pkg["customer_name"] = (customer or {}).get("full_name") or pkg.get("owner_id")
+            pkg["customer_code"] = (customer or {}).get("client_code") or "MOG"
+            pkg["customer_phone"] = (customer or {}).get("phone") or ""
+            packages.append(pkg)
+
+    return packages
+
+
+@router.delete("/{container_id}/remove-package/{package_id}")
+@router.post("/{container_id}/remove-package/{package_id}")
+async def remove_package_from_container(
+    container_id: str,
+    package_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database),
+):
+    """Retire un colis d'un groupage et le remet en stock entrepôt (statut 'received')."""
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+
+    if container.get("status") in ["in_transit", "customs", "arrived", "distributed"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Impossible de retirer un colis d'un conteneur déjà expédié ou clôturé",
+        )
+
+    # Retirer du conteneur
+    await db.containers.update_one(
+        {"_id": container_id},
+        {"$pull": {"packages_ids": package_id}},
+    )
+
+    # Mettre à jour le statut du colis en 'received' et détacher le container_id
+    now = datetime.now()
+    await db.packages.update_one(
+        {"_id": package_id},
+        {
+            "$set": {
+                "status": "received",
+                "container_id": None,
+                "updated_at": now,
+            },
+            "$push": {
+                "timeline": {
+                    "status": "received",
+                    "label": f"Retiré du conteneur {container.get('container_number', '')} — Remis en stock",
+                    "timestamp": now,
+                    "location": container.get("origin_city", "Guangzhou"),
+                    "operator": current_user.get("email"),
+                }
+            },
+        },
+    )
+
+    return {"message": "Colis retiré du groupage avec succès et remis en stock"}
+
+
 @router.get("/{container_id}/manifest")
 async def get_container_manifest(
     container_id: str,
