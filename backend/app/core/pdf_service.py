@@ -742,9 +742,13 @@ def _render_package_thermal_label_page(
         caract += f"  |  VOL: {cbm:.3f} CBM"
     pdf.cell(w, 4, caract, ln=True)
 
-    # 4. QR Code Haute Résolution
+    # 4. QR Code Haute Résolution avec Signature Cryptographique HMAC-SHA256
+    from app.core.security import create_secure_qr_payload
+    package_id = str(package.get("_id") or package.get("id") or "")
+    secure_payload = create_secure_qr_payload(tracking, package_id)
+
     qr = qrcode.QRCode(version=1, box_size=6, border=1)
-    qr.add_data(tracking)
+    qr.add_data(secure_payload)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white")
 
@@ -761,8 +765,11 @@ def _render_package_thermal_label_page(
     pdf.set_font("Courier", "B", 8)
     pdf.cell(w, 3.5, f"* {tracking} *", align="C", ln=True)
 
-    pdf.set_font("Helvetica", "I", 6)
-    pdf.cell(w, 3, "SCAN RECEPTION ENTREPOT DESTINATION", align="C", ln=True)
+    pdf.set_font("Helvetica", "B", 5.5)
+    pdf.cell(w, 2.5, "[ SECURISE & SIGNE CRYPTOGRAPHIQUEMENT (HMAC-SHA256) ]", align="C", ln=True)
+
+    pdf.set_font("Helvetica", "I", 5.5)
+    pdf.cell(w, 2.5, "SCAN RECEPTION ENTREPOT DESTINATION", align="C", ln=True)
 
 
 def generate_package_label_pdf(

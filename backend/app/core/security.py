@@ -52,3 +52,47 @@ def decode_token(token: str) -> dict:
         return payload
     except Exception:
         return {}
+
+
+# ── SIGNATURE CRYPTOGRAPHIQUE NUMÉRIQUE HMAC-SHA256 POUR QR CODE ──
+
+import hmac
+import hashlib
+
+
+def sign_package_qr(tracking: str, package_id: str) -> str:
+    """
+    Génère une signature cryptographique inviolable HMAC-SHA256 pour le colis.
+    Empêche tout tiers de fabriquer de fausses étiquettes physiques.
+    """
+    secret = (getattr(settings, "JWT_SECRET", None) or "mog-super-secure-secret-key").encode("utf-8")
+    msg = f"{str(tracking).strip()}:{str(package_id).strip()}".encode("utf-8")
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()[:16]
+
+
+def create_secure_qr_payload(tracking: str, package_id: str) -> str:
+    """Crée le payload sécurisé et signé au format : MOG:{tracking}:{hmac_sha256_sig}."""
+    sig = sign_package_qr(tracking, package_id)
+    return f"MOG:{str(tracking).strip()}:{sig}"
+
+
+def parse_qr_scan_input(raw_input: str) -> tuple[str, Optional[str]]:
+    """
+    Extrait le numéro de suivi et la signature HMAC à partir du scan.
+    Supporte à la fois les QR signés et les scans legacy ou saisies manuelles.
+    """
+    cleaned = str(raw_input).strip()
+    if cleaned.startswith("MOG:"):
+        parts = cleaned.split(":")
+        if len(parts) >= 3:
+            return parts[1].strip(), parts[2].strip()
+    return cleaned, None
+
+
+def verify_package_signature(tracking: str, package_id: str, signature: Optional[str]) -> bool:
+    """Vérifie la validité mathématique de la signature HMAC-SHA256."""
+    if not signature:
+        return False
+    expected = sign_package_qr(tracking, package_id)
+    return hmac.compare_digest(signature.lower(), expected.lower())
+

@@ -883,18 +883,30 @@ async def scan_package_arrival(
     Scanne un colis à son arrivée en entrepôt de destination (via PDA ou Web).
     Passe le statut à 'arrived', enregistre le lieu et notifie le client.
     """
-    raw_tracking = payload.tracking_number.strip()
+    from app.core.security import parse_qr_scan_input, verify_package_signature
+    raw_input = payload.tracking_number.strip()
+    clean_tracking, signature = parse_qr_scan_input(raw_input)
+
     # Recherche flexible par tracking_number ou ID
     package = await db.packages.find_one({
         "$or": [
-            {"tracking_number": {"$regex": f"^{raw_tracking}$", "$options": "i"}},
-            {"_id": raw_tracking},
+            {"tracking_number": {"$regex": f"^{clean_tracking}$", "$options": "i"}},
+            {"_id": clean_tracking},
         ]
     })
     if not package:
-        raise HTTPException(status_code=404, detail=f"Colis avec le numéro '{raw_tracking}' non trouvé")
+        raise HTTPException(status_code=404, detail=f"Colis avec le numéro '{clean_tracking}' non trouvé")
 
     pkg_id = package["_id"]
+    sig_verified = False
+    if signature:
+        sig_verified = verify_package_signature(package.get("tracking_number", clean_tracking), pkg_id, signature)
+        if not sig_verified:
+            raise HTTPException(
+                status_code=400,
+                detail="ALERTE SÉCURITÉ : La signature cryptographique HMAC-SHA256 de ce QR Code est invalide ou a été falsifiée !",
+            )
+
     prev_status = package.get("status")
     already_arrived = prev_status in ["arrived", "distributed", "delivered"]
 

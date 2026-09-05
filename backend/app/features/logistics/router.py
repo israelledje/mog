@@ -367,7 +367,9 @@ async def scan_container_package_arrival(
     if not container:
         raise HTTPException(status_code=404, detail="Conteneur non trouvé")
 
-    clean_ref = tracking_or_id.strip()
+    from app.core.security import parse_qr_scan_input, verify_package_signature
+    clean_ref, signature = parse_qr_scan_input(tracking_or_id.strip())
+
     package = await db.packages.find_one({
         "$or": [
             {"tracking_number": {"$regex": f"^{clean_ref}$", "$options": "i"}},
@@ -378,6 +380,14 @@ async def scan_container_package_arrival(
         raise HTTPException(status_code=404, detail=f"Colis '{clean_ref}' introuvable")
 
     pkg_id = package["_id"]
+    if signature:
+        sig_verified = verify_package_signature(package.get("tracking_number", clean_ref), pkg_id, signature)
+        if not sig_verified:
+            raise HTTPException(
+                status_code=400,
+                detail="ALERTE SÉCURITÉ : La signature cryptographique HMAC-SHA256 de ce QR Code est invalide ou a été falsifiée !",
+            )
+
     dest_city = container.get("destination_city") or "Douala"
     warehouse_name = f"Entrepôt {dest_city}"
 
