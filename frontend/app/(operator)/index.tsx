@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, X, Check, Plus, ChevronRight } from 'lucide-react-native';
+import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, Coins, X, Check, Plus, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -271,24 +270,31 @@ export default function OperatorDashboard() {
               </Text>
             </View>
             <View style={styles.grid}>
-              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/reports')}>
-                <BarChart3 size={24} color={colors.primary} />
-                <Text style={styles.subActionTitle}>Rapports</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/team')}>
-                <UserCog size={24} color={colors.primary} />
-                <Text style={styles.subActionTitle}>Équipe</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.grid}>
               <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/tarifs')}>
                 <Layers size={24} color={colors.secondary} />
                 <Text style={styles.subActionTitle}>Tarifs</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/taux')}>
+                <Coins size={24} color="#10B981" />
+                <Text style={styles.subActionTitle}>Taux de Change</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.grid}>
               <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/invoices')}>
                 <FileText size={24} color="#F59E0B" />
                 <Text style={styles.subActionTitle}>Factures</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/reports')}>
+                <BarChart3 size={24} color={colors.primary} />
+                <Text style={styles.subActionTitle}>Rapports</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.grid}>
+              <TouchableOpacity style={styles.subAction} onPress={() => router.push('/(operator)/team')}>
+                <UserCog size={24} color={colors.primary} />
+                <Text style={styles.subActionTitle}>Équipe</Text>
+              </TouchableOpacity>
+              <View style={{ flex: 1 }} />
             </View>
           </>
         )}

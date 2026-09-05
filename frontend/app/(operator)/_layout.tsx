@@ -60,6 +60,7 @@ export default function OperatorLayout() {
         <Stack.Screen name="customers" />
         <Stack.Screen name="team" />
         <Stack.Screen name="tarifs" />
+        <Stack.Screen name="taux" />
         <Stack.Screen name="warehouses" />
         <Stack.Screen name="invoices" />
         <Stack.Screen name="reports" />
