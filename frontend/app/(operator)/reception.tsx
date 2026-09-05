@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, Scan, Camera, CheckCircle2, Box, Scale, Maximize, Save, Trash2, Search, PlusCircle, User, ImagePlus, Plane, Ship } from 'lucide-react-native';
+import { ChevronLeft, Scan, Camera, CheckCircle2, Box, Scale, Maximize, Save, Trash2, Search, PlusCircle, User, ImagePlus, Plane, Ship, Printer } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import NetInfo from '@react-native-community/netinfo';
 import Toast from 'react-native-toast-message';
@@ -13,6 +13,7 @@ import { BASE } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { useSyncStore } from '../../src/store/syncStore';
 import QRScanner from '../../src/components/QRScanner';
+import { printPackageThermalLabel } from '../../src/utils/thermalPrinter';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
 import { OPERATOR_OPEN_SCAN } from '../../src/utils/operatorEvents';
 import { CategoryChips } from '../../src/components/ui/HorizontalChips';
@@ -729,6 +730,17 @@ export default function ReceptionScreen() {
           <CheckCircle2 size={100} color={colors.success} />
           <Text style={styles.successTitle}>{t('operator.reception_ok')}</Text>
           <Text style={styles.successDesc}>{t('operator.reception_ok_desc')}</Text>
+
+          {colisId && (
+            <TouchableOpacity
+              style={[styles.primaryBtn, { backgroundColor: '#10b981', marginBottom: spacing.md, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' }]}
+              onPress={() => printPackageThermalLabel(colisId, tracking)}
+            >
+              <Printer size={20} color="#fff" />
+              <Text style={styles.primaryBtnText}>Imprimer Ticket QR (80mm)</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/(operator)')}>
             <Text style={styles.primaryBtnText}>{t('operator.finish')}</Text>
           </TouchableOpacity>

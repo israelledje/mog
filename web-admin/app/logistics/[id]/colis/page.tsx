@@ -6,7 +6,7 @@ import {
   ChevronLeft, Ship, Plane, Package, Plus, Search, Loader2, X,
   Eye, CheckCircle, Clock, AlertCircle, Box, User, Calendar,
   DollarSign, CreditCard, BadgeCheck, ArrowRight, Filter,
-  Download, Trash2
+  Download, Trash2, Printer, QrCode
 } from 'lucide-react';
 import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
@@ -88,6 +88,44 @@ export default function GroupageColisPage() {
     setAdding(null);
   };
 
+  const printPackageLabel = async (pkgId: string) => {
+    try {
+      const res = await fetch(`${API}/colis/${pkgId}/label-pdf`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        alert("Impossible de générer l'étiquette thermique");
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      alert("Erreur lors de la génération de l'étiquette");
+    }
+  };
+
+  const printAllContainerLabels = async () => {
+    if (!packages.length) {
+      alert("Aucun colis dans ce conteneur à imprimer");
+      return;
+    }
+    try {
+      const res = await fetch(`${API}/groupages/${id}/labels-pdf`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) {
+        alert("Impossible de générer les étiquettes groupées");
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch {
+      alert("Erreur lors de la génération des étiquettes");
+    }
+  };
+
   const deleteInvoice = async (pkgId: string) => {
     if (!confirm("Supprimer la facture de ce colis ?")) return;
     try {
@@ -148,12 +186,21 @@ export default function GroupageColisPage() {
               {groupage.origin_port} → {groupage.destination_city} · {groupage.packages_ids?.length || 0} colis
             </p>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="ml-auto flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl hover:bg-blue-600 transition-all"
-          >
-            <Plus size={14} /> Ajouter un colis
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={printAllContainerLabels}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-700 text-xs font-black rounded-xl hover:bg-blue-100 transition-all border border-blue-200"
+              title="Générer et imprimer les tickets QR thermiques de tous les colis du conteneur"
+            >
+              <Printer size={14} /> Imprimer étiquettes ({packages.length})
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl hover:bg-blue-600 transition-all"
+            >
+              <Plus size={14} /> Ajouter un colis
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -255,8 +302,15 @@ export default function GroupageColisPage() {
                     </div>
                   </div>
 
-                  {/* Détail */}
+                  {/* Détail & Actions */}
                     <div className="flex justify-end gap-1">
+                      <button
+                        onClick={() => printPackageLabel(pkg.id)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                        title="Imprimer ticket QR Code (80mm)"
+                      >
+                        <Printer size={18} />
+                      </button>
                       {pkg.invoice_status === 'final' && (
                         <button
                           onClick={() => window.open(`${API}/colis/${pkg.id}/invoice?token=${getToken()}`, '_blank')}
@@ -355,6 +409,16 @@ export default function GroupageColisPage() {
                   <p className="font-black text-slate-900">{showDetail.current_entrepot_name}</p>
                 </div>
               )}
+
+              {/* Thermal Label Action */}
+              <div className="pt-2">
+                <button
+                  onClick={() => printPackageLabel(showDetail.id)}
+                  className="w-full py-3.5 bg-slate-900 text-white font-black text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all shadow-md active:scale-98"
+                >
+                  <Printer size={16} /> Imprimer Ticket / Étiquette QR Thermique (80mm)
+                </button>
+              </div>
             </div>
           </div>
         </div>

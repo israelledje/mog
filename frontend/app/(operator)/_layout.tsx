@@ -64,6 +64,7 @@ export default function OperatorLayout() {
         <Stack.Screen name="warehouses" />
         <Stack.Screen name="invoices" />
         <Stack.Screen name="reports" />
+        <Stack.Screen name="arrival-scan" />
       </Stack>
 
       {showFab && (

@@ -611,3 +611,198 @@ def generate_client_packing_list_pdf(container_data: dict, packages: List[dict],
     pdf.cell(0, 8, "SARL M.O.G GROUP MULTISERVICE - Import-Export & Groupage", align="C")
 
     return _pdf_bytes(pdf)
+
+
+class ThermalLabelPDF(FPDF):
+    """Générateur d'étiquettes / tickets thermiques 80mm ou 58mm pour colis & PDA."""
+
+    def __init__(self, width_mm: float = 80, height_mm: float = 115):
+        super().__init__(unit="mm", format=(width_mm, height_mm))
+        self.set_margins(3, 3, 3)
+        self.set_auto_page_break(auto=False)
+
+    def cell(self, w, h=0, text="", *args, **kwargs):
+        if "txt" in kwargs and not text:
+            text = kwargs.pop("txt")
+        return super().cell(w, h, _pdf_text(text), *args, **kwargs)
+
+    def multi_cell(self, w, h=0, text="", *args, **kwargs):
+        if "txt" in kwargs and not text:
+            text = kwargs.pop("txt")
+        return super().multi_cell(w, h, _pdf_text(text), *args, **kwargs)
+
+
+def _render_package_thermal_label_page(
+    pdf: ThermalLabelPDF,
+    package: dict,
+    container: Optional[dict] = None,
+    customer: Optional[dict] = None,
+):
+    container = container or {}
+    customer = customer or {}
+    pdf.add_page()
+    w = pdf.epw
+
+    # 1. En-tête M.O.G CONNECT+
+    pdf.set_y(3)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(w, 4.5, "M.O.G CONNECT+", align="C", ln=True)
+
+    pdf.set_font("Helvetica", "", 6.5)
+    pdf.cell(w, 3, "FRET INTERNATIONAL & LOGISTIQUE GROUPAGE", align="C", ln=True)
+
+    # Badge mode d'expédition
+    raw_mode = str(
+        package.get("transport_mode")
+        or container.get("mode")
+        or container.get("transport_mode")
+        or "AERIEN"
+    ).upper()
+    if "EXPRESS" in raw_mode:
+        mode_label = "[ AIR EXPRESS (2-3J) ]"
+    elif "AIR" in raw_mode or "AER" in raw_mode:
+        mode_label = "[ AERIEN STANDARD (5-7J) ]"
+    else:
+        mode_label = "[ MARITIME GROUPAGE ]"
+
+    pdf.set_font("Helvetica", "B", 7.5)
+    pdf.cell(w, 4, mode_label, align="C", ln=True)
+
+    # Séparateur
+    pdf.set_draw_color(0, 0, 0)
+    pdf.set_line_width(0.3)
+    pdf.line(3, pdf.get_y() + 1, pdf.w - 3, pdf.get_y() + 1)
+    pdf.set_y(pdf.get_y() + 2)
+
+    # 2. Destination & Client
+    dest = str(
+        package.get("destination_city")
+        or container.get("destination_city")
+        or "DOUALA"
+    ).upper()
+    client_code = str(
+        customer.get("client_code")
+        or package.get("client_code")
+        or "MOG-CLIENT"
+    ).upper()
+    if client_code.startswith("CM"):
+        client_code = "MOG" + client_code[2:]
+
+    client_name = str(
+        customer.get("full_name")
+        or package.get("receiver_name")
+        or package.get("owner_id")
+        or "N/A"
+    )[:25]
+    client_phone = str(customer.get("phone") or package.get("receiver_phone") or "")
+
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(w * 0.52, 4, f"DEST: {dest}", ln=False)
+    pdf.set_font("Courier", "B", 10)
+    pdf.cell(w * 0.48, 4, f"CODE: {client_code}", align="R", ln=True)
+
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.cell(w, 4, f"CLIENT: {client_name}", ln=True)
+    if client_phone:
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(w, 3.5, f"TEL: {client_phone}", ln=True)
+
+    # Séparateur
+    pdf.line(3, pdf.get_y() + 1, pdf.w - 3, pdf.get_y() + 1)
+    pdf.set_y(pdf.get_y() + 2)
+
+    # 3. Groupage & Colis
+    cont_num = str(
+        container.get("container_number")
+        or package.get("container_id")
+        or "EN ATTENTE"
+    ).upper()
+    tracking = str(package.get("tracking_number") or "N/A").upper()
+    desc = str(
+        package.get("description")
+        or package.get("content_description")
+        or "Marchandise diverse"
+    )[:30]
+    weight = float(package.get("weight_real") or package.get("weight_estimated") or 0.0)
+    cbm = float(package.get("volume") or package.get("cbm") or 0.0)
+
+    pdf.set_font("Helvetica", "", 7.5)
+    pdf.cell(w, 3.5, f"GROUPAGE / LOT: {cont_num}", ln=True)
+
+    pdf.set_font("Courier", "B", 10)
+    pdf.cell(w, 5, f" {tracking} ", border=1, align="C", ln=True)
+
+    pdf.set_font("Helvetica", "", 7.5)
+    pdf.cell(w, 3.5, f"CONTENU: {desc}", ln=True)
+
+    pdf.set_font("Helvetica", "B", 8)
+    caract = f"POIDS: {weight:.2f} kg"
+    if cbm > 0:
+        caract += f"  |  VOL: {cbm:.3f} CBM"
+    pdf.cell(w, 4, caract, ln=True)
+
+    # 4. QR Code Haute Résolution
+    qr = qrcode.QRCode(version=1, box_size=6, border=1)
+    qr.add_data(tracking)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+
+    qr_buffer = BytesIO()
+    qr_img.save(qr_buffer, format="PNG")
+    qr_buffer.seek(0)
+
+    qr_size = 25
+    qr_x = (pdf.w - qr_size) / 2
+    qr_y = pdf.get_y() + 1
+    pdf.image(qr_buffer, x=qr_x, y=qr_y, w=qr_size, h=qr_size)
+
+    pdf.set_y(qr_y + qr_size + 1)
+    pdf.set_font("Courier", "B", 8)
+    pdf.cell(w, 3.5, f"* {tracking} *", align="C", ln=True)
+
+    pdf.set_font("Helvetica", "I", 6)
+    pdf.cell(w, 3, "SCAN RECEPTION ENTREPOT DESTINATION", align="C", ln=True)
+
+
+def generate_package_label_pdf(
+    package_data: dict,
+    container_data: Optional[dict] = None,
+    customer_data: Optional[dict] = None,
+    label_width_mm: float = 80,
+) -> BytesIO:
+    """Génère le PDF d'étiquette thermique d'un colis individuel (format 80mm x 115mm)."""
+    height_mm = 115 if label_width_mm >= 80 else 90
+    pdf = ThermalLabelPDF(width_mm=label_width_mm, height_mm=height_mm)
+    _render_package_thermal_label_page(
+        pdf,
+        package=package_data,
+        container=container_data,
+        customer=customer_data,
+    )
+    return _pdf_bytes(pdf)
+
+
+def generate_container_labels_pdf(
+    container_data: dict,
+    packages: List[dict],
+    customers_by_email: Optional[Dict[str, dict]] = None,
+    label_width_mm: float = 80,
+) -> BytesIO:
+    """Génère un PDF multi-pages contenant les étiquettes thermiques de TOUS les colis du conteneur."""
+    height_mm = 115 if label_width_mm >= 80 else 90
+    pdf = ThermalLabelPDF(width_mm=label_width_mm, height_mm=height_mm)
+    customers_by_email = customers_by_email or {}
+
+    for pkg in packages:
+        owner_email = pkg.get("owner_id")
+        customer = customers_by_email.get(owner_email) if owner_email else None
+        _render_package_thermal_label_page(
+            pdf,
+            package=pkg,
+            container=container_data,
+            customer=customer,
+        )
+
+    return _pdf_bytes(pdf)
+

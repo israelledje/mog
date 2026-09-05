@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Plus, Ship, Plane, Calendar, CheckCircle2, Clock, Loader2, X,
   Edit3, Package, ChevronRight, Search, Filter, MoreHorizontal,
-  MapPin, AlertCircle, ArrowRight, Save
+  MapPin, AlertCircle, ArrowRight, Save, Printer
 } from 'lucide-react';
 import { API } from '@/lib/api';
 const getToken = () => typeof window !== 'undefined' ? localStorage.getItem('admin_token') ?? '' : '';
@@ -306,6 +306,23 @@ export default function LogisticsPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`${API}/groupages/${c.id}/labels-pdf`, {
+                              headers: { Authorization: `Bearer ${getToken()}` },
+                            });
+                            if (!res.ok) { alert("Aucun colis ou erreur de génération des étiquettes"); return; }
+                            const blob = await res.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            window.open(url, '_blank');
+                          } catch { alert("Erreur d'impression"); }
+                        }}
+                        title="Imprimer toutes les étiquettes QR du conteneur"
+                        className="p-2 rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+                      >
+                        <Printer size={16} />
+                      </button>
                       <button
                         onClick={() => setEditContainer({ ...c })}
                         title="Modifier"

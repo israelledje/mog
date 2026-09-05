@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronLeft, Search, Ship, Plane, Package, CheckCircle2, Box, ChevronRight, Plus, Users,
-  X, Sparkles, MapPin, Navigation, Check, Zap, Calendar,
+  X, Sparkles, MapPin, Navigation, Check, Zap, Calendar, Printer,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -16,6 +16,7 @@ import { colisApi, groupagesApi } from '../../src/api/colis';
 import type { Groupage, Colis } from '../../src/types';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatErr } from '../../src/api/client';
+import { printContainerThermalLabels, printPackageThermalLabel } from '../../src/utils/thermalPrinter';
 import { darkColors as colors, radii, spacing, shadow, fonts } from '../../src/constants/theme';
 
 const containerId = (c: Groupage) => c.id || (c as any)._id;
@@ -590,6 +591,15 @@ export default function GroupageScreen() {
                       <Package size={12} color={colors.primary} />
                       <Text style={styles.badgeText}>{item.packages_ids?.length ?? 0}</Text>
                     </View>
+                    <TouchableOpacity
+                      style={{ padding: 8, borderRadius: 8, backgroundColor: 'rgba(59, 130, 246, 0.15)', marginHorizontal: 4 }}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        printContainerThermalLabels(cid, item.container_number);
+                      }}
+                    >
+                      <Printer size={16} color={colors.primary} />
+                    </TouchableOpacity>
                     {canTap && <ChevronRight size={20} color={colors.primary} />}
                   </View>
                   {isAssigning && <ActivityIndicator color={colors.primary} style={{ marginTop: 8 }} />}

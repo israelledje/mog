@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, Coins, X, Check, Plus, ChevronRight } from 'lucide-react-native';
+import { LogOut, Scan, List, Lock, Clock, RotateCcw, Building2, Globe, Box, Headphones, ShoppingBag, Percent, Handshake, Smartphone, Gift, Shield, Users, UserCog, FileText, BarChart3, Layers, Coins, X, Check, Plus, ChevronRight, QrCode, Printer } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../src/store/authStore';
 import { colisApi } from '../../src/api/colis';
@@ -214,10 +214,25 @@ export default function OperatorDashboard() {
           <View style={styles.actionIcon}>
             <Scan size={32} color="#fff" />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.actionTitle}>{t('operator.new_reception')}</Text>
             <Text style={styles.actionDesc}>{t('operator.new_reception_desc')}</Text>
           </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mainAction, { backgroundColor: '#059669', borderColor: '#10B981', marginTop: 4 }]}
+          onPress={() => router.push('/(operator)/arrival-scan')}
+          activeOpacity={0.85}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: '#10B981' }]}>
+            <QrCode size={30} color="#fff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.actionTitle}>Scan Déchargement & Arrivée (PDA)</Text>
+            <Text style={styles.actionDesc}>Réceptionner les colis au déchargement et notifier le client</Text>
+          </View>
+          <ChevronRight size={20} color="#fff" style={{ opacity: 0.8 }} />
         </TouchableOpacity>
 
         <View style={styles.grid}>

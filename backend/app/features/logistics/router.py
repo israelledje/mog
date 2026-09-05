@@ -1,7 +1,11 @@
 from typing import List
 from app.core.database import get_database
 from app.core.deps import check_role, get_current_user
-from app.core.pdf_service import generate_manifest_pdf, generate_client_packing_list_pdf
+from app.core.pdf_service import (
+    generate_manifest_pdf,
+    generate_client_packing_list_pdf,
+    generate_container_labels_pdf,
+)
 from app.core.notification_service import NotificationService
 from app.core.task_queue import fire_and_forget
 from .schemas import ContainerCreate, ContainerInDB, ContainerUpdate
@@ -289,6 +293,165 @@ async def get_client_packing_list(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@router.get("/{container_id}/labels-pdf")
+async def get_container_labels_pdf(
+    container_id: str,
+    width: float = 80.0,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database),
+):
+    """
+    Génère en une seule fois les étiquettes / tickets thermiques de TOUS les colis du conteneur.
+    Permet l'impression en continu sur PDA ou imprimante thermique d'étiquettes.
+    """
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+
+    # Colis associés
+    package_ids = list(container.get("packages_ids") or [])
+    async for p in db.packages.find({"container_id": container_id}):
+        pid = p.get("_id")
+        if pid and pid not in package_ids:
+            package_ids.append(pid)
+
+    packages = []
+    if package_ids:
+        async for pkg in db.packages.find({"_id": {"$in": package_ids}}):
+            packages.append(pkg)
+
+    if not packages:
+        raise HTTPException(status_code=400, detail="Ce conteneur ne contient aucun colis pour le moment")
+
+    # Récupérer les clients associés pour avoir leur code client et téléphone
+    owner_emails = list({p.get("owner_id") for p in packages if p.get("owner_id")})
+    customers_by_email = {}
+    if owner_emails:
+        async for cust in db.users.find({"email": {"$in": owner_emails}}):
+            customers_by_email[cust.get("email")] = cust
+
+    pdf_buffer = generate_container_labels_pdf(
+        container_data=container,
+        packages=packages,
+        customers_by_email=customers_by_email,
+        label_width_mm=width,
+    )
+
+    cont_ref = container.get("container_number", "Groupage")
+    filename = f"Etiquettes_{cont_ref}.pdf"
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"'
+        }
+    )
+
+
+@router.post("/{container_id}/scan-arrival/{tracking_or_id}")
+async def scan_container_package_arrival(
+    container_id: str,
+    tracking_or_id: str,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database),
+):
+    """
+    Scanne et valide l'arrivée d'un colis spécifique lors du déchargement d'un conteneur à destination.
+    Retourne la progression du déchargement (ex: 35/50 colis déchargés).
+    """
+    container = await db.containers.find_one({"_id": container_id})
+    if not container:
+        raise HTTPException(status_code=404, detail="Conteneur non trouvé")
+
+    clean_ref = tracking_or_id.strip()
+    package = await db.packages.find_one({
+        "$or": [
+            {"tracking_number": {"$regex": f"^{clean_ref}$", "$options": "i"}},
+            {"_id": clean_ref},
+        ]
+    })
+    if not package:
+        raise HTTPException(status_code=404, detail=f"Colis '{clean_ref}' introuvable")
+
+    pkg_id = package["_id"]
+    dest_city = container.get("destination_city") or "Douala"
+    warehouse_name = f"Entrepôt {dest_city}"
+
+    already_arrived = package.get("status") in ["arrived", "distributed", "delivered"]
+    if not already_arrived:
+        now = datetime.now()
+        await db.packages.update_one(
+            {"_id": pkg_id},
+            {
+                "$set": {
+                    "status": "arrived",
+                    "container_id": container_id,
+                    "destination_warehouse": warehouse_name,
+                    "updated_at": now,
+                },
+                "$push": {
+                    "timeline": {
+                        "status": "arrived",
+                        "label": f"Déchargé du conteneur {container.get('container_number')} — Arrivé à {warehouse_name}",
+                        "timestamp": now,
+                        "location": dest_city,
+                        "operator": current_user.get("email"),
+                    }
+                }
+            }
+        )
+
+        package["status"] = "arrived"
+        fire_and_forget(
+            NotificationService.notify_status_change(
+                package,
+                "arrived",
+                container_number=container.get("container_number", ""),
+            ),
+            label=f"notify_arrival:{package.get('tracking_number', pkg_id)}"
+        )
+
+    # Récupérer les stats globales de déchargement du conteneur
+    package_ids = list(container.get("packages_ids") or [])
+    async for p in db.packages.find({"container_id": container_id}):
+        pid = p.get("_id")
+        if pid and pid not in package_ids:
+            package_ids.append(pid)
+
+    total_packages = len(package_ids)
+    arrived_count = await db.packages.count_documents({
+        "_id": {"$in": package_ids},
+        "status": {"$in": ["arrived", "distributed", "delivered"]}
+    })
+
+    customer = await db.users.find_one({"email": package.get("owner_id")})
+
+    return {
+        "success": True,
+        "already_arrived": already_arrived,
+        "message": "Colis déjà déchargé" if already_arrived else "Colis déchargé et enregistré avec succès",
+        "package": {
+            "id": pkg_id,
+            "tracking_number": package.get("tracking_number"),
+            "description": package.get("description") or package.get("content_description"),
+            "weight": package.get("weight_real") or package.get("weight_estimated"),
+            "volume": package.get("volume") or package.get("cbm"),
+            "status": "arrived",
+        },
+        "customer": {
+            "name": (customer or {}).get("full_name") or package.get("owner_id"),
+            "client_code": (customer or {}).get("client_code") or "MOG-CLIENT",
+            "phone": (customer or {}).get("phone"),
+        },
+        "container_stats": {
+            "total_packages": total_packages,
+            "arrived_packages": arrived_count,
+            "progress_percent": round((arrived_count / total_packages) * 100, 1) if total_packages > 0 else 100,
+        }
+    }
+
 
 @router.patch("/{container_id}/status")
 async def update_container_status(

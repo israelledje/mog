@@ -4,7 +4,11 @@ from app.core.paths import UPLOAD_DIR, upload_file_path, public_upload_url
 from app.features.shipping.schemas import PackageCreate, PackageInDB, PackageUpdate, PackageReceive, PackageAuditUpdate, InvoiceUpdate
 from app.core.database import get_database
 from app.core.utils import apply_watermark
-from app.core.pdf_service import generate_invoice_pdf, generate_insurance_invoice_pdf
+from app.core.pdf_service import (
+    generate_invoice_pdf,
+    generate_insurance_invoice_pdf,
+    generate_package_label_pdf,
+)
 from app.core.notification_service import NotificationService
 from app.core.task_queue import fire_and_forget
 from app.core.config import settings
@@ -816,6 +820,137 @@ async def get_package_insurance_invoice(
             "Content-Disposition": f"attachment; filename=Facture_Assurance_{package.get('tracking_number', 'Colis')}.pdf"
         }
     )
+
+
+@router.get("/{package_id}/label-pdf")
+async def get_package_label_pdf(
+    package_id: str,
+    width: float = Query(default=80.0, description="Largeur étiquette en mm (ex: 80 ou 58)"),
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_database)
+):
+    """Génère l'étiquette / ticket thermique QR Code du colis pour impression PDA ou Web."""
+    package = await db.packages.find_one({"_id": package_id})
+    if not package:
+        # Essayer par tracking_number au cas où
+        package = await db.packages.find_one({"tracking_number": package_id})
+    if not package:
+        raise HTTPException(status_code=404, detail="Colis non trouvé")
+
+    is_owner = package.get("owner_id") == current_user["email"]
+    is_staff = current_user.get("role") in ["admin", "operator"]
+    if not (is_owner or is_staff):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+
+    container = None
+    container_id = package.get("container_id")
+    if container_id:
+        container = await db.containers.find_one({"_id": container_id})
+
+    customer = await db.users.find_one({"email": package.get("owner_id")})
+    pdf_buffer = generate_package_label_pdf(
+        package_data=package,
+        container_data=container,
+        customer_data=customer,
+        label_width_mm=width,
+    )
+
+    tracking = package.get("tracking_number", "Colis")
+    return Response(
+        content=pdf_buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="Ticket_{tracking}.pdf"'
+        }
+    )
+
+
+class ScanArrivalRequest(BaseModel):
+    tracking_number: str
+    warehouse_name: Optional[str] = "Entrepôt Douala"
+    warehouse_city: Optional[str] = "Douala"
+
+
+@router.post("/scan-arrival")
+async def scan_package_arrival(
+    payload: ScanArrivalRequest,
+    current_user: dict = Depends(check_role(["admin", "operator"])),
+    db = Depends(get_database),
+):
+    """
+    Scanne un colis à son arrivée en entrepôt de destination (via PDA ou Web).
+    Passe le statut à 'arrived', enregistre le lieu et notifie le client.
+    """
+    raw_tracking = payload.tracking_number.strip()
+    # Recherche flexible par tracking_number ou ID
+    package = await db.packages.find_one({
+        "$or": [
+            {"tracking_number": {"$regex": f"^{raw_tracking}$", "$options": "i"}},
+            {"_id": raw_tracking},
+        ]
+    })
+    if not package:
+        raise HTTPException(status_code=404, detail=f"Colis avec le numéro '{raw_tracking}' non trouvé")
+
+    pkg_id = package["_id"]
+    prev_status = package.get("status")
+    already_arrived = prev_status in ["arrived", "distributed", "delivered"]
+
+    city = payload.warehouse_city or "Douala"
+    place = payload.warehouse_name or f"Entrepôt {city}"
+
+    if not already_arrived:
+        now = datetime.now()
+        await db.packages.update_one(
+            {"_id": pkg_id},
+            {
+                "$set": {
+                    "status": "arrived",
+                    "destination_warehouse": place,
+                    "updated_at": now,
+                },
+                "$push": {
+                    "timeline": {
+                        "status": "arrived",
+                        "label": f"Arrivé à l'entrepôt {city} — Disponible pour retrait",
+                        "timestamp": now,
+                        "location": place,
+                        "operator": current_user.get("email"),
+                    }
+                }
+            }
+        )
+
+        package["status"] = "arrived"
+        fire_and_forget(
+            NotificationService.notify_status_change(package, "arrived"),
+            label=f"notify_arrived:{package.get('tracking_number', pkg_id)}"
+        )
+
+    # Récupérer les infos client complètes
+    customer = await db.users.find_one({"email": package.get("owner_id")})
+
+    return {
+        "success": True,
+        "already_arrived": already_arrived,
+        "message": "Colis déjà réceptionné" if already_arrived else "Colis réceptionné avec succès et disponible pour retrait",
+        "package": {
+            "id": pkg_id,
+            "tracking_number": package.get("tracking_number"),
+            "description": package.get("description") or package.get("content_description"),
+            "weight": package.get("weight_real") or package.get("weight_estimated"),
+            "volume": package.get("volume") or package.get("cbm"),
+            "status": "arrived",
+            "destination_city": city,
+            "owner_id": package.get("owner_id"),
+        },
+        "customer": {
+            "name": (customer or {}).get("full_name") or package.get("owner_id"),
+            "client_code": (customer or {}).get("client_code") or "MOG-CLIENT",
+            "phone": (customer or {}).get("phone"),
+        }
+    }
+
 
 
 @router.post("/{package_id}/clear-customs")
