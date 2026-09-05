@@ -125,9 +125,10 @@ services:
   whatsapp-service:
     build: ./whatsapp-service
     container_name: cargo-tracker-whatsapp
+    init: true
     shm_size: '256mb'
     cpus: 0.35
-    mem_limit: 300m
+    mem_limit: 350m
     volumes:
       - whatsapp_session:/app/session
     networks:

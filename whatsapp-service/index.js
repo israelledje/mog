@@ -117,6 +117,8 @@ function buildClient() {
                 '--disable-domain-reliability',
                 '--disable-sync',
                 '--disable-translate',
+                '--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BlinkGenPropertyTrees',
+                '--disable-site-isolation-trials',
                 '--mute-audio',
                 '--no-default-browser-check',
                 '--js-flags=--max-old-space-size=128',
